@@ -48,6 +48,12 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             <Link href="/login" className="rounded-lg px-2 py-2 text-[15px] font-semibold text-[#173D32] transition hover:bg-[#EEE9DC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] sm:px-3">Log in</Link>
+            <Link
+  href="/idea-finder"
+  className="rounded-lg px-3 py-2 text-[15px] font-semibold text-[#173D32] transition hover:bg-[#173D32]/5"
+>
+  Find a Business Idea
+</Link>
             <Link href="/signup" className="rounded-xl bg-[#173D32] px-4 py-2.5 text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(23,61,50,0.16)] transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] sm:px-5">Start Building</Link>
           </div>
         </div>

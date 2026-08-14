@@ -19,7 +19,21 @@ export default function LoginPage() {
 
       console.log("Logged In:", userCredential.user);
 
-      window.location.href = "/dashboard";
+const response = await fetch(
+  `/api/projects?userId=${encodeURIComponent(userCredential.user.uid)}`,
+  { cache: "no-store" }
+);
+
+const data = await response.json();
+
+const projects = Array.isArray(data)
+  ? data
+  : Array.isArray(data.projects)
+  ? data.projects
+  : [];
+
+window.location.href =
+  projects.length === 0 ? "/onboarding" : "/dashboard";
 
     } catch (error: any) {
       alert(error.message);
