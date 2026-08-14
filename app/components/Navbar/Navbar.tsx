@@ -16,9 +16,12 @@
 
         <div className="flex gap-4">
 
-          <button className="text-gray-300 transition duration-300 hover:text-white">
-            Login
-          </button>
+          <a
+  href="/login"
+  className="text-gray-300 transition duration-300 hover:text-white"
+>
+  Login
+</a>
 
           <button className="rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-6 py-3 font-semibold text-white transition duration-300 hover:scale-105 hover:shadow-[0_0_30px_rgba(59,130,246,.45)]">
             Get Started

@@ -24,3 +24,219 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.easy-sidebar-scrollbar {
+  scrollbar-color: #334155 #020617;
+  scrollbar-width: thin;
+}
+
+.easy-sidebar-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.easy-sidebar-scrollbar::-webkit-scrollbar-track {
+  background: #020617;
+}
+
+.easy-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: #334155;
+}
+
+.easy-sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #537064;
+}
+
+/* Authenticated Easy Intelligence workspace. Scoped by the shared sidebar so
+   public landing and authentication pages retain their own visual system. */
+body:has(.easy-intelligence-sidebar),
+main:has(.easy-intelligence-sidebar) {
+  background: #f7f4ec !important;
+  color: #1b211e;
+}
+
+.easy-intelligence-sidebar ~ section {
+  background-color: #f7f4ec !important;
+  color: #1b211e;
+}
+
+.easy-intelligence-sidebar ~ section > div:not(header) {
+  color: #1b211e;
+}
+
+.easy-intelligence-sidebar ~ section :is(h1, h2, h3) {
+  color: #0e2c24;
+}
+
+.easy-intelligence-sidebar ~ section p[class*="text-slate-"],
+.easy-intelligence-sidebar ~ section span[class*="text-slate-"] {
+  color: #606a64;
+}
+
+.easy-intelligence-sidebar ~ section :is(div, article, section, a)[class*="border-red-"][class*="bg-slate-"],
+.easy-intelligence-sidebar ~ section :is(div, article, section, a)[class*="border-red-"][class*="bg-[#"] {
+  border-color: rgb(168 184 167 / 0.42) !important;
+  background-color: #fcfbf7 !important;
+  background-image: none !important;
+  box-shadow: 0 16px 42px rgb(40 52 45 / 0.07) !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(div, article, section)[class*="border-cyan-"][class*="bg-slate-"] {
+  border-color: rgb(168 184 167 / 0.38) !important;
+  background-color: #fcfbf7 !important;
+  box-shadow: 0 14px 36px rgb(40 52 45 / 0.06) !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(input, select, textarea) {
+  border-color: rgb(168 184 167 / 0.55) !important;
+  background: #fffefa !important;
+  color: #1b211e !important;
+  color-scheme: light !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(input, textarea)::placeholder {
+  color: #858d87 !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(input, select, textarea):focus {
+  border-color: rgb(23 61 50 / 0.65) !important;
+  box-shadow: 0 0 0 3px rgb(168 184 167 / 0.3) !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="from-red-"][class*="to-[#"] {
+  border-color: #173d32 !important;
+  background: #173d32 !important;
+  color: #f7f4ec !important;
+  box-shadow: 0 12px 30px rgb(23 61 50 / 0.16) !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="from-red-"][class*="to-[#"]:hover {
+  background: #0e2c24 !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="border-cyan-"] {
+  border-color: rgb(23 61 50 / 0.28) !important;
+  background-color: rgb(168 184 167 / 0.14) !important;
+  color: #173d32 !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="border-cyan-"]:hover {
+  border-color: rgb(23 61 50 / 0.5) !important;
+  background-color: rgb(168 184 167 / 0.25) !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="border-red-"]:not([class*="bg-red-500"]):not([class*="bg-red-600"]) {
+  border-color: rgb(184 154 97 / 0.45) !important;
+  background-color: rgb(184 154 97 / 0.1) !important;
+  color: #715d35 !important;
+}
+
+.easy-intelligence-sidebar ~ section [class*="uppercase"][class*="text-red-"] {
+  color: #867044 !important;
+}
+
+.easy-intelligence-sidebar ~ section [class*="text-white"][class*="bg-slate-"] {
+  color: #1b211e !important;
+}
+
+/* Full light authenticated shell. */
+.easy-intelligence-sidebar {
+  border-color: #d8dccf !important;
+  background: #eee9dc !important;
+  color: #173d32 !important;
+  box-shadow: 10px 0 32px rgb(40 52 45 / 0.05);
+}
+
+.easy-intelligence-sidebar h1,
+.easy-intelligence-sidebar [class*="text-white"] {
+  color: #173d32 !important;
+}
+
+.easy-intelligence-sidebar [class*="text-slate-"] {
+  color: #606a64 !important;
+}
+
+.easy-intelligence-sidebar [class*="border-slate-"] {
+  border-color: #d8dccf !important;
+}
+
+.easy-intelligence-sidebar [class*="bg-slate-950"] {
+  background-color: #f7f4ec !important;
+}
+
+.easy-intelligence-sidebar [class*="bg-[#030806]"] {
+  background-color: #f7f4ec !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-slate-9"],
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-black"],
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="from-slate-9"] {
+  border-color: #d8dccf !important;
+  background: #fcfbf7 !important;
+  background-image: none !important;
+  color: #1b211e !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(div, section, article):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-[#0"] {
+  background: #fcfbf7 !important;
+  background-image: none !important;
+  color: #1b211e !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(article, section, div):not(.easy-website-preview *)[class*="rounded-"][class*="border-"] {
+  border-color: #d8dccf !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(h1, h2) {
+  font-size: clamp(2rem, 3.5vw, 3.25rem);
+  line-height: 1.08;
+}
+
+.easy-intelligence-sidebar ~ section h3 {
+  font-size: clamp(1.125rem, 1.5vw, 1.5rem);
+}
+
+.easy-intelligence-sidebar ~ section :is(p, li) {
+  font-size: max(0.9375rem, 15px);
+}
+
+.easy-intelligence-sidebar ~ section article p[class*="text-white"],
+.easy-intelligence-sidebar ~ section article span[class*="text-white"],
+.easy-intelligence-sidebar ~ section div[class*="bg-slate-"] p[class*="text-white"] {
+  color: #1b211e !important;
+}
+
+.easy-intelligence-sidebar ~ section [class*="shadow-[0_0_"][class*="rgba(239,68,68"] {
+  box-shadow: 0 14px 36px rgb(40 52 45 / 0.08) !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="bg-gradient-to-r"][class*="from-red-"] {
+  border-color: #173d32 !important;
+  background: #173d32 !important;
+  background-image: none !important;
+  color: #f7f4ec !important;
+}
+
+.easy-intelligence-sidebar ~ section button[class*="bg-gradient-to-r"][class*="from-red-"]:hover {
+  background: #0e2c24 !important;
+}
+
+.easy-intelligence-sidebar ~ section :is(div, span)[class*="bg-gradient-"][class*="from-red-"] {
+  border-color: #d8dccf !important;
+  background: #edf0e8 !important;
+  background-image: none !important;
+  color: #173d32 !important;
+  box-shadow: none !important;
+}
+
+.easy-intelligence-sidebar .easy-sidebar-scrollbar {
+  scrollbar-color: #a8b8a7 #eee9dc;
+}
+
+.easy-intelligence-sidebar .easy-sidebar-scrollbar::-webkit-scrollbar-track {
+  background: #eee9dc;
+}
+
+.easy-intelligence-sidebar .easy-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background: #a8b8a7;
+}

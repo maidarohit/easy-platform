@@ -6,22 +6,35 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:contracts": "node --test tests/contracts/*.test.mjs",
+    "test:integration": "node --experimental-strip-types --experimental-loader ./tests/typescript-loader.mjs --test tests/integration/*.test.mjs",
+    "test:orchestration": "node --experimental-strip-types --experimental-loader ./tests/typescript-loader.mjs --test tests/orchestration/*.test.mjs"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
+    "file-saver": "^2.0.5",
     "firebase": "^12.16.0",
+    "framer-motion": "^12.43.0",
+    "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.27.0",
     "next": "16.2.11",
     "postgres": "^3.4.9",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-hot-toast": "^2.6.0",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
