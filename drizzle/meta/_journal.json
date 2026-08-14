@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786392113036,
+      "tag": "0000_loose_tony_stark",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786395991698,
+      "tag": "0001_supreme_mandrill",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786421349492,
+      "tag": "0002_misty_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786700000000,
+      "tag": "0003_onboarding_project_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786723200000,
+      "tag": "0004_ai_manager_jobs",
+      "breakpoints": true
+    }
+  ]
+}
