@@ -1,6 +1,6 @@
 import { db } from "@/app/db";
 import { aiManagerJobs } from "@/app/db/schema";
-import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai";
+import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai/types";
 import { and, eq } from "drizzle-orm";
 
 const strategyKeys: Array<keyof AiManagerStrategy> = [

@@ -6,7 +6,7 @@ import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import auth from "../lib/auth";
-import type { AiManagerJobStatus, AiManagerOutput, AiManagerStrategy } from "../lib/ai";
+import type { AiManagerJobStatus, AiManagerOutput, AiManagerStrategy } from "../lib/ai/types";
 
 const industryOptions = [
   "Digital Marketing",
