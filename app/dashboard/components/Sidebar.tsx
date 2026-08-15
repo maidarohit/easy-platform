@@ -20,6 +20,11 @@ const coreItems: MenuItem[] = [
     icon: "✦",
   },
   {
+  label: "Master Workspace",
+  href: "/master-workspace",
+  icon: "▦",
+},
+  {
     label: "Branding AI",
     href: "/branding-ai",
     icon: "◈",
@@ -101,9 +106,15 @@ function SidebarLink({
   item: MenuItem;
   active: boolean;
 }) {
+  const searchParams = useSearchParams();
+const projectId = searchParams.get("projectId");
+
+const hrefWithProject = projectId
+  ? `${item.href}${item.href.includes("?") ? "&" : "?"}projectId=${encodeURIComponent(projectId)}`
+  : item.href;
   return (
     <a
-      href={item.href}
+      href={hrefWithProject}
       className={`
         group relative flex items-center gap-3
         rounded-xl border px-3 py-2.5
