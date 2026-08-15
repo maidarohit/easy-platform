@@ -73,7 +73,15 @@ const [userId, setUserId] = useState("");
         setIndustry(project.industry);
         setBusinessGoal(project.goal);
         setAnalyticsContext(null);
-        setResult(null);
+        if (project.result) {
+  try {
+    setResult(JSON.parse(project.result) as AiManagerStrategy);
+  } catch {
+    setResult(null);
+  }
+} else {
+  setResult(null);
+}
     });
   }, [project, requestedProjectId]);
 
@@ -99,11 +107,41 @@ const [userId, setUserId] = useState("");
         if (!response.ok) throw new Error(data.error || "Failed to check AI Manager job.");
 
         if (data.status === "completed" && data.result) {
-          setResult(data.result.output);
-          setLoading(false);
-          setJobId("");
-          return;
-        }
+  const completedResult = data.result.output;
+
+  setResult(completedResult);
+
+  if (project) {
+    try {
+      const saveResponse = await fetch("/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: project.id,
+          userId: project.userId,
+          name: project.name,
+          result: JSON.stringify(completedResult),
+        }),
+      });
+
+      const saveData = await saveResponse.json();
+
+      if (!saveResponse.ok) {
+        throw new Error(
+          saveData.error || "Failed to save AI Manager result"
+        );
+      }
+    } catch (saveError) {
+      console.error("Failed to save AI Manager result:", saveError);
+    }
+  }
+
+  setLoading(false);
+  setJobId("");
+  return;
+}
 
         if (data.status === "failed") {
           setError(data.error || "AI Manager job failed.");
@@ -561,7 +599,35 @@ const downloadPDF = () => {
 
       <select
         value={industry}
-        onChange={(e) => setIndustry(e.target.value)}
+        onChange={async (e) => {
+  const nextIndustry = e.target.value;
+  setIndustry(nextIndustry);
+
+  if (!project) return;
+
+  try {
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: project.id,
+        userId: project.userId,
+        name: project.name,
+        industry: nextIndustry,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to save industry");
+    }
+  } catch (error) {
+    console.error("Failed to save industry:", error);
+  }
+}}
         className="
           w-full cursor-pointer rounded-xl
           border border-slate-700/80

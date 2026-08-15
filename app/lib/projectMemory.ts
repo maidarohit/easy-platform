@@ -1,6 +1,7 @@
 export type ProjectMemory = {
   id: string;
   userId: string;
+  name: string;
   companyName: string;
   businessDescription: string;
   originalBrief: string;
@@ -27,6 +28,7 @@ export function normalizeProjectMemory(value: unknown): ProjectMemory {
   return {
     id: text(project.id),
     userId: text(project.userId),
+    name: text(project.name),
     companyName: text(project.companyName),
     businessDescription: originalBrief || storedDescription,
     originalBrief,
