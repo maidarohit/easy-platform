@@ -60,3 +60,15 @@ export const aiManagerJobs = pgTable("ai_manager_jobs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+export const projectOutputs = pgTable("project_outputs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+
+  projectId: text("project_id").notNull(),
+  userId: text("user_id").notNull(),
+
+  module: text("module").notNull(),
+  result: text("result").notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

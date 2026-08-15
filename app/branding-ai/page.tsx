@@ -38,6 +38,43 @@ useEffect(() => {
     active = false;
   };
 }, [project, projectId]);
+useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSavedBrandingOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=branding`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load Branding AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setBrandResult(savedResult as BrandingAiOutput);
+    } catch (error) {
+      console.error("Failed to restore Branding AI output:", error);
+    }
+  };
+
+  loadSavedBrandingOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
 const colors =
   brandResult?.colorPalette?.match(/#[0-9A-Fa-f]{6}/g) || [];
 const copyToClipboard = (text: string, label: string) => {
@@ -208,6 +245,26 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
+const currentUser = auth.currentUser;
+
+if (projectId && currentUser) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: currentUser.uid,
+      module: "branding",
+      result: parsed,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save Branding AI output");
+  }
+}
 } catch (error) {
   console.error(error);
   toast.error("Something went wrong.");

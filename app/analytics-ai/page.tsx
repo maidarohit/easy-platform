@@ -32,7 +32,8 @@ function AnalyticsAIContent() {
   const [businessDescription, setBusinessDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [analyticsResult, setAnalyticsResult] = useState<Record<string, any> | null>(null);
-
+  const [salesContext, setSalesContext] =
+  useState<Record<string, any> | null>(null);
   useEffect(() => {
   if (!projectId) return;
 
@@ -57,7 +58,89 @@ function AnalyticsAIContent() {
     project.businessDescription || project.originalBrief || ""
   );
 }, [projectId, project]);
+useEffect(() => {
+  if (!projectId || !project?.userId) return;
 
+  let active = true;
+
+  const loadSavedAnalyticsOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=analytics`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load Analytics AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setAnalyticsResult(savedResult);
+    } catch (error) {
+      console.error("Failed to restore Analytics AI output:", error);
+    }
+  };
+
+  loadSavedAnalyticsOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
+useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSalesContext = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=sales`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load Sales AI context");
+      }
+
+      if (!active) return;
+
+      if (!data.output?.result) {
+        setSalesContext(null);
+        return;
+      }
+
+      const savedSalesResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setSalesContext(savedSalesResult);
+    } catch (error) {
+      console.error("Failed to load Sales AI context:", error);
+
+      if (active) {
+        setSalesContext(null);
+      }
+    }
+  };
+
+  loadSalesContext();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
   const continueToAIManager = () => {
     if (!analyticsResult) {
       toast.error("Generate the Analytics Report first.");
@@ -96,10 +179,46 @@ function AnalyticsAIContent() {
       const response = await fetch("/api/analytics-ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, industry, monthlyVisitors, monthlyLeads, monthlySales, monthlyRevenue, marketingBudget, businessGoal, businessDescription }),
+        body: JSON.stringify({
+  companyName,
+  industry,
+  monthlyVisitors,
+  monthlyLeads,
+  monthlySales,
+  monthlyRevenue,
+  marketingBudget,
+  businessGoal,
+  businessDescription,
+  salesContext,
+}),
       });
       const data = await response.json();
+      if (!response.ok) {
+  throw new Error(
+    data?.error || `Analytics AI request failed with status ${response.status}`
+  );
+}
       setAnalyticsResult(data.output ?? data);
+      const finalAnalyticsResult = data.output ?? data;
+
+if (projectId && project?.userId && finalAnalyticsResult) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: project.userId,
+      module: "analytics",
+      result: finalAnalyticsResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save Analytics AI output");
+  }
+}
       toast.success("Analytics Report Generated!");
     } catch (error) {
       console.error(error);

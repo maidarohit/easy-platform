@@ -94,6 +94,43 @@ function SEOAIPageContent() {
       active = false;
     };
   }, [project, projectId]);
+  useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSavedSEOOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=seo`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load SEO AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setBrandResult(savedResult as SEOResult);
+    } catch (error) {
+      console.error("Failed to restore SEO AI output:", error);
+    }
+  };
+
+  loadSavedSEOOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -259,7 +296,30 @@ ${brandResult.growthRecommendations}
         }
         break;
       }
-      setBrandResult(isRecord(result) ? result as SEOResult : null);
+      const finalSEOResult = isRecord(result)
+  ? (result as SEOResult)
+  : null;
+
+setBrandResult(finalSEOResult);
+
+if (projectId && project?.userId && finalSEOResult) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: project.userId,
+      module: "seo",
+      result: finalSEOResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save SEO AI output");
+  }
+}
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");

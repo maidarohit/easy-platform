@@ -91,6 +91,43 @@ const [isEditing, setIsEditing] = useState(false);
       active = false;
     };
   }, [project, projectId]);
+  useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSavedMarketingOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=marketing`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load Marketing AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setBrandResult(savedResult as MarketingResult);
+    } catch (error) {
+      console.error("Failed to restore Marketing AI output:", error);
+    }
+  };
+
+  loadSavedMarketingOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
   const channelPerformance =
   brandResult?.marketingDashboard?.channels?.map((item) => ({
     label: item.label,
@@ -421,7 +458,32 @@ while (true) {
 
 console.log("FINAL RESULT:", result);
 
-setBrandResult(isRecord(result) ? result as MarketingResult : null);
+const finalMarketingResult = isRecord(result)
+  ? (result as MarketingResult)
+  : null;
+
+setBrandResult(finalMarketingResult);
+
+const currentUser = auth.currentUser;
+
+if (projectId && currentUser && finalMarketingResult) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: currentUser.uid,
+      module: "marketing",
+      result: finalMarketingResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save Marketing AI output");
+  }
+}
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");
@@ -479,10 +541,33 @@ console.log(
   isRecord(regenerated) ? regenerated.marketingStrategy : undefined,
 );
 
-setBrandResult((previous) => ({
-  ...previous,
-  ...regenerated as MarketingResult,
-}));
+const updatedMarketingResult = {
+  ...(brandResult ?? {}),
+  ...(regenerated as MarketingResult),
+} as MarketingResult;
+
+setBrandResult(updatedMarketingResult);
+
+const currentUser = auth.currentUser;
+
+if (projectId && currentUser) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: currentUser.uid,
+      module: "marketing",
+      result: updatedMarketingResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save regenerated Marketing AI output");
+  }
+}
 
     toast.success(`${section} regenerated successfully`, {
       id: "regen",
@@ -538,10 +623,33 @@ const editWithAI = async () => {
           : updated.output;
     }
 
-    setBrandResult((previous) => ({
-      ...previous,
-      ...updated as MarketingResult,
-    }));
+    const editedMarketingResult = {
+  ...(brandResult ?? {}),
+  ...(updated as MarketingResult),
+} as MarketingResult;
+
+setBrandResult(editedMarketingResult);
+
+const currentUser = auth.currentUser;
+
+if (projectId && currentUser) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: currentUser.uid,
+      module: "marketing",
+      result: editedMarketingResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save edited Marketing AI output");
+  }
+}
 
     toast.success("Section updated!");
 

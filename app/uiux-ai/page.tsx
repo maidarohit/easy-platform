@@ -38,6 +38,43 @@ function UIUXAIPageContent() {
     project.businessDescription || project.originalBrief || ""
   );
 }, [projectId, project]);
+useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSavedUIUXOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=uiux`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load UI/UX AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setBrandResult(savedResult);
+    } catch (error) {
+      console.error("Failed to restore UI/UX AI output:", error);
+    }
+  };
+
+  loadSavedUIUXOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
   const colors =
     brandResult?.colourScheme?.match(/#[0-9A-Fa-f]{6}/g) || [];
   const copyToClipboard = (text: string, label: string) => {
@@ -231,6 +268,24 @@ while (true) {
 
 
 setBrandResult(result);
+if (projectId && project?.userId && result) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: project.userId,
+      module: "uiux",
+      result,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save UI/UX AI output");
+  }
+}
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");

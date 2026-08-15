@@ -51,6 +51,43 @@ setBusinessDescription("");
     project.businessDescription || project.originalBrief || ""
   );
 }, [projectId, project]);
+useEffect(() => {
+  if (!projectId || !project?.userId) return;
+
+  let active = true;
+
+  const loadSavedSalesOutput = async () => {
+    try {
+      const response = await fetch(
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=sales`,
+        { cache: "no-store" }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load Sales AI output");
+      }
+
+      if (!active || !data.output?.result) return;
+
+      const savedResult =
+        typeof data.output.result === "string"
+          ? JSON.parse(data.output.result)
+          : data.output.result;
+
+      setSalesResult(savedResult);
+    } catch (error) {
+      console.error("Failed to restore Sales AI output:", error);
+    }
+  };
+
+  loadSavedSalesOutput();
+
+  return () => {
+    active = false;
+  };
+}, [projectId, project?.userId]);
 
   const handleGenerate = async () => {
     try {
@@ -61,9 +98,34 @@ setBusinessDescription("");
         body: JSON.stringify({ companyName, industry, salesGoal, targetAudience, businessDescription }),
       });
       const data = await response.json();
+      if (!response.ok) {
+  throw new Error(
+    data?.error || `Sales AI request failed with status ${response.status}`
+  );
+}
       console.log("Sales AI Response:", data);
       console.log(data);
       setSalesResult(data.output ?? data);
+      const finalSalesResult = data.output ?? data;
+
+if (projectId && project?.userId && finalSalesResult) {
+  const saveOutputResponse = await fetch("/api/project-outputs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      projectId,
+      userId: project.userId,
+      module: "sales",
+      result: finalSalesResult,
+    }),
+  });
+
+  if (!saveOutputResponse.ok) {
+    console.error("Failed to save Sales AI output");
+  }
+}
     } catch (error) {
       console.error(error);
     } finally {
@@ -72,20 +134,19 @@ setBusinessDescription("");
   };
 
   const continueToAnalytics = () => {
-    if (!salesResult) {
-      toast.error("Generate the Sales Strategy first.");
-      return;
-    }
-    localStorage.setItem("easy-platform-open-analytics-project", JSON.stringify({
-      companyName,
-      industry,
-      targetAudience,
-      businessGoal: salesGoal,
-      businessDescription,
-      salesResult,
-    }));
-    window.location.href = "/analytics-ai";
-  };
+  if (!salesResult) {
+    toast.error("Generate the Sales Strategy first.");
+    return;
+  }
+
+  if (!projectId) {
+    toast.error("Project context is missing.");
+    return;
+  }
+
+  window.location.href =
+    `/analytics-ai?projectId=${encodeURIComponent(projectId)}`;
+};
 
   const downloadPDF = () => {
     if (!salesResult) return;
