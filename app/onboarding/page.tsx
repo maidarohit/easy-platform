@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import auth from "../lib/auth";
 
@@ -38,6 +38,22 @@ export default function OnboardingPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+useEffect(() => {
+  const storedIdea = sessionStorage.getItem("easy-selected-business-idea");
+
+  if (!storedIdea) return;
+
+  try {
+    const saved = JSON.parse(storedIdea);
+    const idea = saved?.idea ?? saved;
+
+    if (idea?.title) {
+      setBusinessDescription(idea.title);
+    }
+  } catch (error) {
+    console.error("Could not load selected business idea:", error);
+  }
+}, []);
   const stepOneReady = businessDescription.trim().length > 0;
   const stepTwoReady = Boolean(
     businessName.trim() && location.trim() && businessStage && mainGoal,
@@ -89,6 +105,7 @@ export default function OnboardingPage() {
       }
 
       setCompletionMessage("Your business project is ready.");
+      sessionStorage.removeItem("easy-selected-business-idea");
       window.setTimeout(() => router.push("/dashboard"), 650);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "We couldn't create your business project. Please try again.");

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import auth from "../../lib/auth";
 
 type NavbarProps = {
   searchQuery?: string;
@@ -15,6 +17,16 @@ export default function Navbar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const handleSignOut = async () => {
+  try {
+    await signOut(auth);
+    setShowProfileMenu(false);
+    router.push("/login");
+  } catch (error) {
+    console.error("Sign out failed:", error);
+  }
+};
 
 const pageOptions = [
   {
@@ -339,6 +351,13 @@ const currentPage =
       >
         ⚙️ Settings
       </a>
+      <button
+  type="button"
+  onClick={handleSignOut}
+  className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm text-[#606A64] hover:bg-[#EEE9E1]"
+>
+  ↪ Sign out
+</button>
     </div>
   )}
 </div>
