@@ -109,9 +109,18 @@ function SidebarLink({
   const searchParams = useSearchParams();
 const projectId = searchParams.get("projectId");
 
-const hrefWithProject = projectId
-  ? `${item.href}${item.href.includes("?") ? "&" : "?"}projectId=${encodeURIComponent(projectId)}`
-  : item.href;
+const hrefWithProject = (() => {
+  if (!projectId) return item.href;
+
+  const [path, query = ""] = item.href.split("?");
+  const params = new URLSearchParams(query);
+
+  params.set("projectId", projectId);
+
+  const queryString = params.toString();
+
+  return `${path}?${queryString}`;
+})();
   return (
     <a
       href={hrefWithProject}
