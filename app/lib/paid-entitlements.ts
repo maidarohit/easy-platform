@@ -7,6 +7,7 @@ import { categoryForModule, PLAN_LIMITS, USAGE_CATEGORIES, type UsageCategory } 
 import { getUserSubscription } from "@/app/lib/subscriptions";
 
 const ACCESS_CATEGORY = "__paid_access__";
+const PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>(["projects", "standardAiTasks", "aiManagerRuns"]);
 
 function enabled(name: string): boolean {
   return process.env[name]?.trim().toLowerCase() === "true";
@@ -20,32 +21,41 @@ function categorySwitch(category: UsageCategory): string | null {
   return null;
 }
 
+function isPrivateBetaUser(userId: string, category: UsageCategory): boolean {
+  if (!PRIVATE_BETA_CATEGORIES.has(category)) return false;
+  return new Set((process.env.PRIVATE_BETA_UIDS ?? "").split(",").map((item) => item.trim()).filter(Boolean)).has(userId);
+}
+
 export async function checkUsageAllowance(userId: string, category: UsageCategory) {
-  if (!enabled("PAID_AI_GENERATION_ENABLED")) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
+  const privateBetaUser = isPrivateBetaUser(userId, category);
+  if (!privateBetaUser && !enabled("PAID_AI_GENERATION_ENABLED")) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
   const switchName = categorySwitch(category);
-  if (switchName && !enabled(switchName)) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
+  if (!privateBetaUser && switchName && !enabled(switchName)) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
 
   const subscription = await getUserSubscription(userId);
-  if (!subscription || subscription.status !== "active") return { ok: false as const, reason: "PAID_SUBSCRIPTION_REQUIRED" as const };
+  if (!privateBetaUser && (!subscription || subscription.status !== "active")) return { ok: false as const, reason: "PAID_SUBSCRIPTION_REQUIRED" as const };
 
   const overrides = await db.select().from(entitlementOverrides).where(and(
     eq(entitlementOverrides.userId, userId),
     inArray(entitlementOverrides.category, [ACCESS_CATEGORY, category])
   ));
-  if (overrides.some((item) => item.category === ACCESS_CATEGORY && item.paidAccessDisabled)) {
+  if (!privateBetaUser && overrides.some((item) => item.category === ACCESS_CATEGORY && item.paidAccessDisabled)) {
     return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
   }
 
-  const configuredLimit = PLAN_LIMITS[subscription.plan][category];
+  const plan = subscription?.status === "active" ? subscription.plan : "pro";
+  const configuredLimit = PLAN_LIMITS[plan][category];
   const categoryOverride = overrides.find((item) => item.category === category);
   const limit = categoryOverride?.limit ?? configuredLimit;
-  const periodStart = subscription.currentPeriodStart ?? subscription.createdAt;
+  const periodStart = subscription?.status === "active"
+    ? subscription.currentPeriodStart ?? subscription.createdAt
+    : new Date(0);
   if (category === "projects") {
     const [row] = await db.select({ count: sql<number>`count(*)` }).from(projects).where(eq(projects.userId, userId));
     const used = Number(row?.count ?? 0);
     return used >= limit
       ? { ok: false as const, reason: "PLAN_LIMIT_REACHED" as const, category, used, limit }
-      : { ok: true as const, plan: subscription.plan, category, used, limit };
+      : { ok: true as const, plan, category, used, limit };
   }
 
   const modules = Object.entries({
@@ -66,7 +76,7 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
   const used = Number(row?.count ?? 0);
   return used >= limit
     ? { ok: false as const, reason: "PLAN_LIMIT_REACHED" as const, category, used, limit }
-    : { ok: true as const, plan: subscription.plan, category, used, limit };
+    : { ok: true as const, plan, category, used, limit };
 }
 
 export function allowanceError(result: Exclude<Awaited<ReturnType<typeof checkUsageAllowance>>, { ok: true }>) {
