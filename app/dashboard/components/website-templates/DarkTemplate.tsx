@@ -2,12 +2,13 @@
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import Floating from "../animations/Floating";
+import type { WebsiteAiOutput } from "../../../lib/ai";
 
 type DarkTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
-  brandResult?: any;
+  brandResult?: WebsiteAiOutput & { heroHeadline?: string };
 };
 
 export default function DarkTemplate({
@@ -177,8 +178,8 @@ export default function DarkTemplate({
         <div className="mt-8 grid grid-cols-2 gap-8 text-center text-sm font-bold tracking-[0.18em] text-slate-500 sm:grid-cols-3 lg:grid-cols-6">
           {["NEURAL", "ORBIT", "QUANTUM", "VECTOR", "NOVA", "SYNAPSE"].map(
             (name) => (
-  <AnimatedCard>
-    <div key={name}>{name}</div>
+  <AnimatedCard key={name}>
+    <div>{name}</div>
   </AnimatedCard>
 )
           )}
@@ -202,9 +203,8 @@ export default function DarkTemplate({
             ["Advanced Analytics", "Turn complex data into clear, actionable decisions."],
             ["Secure Infrastructure", "Protect your business with reliable enterprise-grade systems."],
           ].map(([title, text]) => (
-            <AnimatedCard>
+            <AnimatedCard key={title}>
             <div
-              key={title}
               className="rounded-[28px] border border-white/10 bg-white/[0.04] p-7 transition hover:border-cyan-400/30 hover:bg-white/[0.06]"
             >
               <div className="mb-6 h-12 w-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-violet-500" />

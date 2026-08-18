@@ -22,7 +22,8 @@ export default function Navbar({
   try {
     await signOut(auth);
     setShowProfileMenu(false);
-    router.push("/login");
+    router.replace("/login");
+    router.refresh();
   } catch (error) {
     console.error("Sign out failed:", error);
   }
@@ -213,7 +214,7 @@ const currentPage =
       <span
         className="
           text-[9px] font-semibold uppercase
-          tracking-[0.22em] text-[#A8B8A7]
+          tracking-[0.22em] text-[#5B675F]
         "
       >
         {currentPage.label}
@@ -260,7 +261,7 @@ const currentPage =
     rounded-xl
     border border-[#A8B8A7]/20
     bg-[#F7F4EC]
-    text-[#606A64]
+    text-[#46534D]
     transition-all duration-300
     hover:border-[#A8B8A7]/40
     hover:bg-[#EDF0E8]
@@ -295,7 +296,7 @@ const currentPage =
         Notifications
       </h3>
 
-      <p className="mt-3 text-sm text-[#606A64]">
+      <p className="mt-3 text-sm text-[#46534D]">
         No new notifications.
       </p>
     </div>
@@ -342,19 +343,19 @@ const currentPage =
     <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-[#A8B8A7]/35 bg-[#FCFBF7] p-3 shadow-xl">
       <div className="border-b border-[#A8B8A7]/30 px-3 py-2">
         <p className="font-semibold text-[#0E2C24]">Account</p>
-        <p className="text-xs text-[#606A64]">Easy Platform User</p>
+        <p className="text-xs text-[#46534D]">Easy Platform User</p>
       </div>
 
       <a
         href="/settings"
-        className="mt-2 block rounded-lg px-3 py-2 text-sm text-[#606A64] hover:bg-[#EEE9DC] hover:text-[#173D32]"
+        className="mt-2 block rounded-lg px-3 py-2 text-sm text-[#46534D] hover:bg-[#EEE9DC] hover:text-[#173D32]"
       >
         ⚙️ Settings
       </a>
       <button
   type="button"
   onClick={handleSignOut}
-  className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm text-[#606A64] hover:bg-[#EEE9E1]"
+  className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm text-[#46534D] hover:bg-[#EEE9E1]"
 >
   ↪ Sign out
 </button>

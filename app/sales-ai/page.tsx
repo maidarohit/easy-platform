@@ -5,6 +5,8 @@ import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
+import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 
 const SalesIcon = ({ className = "h-6 w-6" }: { className?: string }) => (
@@ -27,13 +29,14 @@ function SalesAIPageContent() {
   const [salesGoal, setSalesGoal] = useState("Increase Revenue");
   const [businessDescription, setBusinessDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [salesResult, setSalesResult] = useState<Record<string, any> | null>(null);
+  const [salesResult, setSalesResult] = useState<Record<string, string> | null>(null);
   const { project, projectId } = useProjectMemory();
 
   useEffect(() => {
   if (!projectId) return;
 
   // Clear data/results from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setSalesResult(null);
 setCompanyName("");
 setIndustry("");
@@ -58,7 +61,7 @@ useEffect(() => {
 
   const loadSavedSalesOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=sales`,
         { cache: "no-store" }
       );
@@ -90,12 +93,35 @@ useEffect(() => {
 }, [projectId, project?.userId]);
 
   const handleGenerate = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      toast.error("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      toast.error("Please open a project before generating Sales intelligence.");
+      return;
+    }
+
     try {
       setLoading(true);
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/sales-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, industry, salesGoal, targetAudience, businessDescription }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          companyName,
+          industry,
+          salesGoal,
+          targetAudience,
+          businessDescription,
+          projectId,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -109,7 +135,7 @@ useEffect(() => {
       const finalSalesResult = data.output ?? data;
 
 if (projectId && project?.userId && finalSalesResult) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

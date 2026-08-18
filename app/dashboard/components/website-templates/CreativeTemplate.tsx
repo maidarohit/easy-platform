@@ -6,12 +6,13 @@ import ScaleIn from "../animations/ScaleIn";
 import Floating from "../animations/Floating";
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
+import type { WebsiteAiOutput } from "../../../lib/ai";
 
 type CreativeTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
-  brandResult?: any;
+  brandResult?: WebsiteAiOutput & { heroHeadline?: string };
 };
 
 export default function CreativeTemplate({

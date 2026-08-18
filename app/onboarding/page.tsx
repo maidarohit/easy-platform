@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 
 const businessStages = [
   "I'm starting something new",
@@ -48,6 +49,7 @@ useEffect(() => {
     const idea = saved?.idea ?? saved;
 
     if (idea?.title) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- initialize the form from the explicit session handoff
       setBusinessDescription(idea.title);
     }
   } catch (error) {
@@ -82,7 +84,7 @@ useEffect(() => {
     setCompletionMessage("");
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await authenticatedFetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

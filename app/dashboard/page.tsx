@@ -6,6 +6,7 @@ import Navbar from "./components/Navbar";
 import StatsCards from "./components/StatsCards";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useRouter } from "next/navigation";
 
 type Project = {
@@ -38,11 +39,11 @@ function DashboardPageContent() {
 
         if (!user) {
           setProjects([]);
-          setError("Please sign in to view your projects.");
+          router.replace("/login");
           return;
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/projects?userId=${encodeURIComponent(user.uid)}`
         );
 
@@ -67,7 +68,7 @@ function DashboardPageContent() {
     });
 
     return unsubscribe;
-  }, []);
+  }, [router]);
 
   const openInAIManager = (project: Project) => {
     router.push(`/ai-manager?projectId=${encodeURIComponent(project.id)}`);

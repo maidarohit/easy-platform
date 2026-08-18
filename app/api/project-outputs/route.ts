@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/db";
-import { projectOutputs } from "@/app/db/schema";
+import { projectOutputs, projects } from "@/app/db/schema";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq } from "drizzle-orm";
 
 const asText = (value: unknown) =>
@@ -22,21 +23,38 @@ function serializeResult(value: unknown) {
   SAVE OR UPDATE MODULE OUTPUT
 */
 export async function POST(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const body: Record<string, unknown> = await req.json();
 
     const projectId = asText(body.projectId);
-    const userId = asText(body.userId);
-    const module = asText(body.module).toLowerCase();
+    const moduleName = asText(body.module).toLowerCase();
     const result = serializeResult(body.result);
 
-    if (!projectId || !userId || !module || !result) {
+    if (!projectId || !moduleName || !result) {
       return NextResponse.json(
         {
-          error: "projectId, userId, module and result are required",
+          error: "projectId, module and result are required",
         },
         { status: 400 }
       );
+    }
+
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const [existingOutput] = await db
@@ -46,7 +64,7 @@ export async function POST(req: Request) {
         and(
           eq(projectOutputs.projectId, projectId),
           eq(projectOutputs.userId, userId),
-          eq(projectOutputs.module, module)
+          eq(projectOutputs.module, moduleName)
         )
       )
       .limit(1);
@@ -73,7 +91,7 @@ export async function POST(req: Request) {
       .values({
         projectId,
         userId,
-        module,
+        module: moduleName,
         result,
       })
       .returning();
@@ -99,23 +117,40 @@ export async function POST(req: Request) {
   LOAD PROJECT OUTPUTS
 */
 export async function GET(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
 
     const projectId = searchParams.get("projectId")?.trim() || "";
-    const userId = searchParams.get("userId")?.trim() || "";
-    const module = searchParams.get("module")?.trim().toLowerCase() || "";
+    const moduleName = searchParams.get("module")?.trim().toLowerCase() || "";
 
-    if (!projectId || !userId) {
+    if (!projectId) {
       return NextResponse.json(
         {
-          error: "projectId and userId are required",
+          error: "projectId is required",
         },
         { status: 400 }
       );
     }
 
-    if (module) {
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    if (moduleName) {
       const [output] = await db
         .select()
         .from(projectOutputs)
@@ -123,7 +158,7 @@ export async function GET(req: Request) {
           and(
             eq(projectOutputs.projectId, projectId),
             eq(projectOutputs.userId, userId),
-            eq(projectOutputs.module, module)
+            eq(projectOutputs.module, moduleName)
           )
         )
         .limit(1);

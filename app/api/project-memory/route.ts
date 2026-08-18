@@ -1,15 +1,23 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/db";
-import { projectMemory } from "@/app/db/schema";
+import { projectMemory, projects } from "@/app/db/schema";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
 
     const {
       projectId,
-      userId,
       businessName,
       industry,
       businessDescription,
@@ -23,11 +31,21 @@ export async function POST(req: Request) {
       additionalContext,
     } = body;
 
-    if (!projectId || !userId) {
+    if (!projectId) {
       return NextResponse.json(
-        { error: "projectId and userId are required" },
+        { error: "projectId is required" },
         { status: 400 }
       );
+    }
+
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const existingMemory = await db
@@ -105,17 +123,34 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
 
     const projectId = searchParams.get("projectId");
-    const userId = searchParams.get("userId");
 
-    if (!projectId || !userId) {
+    if (!projectId) {
       return NextResponse.json(
-        { error: "projectId and userId are required" },
+        { error: "projectId is required" },
         { status: 400 }
       );
+    }
+
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
     const memory = await db

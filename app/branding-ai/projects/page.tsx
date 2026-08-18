@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../../lib/auth";
+import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import type { BrandingAiOutput } from "../../lib/ai";
 
 type BrandingProject = {
@@ -35,7 +36,7 @@ export default function BrandingProjectsPage() {
       }
 
       try {
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/projects?userId=${encodeURIComponent(user.uid)}`
         );
 
@@ -82,7 +83,7 @@ export default function BrandingProjectsPage() {
 
   const deleteProject = async (id: string) => {
     try {
-      const response = await fetch(`/api/projects?id=${id}`, {
+      const response = await authenticatedFetch(`/api/projects?id=${id}`, {
         method: "DELETE",
       });
 

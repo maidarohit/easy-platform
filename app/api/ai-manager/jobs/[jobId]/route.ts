@@ -1,7 +1,9 @@
 import { db } from "@/app/db";
 import { aiManagerJobs } from "@/app/db/schema";
+import { completeAiUsage, failAiUsage } from "@/app/lib/ai-usage";
 import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai/types";
-import { and, eq } from "drizzle-orm";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { and, eq, inArray } from "drizzle-orm";
 
 const strategyKeys: Array<keyof AiManagerStrategy> = [
   "overview",
@@ -26,16 +28,38 @@ function validOutput(value: unknown): value is AiManagerOutput {
 }
 
 type JobRouteContext = { params: Promise<{ jobId: string }> };
+type TerminalStatus = "completed" | "failed";
 
-export async function GET(req: Request, { params }: JobRouteContext) {
-  const { jobId } = await params;
-  const { searchParams } = new URL(req.url);
-  const userId = text(searchParams.get("userId"));
+async function finalizeUsage(
+  usageId: string | null,
+  status: TerminalStatus,
+  createdAt: Date
+) {
+  if (!usageId) return;
 
-  if (!userId) {
+  try {
+    const durationMs = Math.max(0, Date.now() - createdAt.getTime());
+
+    if (status === "completed") {
+      await completeAiUsage({ usageId, durationMs });
+    } else {
+      await failAiUsage({ usageId, durationMs });
+    }
+  } catch {
+    console.error("AI Manager usage finalization failed.");
+  }
+}
+
+export async function GET(request: Request, { params }: JobRouteContext) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
     return Response.json({ error: "Authentication is required." }, { status: 401 });
   }
 
+  const { jobId } = await params;
   const [job] = await db
     .select()
     .from(aiManagerJobs)
@@ -59,23 +83,29 @@ export async function GET(req: Request, { params }: JobRouteContext) {
   return Response.json(response);
 }
 
-export async function POST(req: Request, { params }: JobRouteContext) {
+export async function POST(request: Request, { params }: JobRouteContext) {
   const configuredSecret = text(process.env.AI_MANAGER_CALLBACK_SECRET);
-  const suppliedSecret = text(req.headers.get("authorization")).replace(/^Bearer\s+/i, "");
+  const suppliedSecret = text(request.headers.get("authorization")).replace(/^Bearer\s+/i, "");
 
   if (!configuredSecret || suppliedSecret !== configuredSecret) {
     return Response.json({ error: "Unauthorized callback." }, { status: 401 });
   }
 
   const { jobId } = await params;
-  const body: unknown = await req.json();
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid callback body." }, { status: 400 });
+  }
 
   if (!isRecord(body) || text(body.jobId) !== jobId) {
     return Response.json({ error: "Callback jobId does not match." }, { status: 400 });
   }
 
   const [job] = await db
-    .select({ id: aiManagerJobs.id })
+    .select()
     .from(aiManagerJobs)
     .where(eq(aiManagerJobs.id, jobId))
     .limit(1);
@@ -84,29 +114,72 @@ export async function POST(req: Request, { params }: JobRouteContext) {
     return Response.json({ error: "AI Manager job not found." }, { status: 404 });
   }
 
-  if (body.status === "failed") {
-    const error = text(body.error) || "AI Manager workflow failed.";
-    await db
-      .update(aiManagerJobs)
-      .set({ status: "failed", result: null, error, updatedAt: new Date() })
-      .where(eq(aiManagerJobs.id, jobId));
-
-    return Response.json({ jobId, status: "failed" });
+  if (job.status === "completed" || job.status === "failed") {
+    return Response.json({ jobId, status: job.status });
   }
 
-  if (!validOutput(body)) {
-    return Response.json({ error: "Invalid AI Manager result structure." }, { status: 400 });
-  }
+  const outputIsValid = validOutput(body);
+  const invalidOutput = body.status !== "failed" && !outputIsValid;
+  const nextStatus: TerminalStatus = body.status === "failed" || invalidOutput
+    ? "failed"
+    : "completed";
+  const error = body.status === "failed"
+    ? text(body.error) || "AI Manager workflow failed."
+    : invalidOutput
+      ? "Invalid AI Manager result structure."
+      : null;
 
-  await db
+  const [transitionedJob] = await db
     .update(aiManagerJobs)
-    .set({
-      status: "completed",
-      result: JSON.stringify({ output: body.output }),
-      error: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(aiManagerJobs.id, jobId));
+    .set(
+      nextStatus === "completed" && outputIsValid
+        ? {
+            status: "completed",
+            result: JSON.stringify({ output: body.output }),
+            error: null,
+            updatedAt: new Date(),
+          }
+        : {
+            status: "failed",
+            result: null,
+            error,
+            updatedAt: new Date(),
+          }
+    )
+    .where(
+      and(
+        eq(aiManagerJobs.id, jobId),
+        inArray(aiManagerJobs.status, ["pending", "processing"])
+      )
+    )
+    .returning({
+      usageId: aiManagerJobs.usageId,
+      createdAt: aiManagerJobs.createdAt,
+      status: aiManagerJobs.status,
+    });
 
-  return Response.json({ jobId, status: "completed" });
+  if (!transitionedJob) {
+    const [terminalJob] = await db
+      .select({ status: aiManagerJobs.status })
+      .from(aiManagerJobs)
+      .where(eq(aiManagerJobs.id, jobId))
+      .limit(1);
+
+    return Response.json({ jobId, status: terminalJob?.status || job.status });
+  }
+
+  await finalizeUsage(
+    transitionedJob.usageId,
+    transitionedJob.status as TerminalStatus,
+    transitionedJob.createdAt
+  );
+
+  if (invalidOutput) {
+    return Response.json(
+      { jobId, status: "failed", error: "Invalid AI Manager result structure." },
+      { status: 400 }
+    );
+  }
+
+  return Response.json({ jobId, status: nextStatus });
 }

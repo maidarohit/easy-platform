@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 function VideoAIPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -28,6 +29,7 @@ const [aspectRatio, setAspectRatio] = useState("Landscape (16:9)");
   if (!projectId) return;
 
   // Clear data from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setPrompt("");
   setVideoUrl("");
   setError("");
@@ -45,6 +47,18 @@ const [aspectRatio, setAspectRatio] = useState("Landscape (16:9)");
 }, [projectId, project]);
 
   const handleGenerateVideo = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setError("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      setError("Please open a project before generating a video.");
+      return;
+    }
+
     if (!prompt.trim()) {
       alert("Please enter a video description.");
       return;
@@ -55,10 +69,12 @@ const [aspectRatio, setAspectRatio] = useState("Landscape (16:9)");
     setVideoUrl("");
 
     try {
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/video-ai", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
   prompt,

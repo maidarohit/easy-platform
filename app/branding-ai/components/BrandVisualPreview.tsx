@@ -6,9 +6,10 @@ import { toPng } from "html-to-image";
 import jsPDF from "jspdf";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import type { BrandingAiOutput } from "../../lib/ai";
 
 type BrandVisualPreviewProps = {
-  brandResult: any;
+  brandResult: BrandingAiOutput;
 };
 
 export default function BrandVisualPreview({

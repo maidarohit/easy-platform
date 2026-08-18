@@ -1,12 +1,13 @@
 "use client";
 import AnimatedCard from "../animations/AnimatedCard";
 import AnimatedButton from "../animations/AnimatedButton";
+import type { WebsiteAiOutput } from "../../../lib/ai";
 
 type MinimalTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
-  brandResult?: any;
+  brandResult?: WebsiteAiOutput & { heroHeadline?: string };
 };
 
 export default function MinimalTemplate({

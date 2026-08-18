@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/db";
 import { users } from "@/app/db/schema";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 
 export async function POST(req: Request) {
+  let id: string;
+  let email: string;
+
   try {
-    const body = await req.json();
-    const { id, email } = body;
+    const verifiedToken = await verifyFirebaseIdToken(req);
+    id = verifiedToken.uid;
+    email = typeof verifiedToken.email === "string" ? verifiedToken.email.trim() : "";
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
 
-    if (!id || !email) {
-      return NextResponse.json(
-        { error: "User ID and email are required" },
-        { status: 400 }
-      );
-    }
+  if (!email || !email.includes("@")) {
+    return NextResponse.json(
+      { error: "Authenticated email is required" },
+      { status: 400 }
+    );
+  }
 
+  try {
     await db
       .insert(users)
       .values({

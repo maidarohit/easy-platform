@@ -296,7 +296,7 @@ export default function Sidebar() {
             <p
               className="
                 mt-1 text-[9px] font-medium uppercase
-                tracking-[0.22em] text-[#87938B]
+                tracking-[0.22em] text-[#46534D]
               "
             >
               Intelligence OS
@@ -326,7 +326,7 @@ export default function Sidebar() {
             <p
               className="
                 text-[9px] font-semibold uppercase
-                tracking-[0.24em] text-[#728078]
+                tracking-[0.24em] text-[#5B675F]
               "
             >
               Core Intelligence
@@ -367,7 +367,7 @@ export default function Sidebar() {
             <p
               className="
                 text-[9px] font-semibold uppercase
-                tracking-[0.24em] text-[#728078]
+                tracking-[0.24em] text-[#5B675F]
               "
             >
               Creative Systems
@@ -414,7 +414,7 @@ export default function Sidebar() {
               <span
                 className="
                   text-[9px] font-semibold uppercase
-                  tracking-[0.18em] text-[#87938B]
+                  tracking-[0.18em] text-[#46534D]
                 "
               >
                 System Online
@@ -433,7 +433,7 @@ export default function Sidebar() {
             group mt-2 flex items-center gap-3
             rounded-xl border border-transparent
             px-3 py-2.5
-            text-[#87938B]
+            text-[#46534D]
             transition-all duration-300
             hover:border-[#A8B8A7]/15
             hover:bg-[#173D32]/25

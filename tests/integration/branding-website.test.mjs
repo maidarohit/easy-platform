@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { POST as brandingPost } from "../../app/api/branding-ai/route.ts";
@@ -14,7 +15,7 @@ const brandInput = {
   brandDescription: "An AI business platform",
 };
 
-async function verifyProxy(post, expectedWebhook) {
+async function verifyProtectedProxy(post, routePath, expectedWebhook) {
   const originalFetch = globalThis.fetch;
   let captured;
   globalThis.fetch = async (url, init) => {
@@ -34,24 +35,26 @@ async function verifyProxy(post, expectedWebhook) {
       })
     );
 
-    assert.equal(captured.url, expectedWebhook);
-    assert.equal(captured.init.method, "POST");
-    assert.deepEqual(JSON.parse(captured.init.body), brandInput);
-    assert.deepEqual(await response.json(), { output: { name: "result" } });
+    assert.equal(response.status, 401);
+    assert.equal(captured, undefined, "Unauthenticated requests must not reach n8n");
+    const contents = await readFile(new URL(`../../${routePath}`, import.meta.url), "utf8");
+    assert.ok(contents.includes(expectedWebhook));
   } finally {
     globalThis.fetch = originalFetch;
   }
 }
 
-test("Branding AI proxies its pinned contract without a live n8n call", () =>
-  verifyProxy(
+test("Branding AI protects its pinned proxy without a live n8n call", () =>
+  verifyProtectedProxy(
     brandingPost,
+    "app/api/branding-ai/route.ts",
     "https://rohitm2026.app.n8n.cloud/webhook/branding-api"
   ));
 
-test("Website AI proxies its pinned contract without a live n8n call", () =>
-  verifyProxy(
+test("Website AI protects its pinned proxy without a live n8n call", () =>
+  verifyProtectedProxy(
     websitePost,
+    "app/api/website-ai/route.ts",
     "https://rohitm2026.app.n8n.cloud/webhook/c5d5e244-e62c-4634-b353-0175b9793c32"
   ));
 

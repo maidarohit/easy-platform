@@ -1,35 +1,123 @@
-export async function POST(req: Request) {
+import { db } from "@/app/db";
+import { projects } from "@/app/db/schema";
+import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { and, eq } from "drizzle-orm";
+
+const VIDEO_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/video-ai";
+const VIDEO_AI_WORKFLOW = "video-ai";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object";
+
+async function finalizeUsage(
+  usageId: string,
+  status: "success" | "failed",
+  startedAt: number
+) {
   try {
-    const body = await req.json();
+    const durationMs = Date.now() - startedAt;
+    if (status === "success") {
+      await completeAiUsage({ usageId, durationMs });
+    } else {
+      await failAiUsage({ usageId, durationMs });
+    }
+  } catch {
+    console.error("Video AI usage finalization failed.");
+  }
+}
 
-    const n8nResponse = await fetch(
-      "https://rohitm2026.app.n8n.cloud/webhook/video-ai",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        cache: "no-store",
-      }
-    );
+export async function POST(request: Request) {
+  let userId: string;
+  try {
+    userId = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
+    return Response.json({ error: "Authentication is required." }, { status: 401 });
+  }
 
-    if (!n8nResponse.ok) {
-      const errorText = await n8nResponse.text();
+  let body: Record<string, unknown>;
+  try {
+    const requestBody: unknown = await request.json();
+    if (!isRecord(requestBody)) {
+      return Response.json({ error: "Invalid request body." }, { status: 400 });
+    }
+    body = requestBody;
+  } catch {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
 
+  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+  if (!projectId) {
+    return Response.json({ error: "projectId is required." }, { status: 400 });
+  }
+
+  try {
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+    if (!ownedProject) {
+      return Response.json({ error: "Project not found." }, { status: 404 });
+    }
+  } catch {
+    console.error("Video AI project authorization failed.");
+    return Response.json({ error: "Unable to authorize project." }, { status: 500 });
+  }
+
+  let usageId: string;
+  try {
+    usageId = await startAiUsage({
+      userId,
+      projectId,
+      module: "video",
+      workflow: VIDEO_AI_WORKFLOW,
+      model: null,
+    });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    console.error("Video AI usage initialization failed.");
+    return Response.json({ error: "Unable to track Video AI request." }, { status: 500 });
+  }
+
+  const videoPayload = { ...body };
+  delete videoPayload.userId;
+  const startedAt = Date.now();
+
+  try {
+    const response = await fetch(VIDEO_AI_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(videoPayload),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      await finalizeUsage(usageId, "failed", startedAt);
       return new Response(errorText || "Video generation failed.", {
-        status: n8nResponse.status,
+        status: response.status,
       });
     }
 
-    const video = await n8nResponse.arrayBuffer();
+    const contentType = response.headers.get("content-type") ?? "";
+    const video = await response.arrayBuffer();
 
     if (video.byteLength === 0) {
-      return new Response("n8n returned an empty video response.", {
+      await finalizeUsage(usageId, "failed", startedAt);
+      return new Response("Video AI returned an empty video response.", {
         status: 502,
       });
     }
 
+    if (!contentType.toLowerCase().startsWith("video/")) {
+      await finalizeUsage(usageId, "failed", startedAt);
+      return new Response("Video AI returned invalid video data.", {
+        status: 502,
+      });
+    }
+
+    await finalizeUsage(usageId, "success", startedAt);
     return new Response(video, {
       status: 200,
       headers: {
@@ -38,9 +126,9 @@ export async function POST(req: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch (error) {
-    console.error("Video API error:", error);
-
+  } catch {
+    await finalizeUsage(usageId, "failed", startedAt);
+    console.error("Video AI request failed.");
     return new Response("Something went wrong while generating the video.", {
       status: 500,
     });

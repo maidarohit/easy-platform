@@ -53,6 +53,10 @@ body:has(.easy-intelligence-sidebar),
 main:has(.easy-intelligence-sidebar) {
   background: #f7f4ec !important;
   color: #1b211e;
+  --easy-text-primary: #173d32;
+  --easy-text-body: #46534d;
+  --easy-text-secondary: #5b675f;
+  --easy-text-accent: #176b68;
 }
 
 .easy-intelligence-sidebar ~ section {
@@ -65,12 +69,42 @@ main:has(.easy-intelligence-sidebar) {
 }
 
 .easy-intelligence-sidebar ~ section :is(h1, h2, h3) {
-  color: #0e2c24;
+  color: var(--easy-text-primary);
 }
 
 .easy-intelligence-sidebar ~ section p[class*="text-slate-"],
 .easy-intelligence-sidebar ~ section span[class*="text-slate-"] {
-  color: #606a64;
+  color: var(--easy-text-body);
+}
+
+/* Legacy dark-shell text utilities need an explicit light-shell counterpart.
+   Website previews retain their generated theme colors. */
+.easy-intelligence-sidebar ~ section
+  :not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="text-slate-"],
+.easy-intelligence-sidebar ~ section
+  :not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="text-gray-"],
+.easy-intelligence-sidebar ~ section
+  :not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="text-zinc-"],
+.easy-intelligence-sidebar ~ section
+  :not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="text-neutral-"] {
+  color: var(--easy-text-body) !important;
+}
+
+.easy-intelligence-sidebar ~ section
+  :not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="text-cyan-"] {
+  color: var(--easy-text-accent) !important;
+}
+
+.easy-intelligence-sidebar ~ section
+  article:not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview *)
+  :is(p, pre, li, blockquote) {
+  color: var(--easy-text-body) !important;
+}
+
+.easy-intelligence-sidebar ~ section
+  article:not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview *)
+  :is(h1, h2, h3, h4) {
+  color: var(--easy-text-primary) !important;
 }
 
 .easy-intelligence-sidebar ~ section :is(div, article, section, a)[class*="border-red-"][class*="bg-slate-"],
@@ -153,7 +187,7 @@ main:has(.easy-intelligence-sidebar) {
 }
 
 .easy-intelligence-sidebar [class*="text-slate-"] {
-  color: #606a64 !important;
+  color: var(--easy-text-body, #46534d) !important;
 }
 
 .easy-intelligence-sidebar [class*="border-slate-"] {
@@ -168,22 +202,22 @@ main:has(.easy-intelligence-sidebar) {
   background-color: #f7f4ec !important;
 }
 
-.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-slate-9"],
-.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-black"],
-.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *)[class*="from-slate-9"] {
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="bg-slate-9"],
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="bg-black"],
+.easy-intelligence-sidebar ~ section :is(div, section, article, a):not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="from-slate-9"] {
   border-color: #d8dccf !important;
   background: #fcfbf7 !important;
   background-image: none !important;
   color: #1b211e !important;
 }
 
-.easy-intelligence-sidebar ~ section :is(div, section, article):not(.easy-website-preview):not(.easy-website-preview *)[class*="bg-[#0"] {
+.easy-intelligence-sidebar ~ section :is(div, section, article):not(.easy-website-preview):not(.easy-website-preview *):not(.easy-brand-preview):not(.easy-brand-preview *)[class*="bg-[#0"] {
   background: #fcfbf7 !important;
   background-image: none !important;
   color: #1b211e !important;
 }
 
-.easy-intelligence-sidebar ~ section :is(article, section, div):not(.easy-website-preview *)[class*="rounded-"][class*="border-"] {
+.easy-intelligence-sidebar ~ section :is(article, section, div):not(.easy-website-preview *):not(.easy-brand-preview *)[class*="rounded-"][class*="border-"] {
   border-color: #d8dccf !important;
 }
 
@@ -198,6 +232,10 @@ main:has(.easy-intelligence-sidebar) {
 
 .easy-intelligence-sidebar ~ section :is(p, li) {
   font-size: max(0.9375rem, 15px);
+}
+
+.easy-intelligence-sidebar ~ section :is(pre, blockquote) {
+  color: var(--easy-text-body) !important;
 }
 
 .easy-intelligence-sidebar ~ section article p[class*="text-white"],

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -11,32 +12,47 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(
+      await signInWithEmailAndPassword(
         auth,
         email,
         password
       );
 
-      console.log("Logged In:", userCredential.user);
+      const response = await authenticatedFetch("/api/projects", {
+        cache: "no-store",
+      });
+      const contentType = response.headers.get("content-type") ?? "";
 
-const response = await fetch(
-  `/api/projects?userId=${encodeURIComponent(userCredential.user.uid)}`,
-  { cache: "no-store" }
-);
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `Projects API returned HTTP ${response.status} with ${contentType || "an unknown content type"}.`
+        );
+      }
 
-const data = await response.json();
+      const data: unknown = await response.json();
+      const payload = data && typeof data === "object"
+        ? data as Record<string, unknown>
+        : {};
 
-const projects = Array.isArray(data)
-  ? data
-  : Array.isArray(data.projects)
-  ? data.projects
-  : [];
+      if (!response.ok) {
+        throw new Error(
+          typeof payload.error === "string"
+            ? payload.error
+            : `Projects API returned HTTP ${response.status}.`
+        );
+      }
 
-window.location.href =
-  projects.length === 0 ? "/onboarding" : "/dashboard";
+      const projects = Array.isArray(data)
+        ? data
+        : Array.isArray(payload.projects)
+          ? payload.projects
+          : [];
 
-    } catch (error: any) {
-      alert(error.message);
+      window.location.href =
+        projects.length === 0 ? "/onboarding" : "/dashboard";
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Login failed.";
+      alert(message);
       console.error(error);
     }
   };

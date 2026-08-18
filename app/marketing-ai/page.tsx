@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 
 const MARKETING_GOALS = [
@@ -98,7 +99,7 @@ const [isEditing, setIsEditing] = useState(false);
 
   const loadSavedMarketingOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=marketing`,
         { cache: "no-store" }
       );
@@ -338,7 +339,7 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
   }
 
   try {
-    const response = await fetch("/api/projects", {
+    const response = await authenticatedFetch("/api/projects", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -371,6 +372,23 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
     toast.error("Failed to save project.");
   }
 };
+  const getAuthenticatedMarketingRequest = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      throw new Error("Authentication is required.");
+    }
+
+    if (!projectId) {
+      throw new Error("A project is required.");
+    }
+
+    return {
+      currentUser,
+      idToken: await currentUser.getIdToken(),
+    };
+  };
+
   const handleGenerateBrand = async () => {
     if (
       !companyName ||
@@ -383,12 +401,14 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
     }
     setLoading(true);
     try {
+      const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
       const response = await fetch(
         "/api/marketing-ai",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
           },
           body: JSON.stringify({
             companyName,
@@ -396,6 +416,7 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
             targetAudience,
             brandStyle,
             brandDescription,
+            projectId,
           }),
         }
       );
@@ -464,10 +485,8 @@ const finalMarketingResult = isRecord(result)
 
 setBrandResult(finalMarketingResult);
 
-const currentUser = auth.currentUser;
-
 if (projectId && currentUser && finalMarketingResult) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -500,10 +519,12 @@ const regenerateSection = async (section: string) => {
   });
 
   try {
+   const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
    const response = await fetch("/api/marketing-ai", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
+    Authorization: `Bearer ${idToken}`,
   },
   body: JSON.stringify({
     companyName,
@@ -513,6 +534,7 @@ const regenerateSection = async (section: string) => {
     brandDescription,
     regenerateSection: section,
     currentResult: brandResult,
+    projectId,
   }),
 });
 
@@ -548,10 +570,8 @@ const updatedMarketingResult = {
 
 setBrandResult(updatedMarketingResult);
 
-const currentUser = auth.currentUser;
-
 if (projectId && currentUser) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -586,10 +606,12 @@ const editWithAI = async () => {
   setIsEditing(true);
 
   try {
+    const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
     const response = await fetch("/api/marketing-ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
         companyName,
@@ -601,6 +623,7 @@ const editWithAI = async () => {
         currentResult: brandResult,
         editInstruction: editInstruction.trim(),
         mode: "edit",
+        projectId,
       }),
     });
 
@@ -630,10 +653,8 @@ const editWithAI = async () => {
 
 setBrandResult(editedMarketingResult);
 
-const currentUser = auth.currentUser;
-
 if (projectId && currentUser) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -4,6 +4,7 @@ import jsPDF from "jspdf";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 function LogoAIPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -17,6 +18,7 @@ function LogoAIPageContent() {
   if (!projectId) return;
 
   // Clear fields/results from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setShowResults(false);
   setCompanyName("");
   setIndustry("");
@@ -107,6 +109,18 @@ const handleDownloadPDF = () => {
 };
   const handleGenerateLogo = async () => {
     console.log("BUTTON CLICKED");
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    alert("Please log in first.");
+    return;
+  }
+
+  if (!projectId) {
+    alert("Please open a project before generating a logo.");
+    return;
+  }
+
   if (!companyName || !industry || !brandStyle || !logoIdea) {
     alert("Please fill in all fields.");
     return;
@@ -116,16 +130,19 @@ const handleDownloadPDF = () => {
   setShowResults(false);
 
   try {
+    const idToken = await currentUser.getIdToken();
     const response = await fetch("/api/logo-ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
         companyName,
         industry,
         brandStyle,
         logoIdea,
+        projectId,
       }),
     });
 

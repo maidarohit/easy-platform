@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../../../lib/auth";
+import { authenticatedFetch } from "../../../lib/authenticated-fetch";
 import type { WebsiteAiOutput } from "../../../lib/ai";
 
 type WebsiteProject = {
@@ -36,7 +37,7 @@ export default function WebsiteProjectsPage() {
     }
 
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/projects?userId=${encodeURIComponent(user.uid)}`
       );
 
@@ -64,9 +65,12 @@ export default function WebsiteProjectsPage() {
 
   const deleteProject = async (id: string) => {
     try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: "DELETE",
-      });
+      const response = await authenticatedFetch(
+        `/api/projects?id=${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to delete project");

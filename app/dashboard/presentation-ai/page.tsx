@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 type PresentationSlide = {
   number: string;
@@ -87,6 +88,7 @@ function PresentationAIPageContent() {
   if (!projectId) return;
 
   // Clear data from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setTopic("");
   setPresentationType("Business Presentation");
   setAudience("");
@@ -115,6 +117,18 @@ function PresentationAIPageContent() {
 }, [projectId, project]);
 
   const handleGeneratePresentation = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setError("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      setError("Please open a project before generating a presentation.");
+      return;
+    }
+
     if (!topic.trim()) {
       setError("Please enter a presentation topic.");
       return;
@@ -125,10 +139,12 @@ function PresentationAIPageContent() {
     setPresentation("");
 
     try {
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/presentation-ai", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
   topic,

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 function ContentAIPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -20,6 +21,7 @@ function ContentAIPageContent() {
   if (!projectId) return;
 
   // Clear output from a previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setContent("");
   setError("");
 
@@ -41,6 +43,18 @@ function ContentAIPageContent() {
 }, [projectId, project]);
 
   const handleGenerateContent = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setError("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      setError("Please open a project before generating content.");
+      return;
+    }
+
     if (!prompt.trim()) {
       setError("Please enter a topic or content brief.");
       return;
@@ -51,10 +65,12 @@ function ContentAIPageContent() {
     setContent("");
 
     try {
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/content-ai", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
         body: JSON.stringify({
           prompt,
@@ -63,6 +79,7 @@ function ContentAIPageContent() {
           audience,
           length,
           keywords,
+          projectId,
         }),
       });
 

@@ -2,22 +2,35 @@
 
 import { useState } from "react";
 import Link from "next/link";
-
+import { useRouter } from "next/navigation";
+type BusinessIdea = {
+  title: string;
+  whyItFits: string;
+  businessModel: string;
+  startupLevel: string;
+  difficulty: string;
+  mode: string;
+  targetCustomer: string;
+  firstSteps: string[];
+};
 export default function IdeaFinderPage() {
+  const router = useRouter();
   const [interests, setInterests] = useState("");
   const [budget, setBudget] = useState("Not sure");
   const [businessType, setBusinessType] = useState("Not sure");
   const [workStyle, setWorkStyle] = useState("Not sure");
   const [skills, setSkills] = useState("");
   const [speed, setSpeed] = useState("Not sure");
-  const [ideas, setIdeas] = useState<any[]>([]);
+  const [ideas, setIdeas] = useState<BusinessIdea[]>([]);
 const [loading, setLoading] = useState(false);
 const [error, setError] = useState("");
+const [limitReached, setLimitReached] = useState(false);
 
 const findIdeas = async () => {
   try {
     setLoading(true);
     setError("");
+    setLimitReached(false);
     setIdeas([]);
 
     const response = await fetch("/api/business-ideas", {
@@ -38,17 +51,35 @@ const findIdeas = async () => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Could not generate business ideas.");
-    }
+  if (
+    response.status === 429 &&
+    data.code === "PUBLIC_AI_LIMIT_REACHED"
+  ) {
+    setLimitReached(true);
+    setError(
+      data.error ||
+        "You've used today's free business idea generations."
+    );
+    return;
+  }
+
+  throw new Error(
+    data.error || "Could not generate business ideas."
+  );
+}
 
     setIdeas(Array.isArray(data.ideas) ? data.ideas : []);
-  } catch (err: any) {
-    setError(err.message || "Something went wrong.");
+  } catch (err: unknown) {
+  setError(
+    err instanceof Error
+      ? err.message
+      : "Something went wrong."
+  );
   } finally {
     setLoading(false);
   }
 };
-const buildBusiness = (idea: any) => {
+const buildBusiness = (idea: BusinessIdea) => {
   sessionStorage.setItem(
     "easy-selected-business-idea",
     JSON.stringify({
@@ -64,7 +95,7 @@ const buildBusiness = (idea: any) => {
     })
   );
 
-  window.location.href = "/signup";
+  router.push("/signup");
 };
 
   return (
@@ -202,10 +233,14 @@ const buildBusiness = (idea: any) => {
             <button
   type="button"
   onClick={findIdeas}
-  disabled={loading}
+  disabled={loading || limitReached}
   className="mt-9 h-14 w-full rounded-2xl bg-[#173D32] text-base font-semibold text-white transition hover:bg-[#0E2C24] disabled:cursor-not-allowed disabled:opacity-60"
 >
-  {loading ? "Finding ideas..." : "Find My Business Ideas →"}
+  {loading
+  ? "Finding ideas..."
+  : limitReached
+    ? "Free Limit Reached"
+    : "Find My Business Ideas →"}
 </button>
 
             <p className="mt-4 text-center text-sm text-[#8A918C]">
@@ -214,7 +249,22 @@ const buildBusiness = (idea: any) => {
           </div>
           {error && (
   <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-    {error}
+    <p>{error}</p>
+
+    {limitReached && (
+      <div className="mt-4">
+        <Link
+          href="/signup"
+          className="inline-flex items-center rounded-xl bg-[#173D32] px-5 py-3 font-semibold text-white transition hover:opacity-90"
+        >
+          Create Free Account →
+        </Link>
+
+        <p className="mt-3 text-xs text-red-600">
+          Sign up to continue building your business with Easy Platform.
+        </p>
+      </div>
+    )}
   </div>
 )}
 

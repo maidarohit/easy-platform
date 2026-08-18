@@ -5,7 +5,25 @@ import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
+import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
+
+type UiuxResult = {
+  accessibility: string;
+  colourScheme?: string;
+  designSystem: string;
+  desktopExperience: string;
+  microInteractions: string;
+  mobileExperience: string;
+  uiuxStrategy: string;
+  userFlow: string;
+  userPersonas: string;
+  wireframes: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 function UIUXAIPageContent() {
   const [companyName, setCompanyName] = useState("");
@@ -15,13 +33,14 @@ function UIUXAIPageContent() {
   const [brandStyle, setBrandStyle] = useState("Minimal");
   const [brandDescription, setBrandDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [brandResult, setBrandResult] = useState<any>(null);
+  const [brandResult, setBrandResult] = useState<UiuxResult | null>(null);
   const { project, projectId } = useProjectMemory();
 
   useEffect(() => {
   if (!projectId) return;
 
   // Prevent results/fields from the previous project appearing.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setBrandResult(null);
   setCompanyName("");
   setIndustry("");
@@ -45,7 +64,7 @@ useEffect(() => {
 
   const loadSavedUIUXOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=uiux`,
         { cache: "no-store" }
       );
@@ -191,12 +210,27 @@ addSection("Accessibility", brandResult.accessibility);
       toast.error("Please fill in all required fields.");
       return;
     }
+
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      toast.error("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      toast.error("Please open a project before generating UI/UX intelligence.");
+      return;
+    }
+
     setLoading(true);
     try {
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/uiux-ai", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
           },
           body: JSON.stringify({
             companyName,
@@ -204,6 +238,7 @@ addSection("Accessibility", brandResult.accessibility);
             targetAudience,
             brandStyle,
             brandDescription,
+            projectId,
           }),
         }
       );
@@ -231,7 +266,7 @@ addSection("Accessibility", brandResult.accessibility);
 
       console.log("PARSED:", parsed);
 
-      let result: any = parsed;
+      let result: unknown = parsed;
 
 while (true) {
   if (typeof result === "string") {
@@ -240,8 +275,7 @@ while (true) {
   }
 
   if (
-    result &&
-    typeof result === "object" &&
+    isRecord(result) &&
     "text" in result &&
     typeof result.text === "object"
   ) {
@@ -250,8 +284,7 @@ while (true) {
   }
 
   if (
-  result &&
-  typeof result === "object" &&
+  isRecord(result) &&
   "output" in result
 ) {
   if (typeof result.output === "string") {
@@ -267,9 +300,13 @@ while (true) {
 }
 
 
-setBrandResult(result);
+if (!isRecord(result)) {
+  throw new Error("UI/UX AI returned an invalid response.");
+}
+
+setBrandResult(result as UiuxResult);
 if (projectId && project?.userId && result) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

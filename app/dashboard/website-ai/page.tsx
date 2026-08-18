@@ -8,6 +8,7 @@ import Navbar from "../components/Navbar";
 import WebsitePreview from "../components/WebsitePreview";
 import type { WebsiteAiOutput } from "../../lib/ai";
 import auth from "../../lib/auth";
+import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 
 const WEBSITE_GOALS = [
@@ -66,7 +67,7 @@ useEffect(() => {
 
   const loadSavedWebsiteOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=website`,
         { cache: "no-store" }
       );
@@ -200,7 +201,7 @@ const saveProject = async () => {
   }
 
   try {
-    const response = await fetch("/api/projects", {
+    const response = await authenticatedFetch("/api/projects", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -229,6 +230,18 @@ const saveProject = async () => {
   }
 };
 const handleGenerateBrand = async () => {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    toast.error("Please log in first.");
+    return;
+  }
+
+  if (!projectId) {
+    toast.error("Please open a project before generating Website intelligence.");
+    return;
+  }
+
   if (
   !companyName ||
   !industry ||
@@ -247,6 +260,7 @@ try {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${await currentUser.getIdToken()}`,
       },
       body: JSON.stringify({
         companyName,
@@ -254,6 +268,7 @@ try {
         targetAudience,
         brandStyle,
         brandDescription,
+        projectId,
       }),
     }
   );
@@ -275,10 +290,9 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
-const currentUser = auth.currentUser;
 
-if (projectId && currentUser) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+if (projectId) {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

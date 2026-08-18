@@ -43,6 +43,41 @@
       "when": 1786798895535,
       "tag": "0005_add-project-outputs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786861711915,
+      "tag": "0006_add-ai-usage",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786876077262,
+      "tag": "0007_add-ai-manager-usage-id",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786907648941,
+      "tag": "0008_add-ai-usage-reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786909000000,
+      "tag": "0009_add-subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786910000000,
+      "tag": "0010_add-entitlement-overrides",
+      "breakpoints": true
     }
   ]
 }

@@ -1,18 +1,27 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
-import { and, eq } from "drizzle-orm";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { and, eq, sql } from "drizzle-orm";
+import { requirePaidEntitlement } from "@/app/lib/paid-entitlements";
 
 export async function POST(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const body: Record<string, unknown> = await req.json();
     const id = typeof body.id === "string" ? body.id.trim() : "";
-    const userId = typeof body.userId === "string" ? body.userId.trim() : "";
     const name = typeof body.name === "string" ? body.name.trim() : "";
 
-    if (!id || !userId || !name) {
+    if (!id || !name) {
       return NextResponse.json(
-        { error: "Project id, userId and name are required" },
+        { error: "Project id and name are required" },
         { status: 400 }
       );
     }
@@ -49,22 +58,31 @@ export async function POST(req: Request) {
       const [project] = await db
         .update(projects)
         .set({ ...suppliedFields, updatedAt: new Date() })
-        .where(eq(projects.id, existingProject.id))
+        .where(and(eq(projects.id, existingProject.id), eq(projects.userId, userId)))
         .returning();
 
       return NextResponse.json({ success: true, project, updated: true });
     }
 
-    const [project] = await db
-      .insert(projects)
-      .values({ id, userId, name, ...optionalFields })
-      .returning();
+    const project = await db.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`${userId}:projects`}))`
+      );
+      const entitlement = await requirePaidEntitlement(userId, "projects");
+      if (!entitlement.ok) throw entitlement.response;
+      const [createdProject] = await transaction
+        .insert(projects)
+        .values({ id, userId, name, ...optionalFields })
+        .returning();
+      return createdProject;
+    });
 
     return NextResponse.json({
       success: true,
       project,
     });
   } catch (error) {
+    if (error instanceof Response) return error;
     console.error("Create project error:", error);
 
     const detail = error instanceof Error ? error.message : "Unknown database error";
@@ -81,17 +99,17 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const projectId = searchParams.get("projectId");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
-    }
 
     if (projectId) {
       const [project] = await db
@@ -130,6 +148,14 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -143,7 +169,7 @@ export async function DELETE(req: Request) {
 
     await db
       .delete(projects)
-      .where(eq(projects.id, id));
+      .where(and(eq(projects.id, id), eq(projects.userId, userId)));
 
     return NextResponse.json({
       success: true,

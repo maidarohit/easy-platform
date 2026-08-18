@@ -3,12 +3,13 @@
 import FadeIn from "../animations/FadeIn";
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
+import type { WebsiteAiOutput } from "../../../lib/ai";
 
 type CorporateTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
-  brandResult?: any;
+  brandResult?: WebsiteAiOutput & { heroHeadline?: string };
 };
 
 export default function CorporateTemplate({

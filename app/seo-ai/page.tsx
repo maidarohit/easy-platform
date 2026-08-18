@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 
 const SEO_GOALS = [
@@ -101,7 +102,7 @@ function SEOAIPageContent() {
 
   const loadSavedSEOOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=seo`,
         { cache: "no-store" }
       );
@@ -229,7 +230,7 @@ ${brandResult.growthRecommendations}
     }
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await authenticatedFetch("/api/projects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -268,12 +269,36 @@ ${brandResult.growthRecommendations}
       toast.error("Please fill in all required fields.");
       return;
     }
+
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      toast.error("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      toast.error("Please open a project before generating SEO intelligence.");
+      return;
+    }
+
     setLoading(true);
     try {
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/seo-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, industry, targetAudience, brandStyle, brandDescription }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          companyName,
+          industry,
+          targetAudience,
+          brandStyle,
+          brandDescription,
+          projectId,
+        }),
       });
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       const text = await response.text();
@@ -303,7 +328,7 @@ ${brandResult.growthRecommendations}
 setBrandResult(finalSEOResult);
 
 if (projectId && project?.userId && finalSEOResult) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

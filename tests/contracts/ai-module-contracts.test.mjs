@@ -58,7 +58,10 @@ for (const [path, webhook, outputKind] of routeContracts) {
     assert.ok(contents.includes(webhook), `Expected production webhook ${webhook}`);
     assert.match(contents, /method:\s*["']POST["']/);
     assert.match(contents, /["']Content-Type["']:\s*["']application\/json["']/);
-    assert.match(contents, /body:\s*JSON\.stringify\(body\)/);
+    assert.match(
+      contents,
+      /body:\s*JSON\.stringify\((?:body|payload|[a-z]+Payload)\)/,
+    );
 
     if (outputKind === "image/png" || outputKind === "video/mp4") {
       assert.ok(contents.includes(`"Content-Type": "${outputKind}"`));
@@ -88,11 +91,11 @@ test("Automation Hub preserves all five API endpoints and payload fields", async
   }
 });
 
-test("Marketing project storage keys remain compatible", async () => {
+test("Marketing projects use authenticated database persistence", async () => {
   const modulePage = await source("app/marketing-ai/page.tsx");
   const projectsPage = await source("app/marketing-ai/projects/page.tsx");
-  for (const key of ["marketingProjects", "selectedMarketingProject"]) {
-    assert.ok(modulePage.includes(`"${key}"`));
-    assert.ok(projectsPage.includes(`"${key}"`));
-  }
+  assert.ok(modulePage.includes('module: "marketing"'));
+  assert.ok(modulePage.includes('authenticatedFetch("/api/project-outputs"'));
+  assert.ok(projectsPage.includes("authenticatedFetch("));
+  assert.ok(projectsPage.includes("/api/projects?userId="));
 });

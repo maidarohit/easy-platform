@@ -8,6 +8,7 @@ import Navbar from "../dashboard/components/Navbar";
 import BrandVisualPreview from "./components/BrandVisualPreview";
 import type { BrandingAiOutput } from "../lib/ai";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 
 function BrandingAIPageContent() {
@@ -45,7 +46,7 @@ useEffect(() => {
 
   const loadSavedBrandingOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=branding`,
         { cache: "no-store" }
       );
@@ -177,7 +178,7 @@ const saveProject = async () => {
   }
 
   try {
-    const response = await fetch("/api/projects", {
+    const response = await authenticatedFetch("/api/projects", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -215,14 +216,28 @@ const handleGenerateBrand = async () => {
   toast.error("Please fill in all required fields.");
   return;
 }
+const currentUser = auth.currentUser;
+
+if (!currentUser) {
+  toast.error("Please log in first.");
+  return;
+}
+
+if (!projectId) {
+  toast.error("Please open a project before generating a brand.");
+  return;
+}
+
 setLoading(true);
 try {
+  const idToken = await currentUser.getIdToken();
   const response = await fetch(
     "/api/branding-ai",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
         companyName,
@@ -230,6 +245,7 @@ try {
         targetAudience,
         brandStyle,
         brandDescription,
+        projectId,
       }),
     }
   );
@@ -245,10 +261,9 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
-const currentUser = auth.currentUser;
 
-if (projectId && currentUser) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+if (projectId) {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -335,7 +350,7 @@ const handleNewBrand = () => {
                   <article className={`${moduleClass} md:col-span-2`}><div className="flex items-start justify-between gap-4"><div><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">MODULE / 11</span><h3 className="mt-1 text-lg font-semibold text-white">Brand Style Guide</h3></div><button type="button" onClick={() => copyToClipboard(brandResult.brandStyleGuide, "Brand Style Guide")} className={copyButtonClass}>{copyIcon}Copy</button></div><p className="mt-4 whitespace-pre-wrap break-words text-base leading-[1.8] text-slate-300">{brandResult.brandStyleGuide}</p></article>
                 </div>
 
-                <div className="relative mt-5 overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/55 p-3 sm:p-5"><div className="mb-4 flex items-center gap-2"><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">MODULE / 12</span><span className="h-1 w-1 rounded-full bg-cyan-300"/><span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-cyan-300">Visual direction</span></div><BrandVisualPreview brandResult={brandResult} /></div>
+                <div className="easy-brand-preview relative mt-5 overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/55 p-3 sm:p-5"><div className="mb-4 flex items-center gap-2"><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">MODULE / 12</span><span className="h-1 w-1 rounded-full bg-cyan-300"/><span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-cyan-300">Visual direction</span></div><BrandVisualPreview brandResult={brandResult} /></div>
               </section>
             )}
           </div>

@@ -86,7 +86,7 @@ export default function Testimonials() {
       {/* Review */}
 
       <p className="mt-6 leading-8 text-slate-300">
-        "{testimonial.review}"
+        &quot;{testimonial.review}&quot;
       </p>
 
       {/* Avatar */}

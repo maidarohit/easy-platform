@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { useSearchParams } from "next/navigation";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { normalizeProjectMemory, type ProjectMemory } from "../lib/projectMemory";
 
 type ProjectMemoryState = {
@@ -48,7 +49,7 @@ export function useProjectMemory(): ProjectMemoryState {
       }
 
       try {
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/projects?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(user.uid)}`,
         );
         const data = await response.json();

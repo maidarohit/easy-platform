@@ -1,42 +1,122 @@
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
+import { db } from "@/app/db";
+import { projects } from "@/app/db/schema";
+import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { and, eq } from "drizzle-orm";
 
-    const response = await fetch(
-      "https://rohitm2026.app.n8n.cloud/webhook/image-ai",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-        cache: "no-store",
-      }
-    );
+const IMAGE_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/image-ai";
+const IMAGE_AI_WORKFLOW = "image-ai";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object";
+
+async function finalizeUsage(
+  usageId: string,
+  status: "success" | "failed",
+  startedAt: number
+) {
+  try {
+    const durationMs = Date.now() - startedAt;
+    if (status === "success") {
+      await completeAiUsage({ usageId, durationMs });
+    } else {
+      await failAiUsage({ usageId, durationMs });
+    }
+  } catch {
+    console.error("Image AI usage finalization failed.");
+  }
+}
+
+export async function POST(request: Request) {
+  let userId: string;
+  try {
+    userId = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
+    return Response.json({ error: "Authentication is required." }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    const requestBody: unknown = await request.json();
+    if (!isRecord(requestBody)) {
+      return Response.json({ error: "Invalid request body." }, { status: 400 });
+    }
+    body = requestBody;
+  } catch {
+    return Response.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+  if (!projectId) {
+    return Response.json({ error: "projectId is required." }, { status: 400 });
+  }
+
+  try {
+    const [ownedProject] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+      .limit(1);
+    if (!ownedProject) {
+      return Response.json({ error: "Project not found." }, { status: 404 });
+    }
+  } catch {
+    console.error("Image AI project authorization failed.");
+    return Response.json({ error: "Unable to authorize project." }, { status: 500 });
+  }
+
+  let usageId: string;
+  try {
+    usageId = await startAiUsage({
+      userId,
+      projectId,
+      module: "image",
+      workflow: IMAGE_AI_WORKFLOW,
+      model: null,
+    });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    console.error("Image AI usage initialization failed.");
+    return Response.json({ error: "Unable to track Image AI request." }, { status: 500 });
+  }
+
+  const imagePayload = { ...body };
+  delete imagePayload.userId;
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+
+  try {
+    const response = await fetch(IMAGE_AI_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(imagePayload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
 
     if (!response.ok) {
-      const errorText = await response.text();
-
-      console.error("n8n error:", errorText);
-
+      await finalizeUsage(usageId, "failed", startedAt);
       return Response.json(
-        {
-          error: "Image generation failed.",
-          details: errorText,
-        },
+        { error: "Image generation failed." },
         { status: response.status }
       );
     }
 
+    const contentType = response.headers.get("content-type") ?? "";
     const imageBuffer = await response.arrayBuffer();
 
     if (imageBuffer.byteLength === 0) {
-      return Response.json(
-        { error: "n8n returned an empty image." },
-        { status: 500 }
-      );
+      await finalizeUsage(usageId, "failed", startedAt);
+      return Response.json({ error: "Image AI returned an empty image." }, { status: 502 });
     }
 
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      await finalizeUsage(usageId, "failed", startedAt);
+      return Response.json({ error: "Image AI returned invalid image data." }, { status: 502 });
+    }
+
+    await finalizeUsage(usageId, "success", startedAt);
     return new Response(imageBuffer, {
       status: 200,
       headers: {
@@ -45,12 +125,11 @@ export async function POST(req: Request) {
         "Cache-Control": "no-store, no-cache, must-revalidate",
       },
     });
-  } catch (error) {
-    console.error("Image AI route error:", error);
-
-    return Response.json(
-      { error: "Image AI failed." },
-      { status: 500 }
-    );
+  } catch {
+    await finalizeUsage(usageId, "failed", startedAt);
+    console.error("Image AI request failed.");
+    return Response.json({ error: "Image AI failed." }, { status: 500 });
+  } finally {
+    clearTimeout(timeout);
   }
 }

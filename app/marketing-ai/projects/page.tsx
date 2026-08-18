@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../../lib/auth";
+import { authenticatedFetch } from "../../lib/authenticated-fetch";
 
 type MarketingProject = {
   id: string;
@@ -34,7 +35,7 @@ export default function MarketingProjectsPage() {
     }
 
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/projects?userId=${encodeURIComponent(user.uid)}`
       );
 

@@ -118,7 +118,7 @@ const faqs = [
 
   <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-300">
     Our team is here to help you understand how our AI platform can
-    transform your business. We'd love to answer your questions.
+    transform your business. We&apos;d love to answer your questions.
   </p>
 
   <button className="mt-8 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-8 py-4 font-semibold text-white transition-all duration-300 hover:scale-105 hover:shadow-[0_0_30px_rgba(34,211,238,.45)]">

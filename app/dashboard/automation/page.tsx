@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 type AutomationType =
   | "content"
@@ -11,6 +12,21 @@ type AutomationType =
   | "social"
   | "workflow"
   | "pipeline";
+
+async function getAutomationRequestHeaders() {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error("Please sign in before running an automation.");
+  }
+
+  const idToken = await currentUser.getIdToken();
+
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${idToken}`,
+  };
+}
 
 function AutomationPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -50,6 +66,7 @@ useEffect(() => {
   if (!projectId) return;
 
   // Clear data/results from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setBusinessName("");
   setTargetAudience("");
   setEmailBusinessName("");
@@ -94,9 +111,7 @@ const handleRunContentAutomation = async () => {
   try {
     const response = await fetch("/api/automation/content", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getAutomationRequestHeaders(),
       body: JSON.stringify({
   businessName,
   contentType,
@@ -167,9 +182,7 @@ const handleRunEmailAutomation = async () => {
   try {
     const response = await fetch("/api/automation/email", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getAutomationRequestHeaders(),
       body: JSON.stringify({
   businessName,
   targetAudience,
@@ -245,9 +258,7 @@ const handleRunSocialAutomation = async () => {
   try {
     const response = await fetch("/api/automation/social", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getAutomationRequestHeaders(),
       body: JSON.stringify({
   businessName,
   targetAudience,
@@ -329,9 +340,7 @@ const handleRunWorkflowAutomation = async () => {
   try {
     const response = await fetch("/api/automation/workflow", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getAutomationRequestHeaders(),
       body: JSON.stringify({
   workflowName,
   automationGoal,
@@ -406,9 +415,7 @@ const handleRunPipelineAutomation = async () => {
   try {
     const response = await fetch("/api/automation/pipeline", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: await getAutomationRequestHeaders(),
       body: JSON.stringify({
   businessName,
   pipelineGoal: topic,

@@ -162,7 +162,7 @@ export default function StatsCards({
       relative mt-5
       text-xs font-semibold uppercase
       tracking-[0.20em]
-      text-[#606A64]
+      text-[#46534D]
       transition-colors duration-300
       group-hover:text-[#173D32]
     "
@@ -181,7 +181,7 @@ export default function StatsCards({
         flex h-7 w-7 items-center justify-center
         rounded-full
         border border-[#A8B8A7]/35
-        text-xs text-[#606A64]
+        text-xs text-[#46534D]
         transition-all duration-300
         group-hover:border-[#A8B8A7]/35
         group-hover:bg-[#173D32]/35
@@ -202,7 +202,7 @@ export default function StatsCards({
       "
     />
 
-    <span className="text-[10px] uppercase tracking-[0.18em] text-[#606A64]">
+    <span className="text-[10px] uppercase tracking-[0.18em] text-[#46534D]">
       System Active
     </span>
   </div>

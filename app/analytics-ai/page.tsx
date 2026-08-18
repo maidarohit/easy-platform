@@ -6,6 +6,8 @@ import { jsPDF } from "jspdf";
 import toast from "react-hot-toast";
 import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
+import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 
 const AnalyticsIcon = ({ className = "h-6 w-6" }: { className?: string }) => (
@@ -31,13 +33,14 @@ function AnalyticsAIContent() {
   const [businessGoal, setBusinessGoal] = useState("");
   const [businessDescription, setBusinessDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [analyticsResult, setAnalyticsResult] = useState<Record<string, any> | null>(null);
+  const [analyticsResult, setAnalyticsResult] = useState<Record<string, string> | null>(null);
   const [salesContext, setSalesContext] =
-  useState<Record<string, any> | null>(null);
+  useState<Record<string, unknown> | null>(null);
   useEffect(() => {
   if (!projectId) return;
 
   // Clear data from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setAnalyticsResult(null);
   setCompanyName("");
   setIndustry("");
@@ -65,7 +68,7 @@ useEffect(() => {
 
   const loadSavedAnalyticsOutput = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=analytics`,
         { cache: "no-store" }
       );
@@ -102,7 +105,7 @@ useEffect(() => {
 
   const loadSalesContext = async () => {
     try {
-      const response = await fetch(
+      const response = await authenticatedFetch(
         `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=sales`,
         { cache: "no-store" }
       );
@@ -174,11 +177,27 @@ useEffect(() => {
   };
 
   const handleGenerate = async () => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      toast.error("Please log in first.");
+      return;
+    }
+
+    if (!projectId) {
+      toast.error("Please open a project before generating Analytics intelligence.");
+      return;
+    }
+
     try {
       setLoading(true);
+      const idToken = await currentUser.getIdToken();
       const response = await fetch("/api/analytics-ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
   companyName,
   industry,
@@ -190,6 +209,7 @@ useEffect(() => {
   businessGoal,
   businessDescription,
   salesContext,
+  projectId,
 }),
       });
       const data = await response.json();
@@ -202,7 +222,7 @@ useEffect(() => {
       const finalAnalyticsResult = data.output ?? data;
 
 if (projectId && project?.userId && finalAnalyticsResult) {
-  const saveOutputResponse = await fetch("/api/project-outputs", {
+  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

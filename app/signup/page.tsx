@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
  export default function SignUpPage() {
   const [name, setName] = useState("");
 const [email, setEmail] = useState("");
@@ -21,9 +22,7 @@ const handleSignUp = async () => {
       password
     );
 
-    console.log("User Created:", userCredential.user);
-
-    await fetch("/api/user/sync", {
+    await authenticatedFetch("/api/user/sync", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -37,8 +36,8 @@ const handleSignUp = async () => {
 // Redirect to Login page
 window.location.href = "/login";
 
-  } catch (error: any) {
-    alert(error.message);
+  } catch (error: unknown) {
+    alert(error instanceof Error ? error.message : "Unable to create account.");
     console.error(error);
   }
 };
@@ -105,6 +104,7 @@ window.location.href = "/login";
             <button onClick={handleSignUp} className="mt-8 h-14 w-full rounded-[14px] bg-[#173D32] text-[17px] font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] transition duration-300 hover:-translate-y-0.5 hover:bg-[#0E2C24] hover:shadow-[0_16px_34px_rgba(23,61,50,0.20)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#A8B8A7]/40">
               Create Account
             </button>
+            <p className="mt-4 text-center text-sm leading-6 text-[#747B76]">By creating an account, you agree to the <Link href="/terms" className="underline hover:text-[#173D32]">Terms of Service</Link> and acknowledge the <Link href="/privacy" className="underline hover:text-[#173D32]">Privacy Policy</Link>.</p>
             <p className="mt-7 text-center text-base text-[#6F756F]">Already have an account?{" "}<Link href="/login" className="font-semibold text-[#173D32] underline decoration-[#B89A61]/60 underline-offset-4 transition hover:text-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Log in →</Link></p>
           </div>
         </div>

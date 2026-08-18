@@ -6,6 +6,7 @@ import Sidebar from "../dashboard/components/Sidebar";
 import Navbar from "../dashboard/components/Navbar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import auth from "../lib/auth";
+import { authenticatedFetch } from "../lib/authenticated-fetch";
 import type { AiManagerJobStatus, AiManagerOutput, AiManagerStrategy } from "../lib/ai/types";
 
 const industryOptions = [
@@ -45,7 +46,6 @@ function AIManagerPageContent() {
   const [openSection, setOpenSection] = useState("overview");
   const [analyticsContext, setAnalyticsContext] = useState<unknown>(null);
   const [projectId, setProjectId] = useState("");
-const [userId, setUserId] = useState("");
   useEffect(() => {
     let active = true;
 
@@ -67,7 +67,6 @@ const [userId, setUserId] = useState("");
     queueMicrotask(() => {
         if (project.id !== requestedProjectId) return;
         setProjectId(project.id);
-        setUserId(project.userId);
         setCompanyName(project.companyName);
         setBusinessDescription(project.businessDescription);
         setIndustry(project.industry);
@@ -86,16 +85,26 @@ const [userId, setUserId] = useState("");
   }, [project, requestedProjectId]);
 
   useEffect(() => {
-    if (!jobId || !userId) return;
+    if (!jobId) return;
 
     let active = true;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
     const pollJob = async () => {
       try {
+        const currentUser = auth.currentUser;
+
+        if (!currentUser) {
+          throw new Error("Please sign in to check the AI Manager job.");
+        }
+
+        const idToken = await currentUser.getIdToken();
         const response = await fetch(
-          `/api/ai-manager/jobs/${encodeURIComponent(jobId)}?userId=${encodeURIComponent(userId)}`,
-          { cache: "no-store" },
+          `/api/ai-manager/jobs/${encodeURIComponent(jobId)}`,
+          {
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${idToken}` },
+          },
         );
         const data = await response.json() as {
           status?: AiManagerJobStatus;
@@ -113,7 +122,7 @@ const [userId, setUserId] = useState("");
 
   if (project) {
     try {
-      const saveResponse = await fetch("/api/projects", {
+      const saveResponse = await authenticatedFetch("/api/projects", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -164,7 +173,7 @@ const [userId, setUserId] = useState("");
       active = false;
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [jobId, userId]);
+  }, [jobId, project]);
 
   const handleGenerate = async () => {
     
@@ -176,21 +185,25 @@ const [userId, setUserId] = useState("");
   console.log("Button Clicked");
 
   try {
-    const activeUserId = userId || auth.currentUser?.uid || "";
+    const currentUser = auth.currentUser;
 
-    if (!activeUserId) {
+    if (!currentUser) {
       throw new Error("Please sign in to generate a business strategy.");
     }
 
-    setUserId(activeUserId);
+    if (!projectId) {
+      throw new Error("Please open a project before generating a business strategy.");
+    }
+
+    const idToken = await currentUser.getIdToken();
     const response = await fetch("/api/ai-manager", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
   projectId,
-  userId: activeUserId,
   companyName,
   businessDescription,
   industry,
@@ -606,7 +619,7 @@ const downloadPDF = () => {
   if (!project) return;
 
   try {
-    const response = await fetch("/api/projects", {
+    const response = await authenticatedFetch("/api/projects", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

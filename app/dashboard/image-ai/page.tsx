@@ -4,14 +4,21 @@ import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import auth from "../../lib/auth";
 
 function ImageAIPageContent() {
   const { project, projectId } = useProjectMemory();
   const [prompt, setPrompt] = useState("");
+  const [style, setStyle] = useState("Realistic");
+  const [size, setSize] = useState("Square");
+  const [loading, setLoading] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
+  const [error, setError] = useState("");
   useEffect(() => {
   if (!projectId) return;
 
   // Clear data from the previously opened project.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
   setPrompt("");
   setStyle("Realistic");
   setSize("Square");
@@ -31,13 +38,19 @@ function ImageAIPageContent() {
     localStorage.removeItem("easy-platform-creative-prompt");
   }
 }, [projectId, project]);
-  const [style, setStyle] = useState("Realistic");
-  const [size, setSize] = useState("Square");
-  const [loading, setLoading] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
-  const [error, setError] = useState("");
-
   const handleGenerateImage = async () => {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    setError("Please log in first.");
+    return;
+  }
+
+  if (!projectId) {
+    setError("Please open a project before generating an image.");
+    return;
+  }
+
   if (!prompt.trim()) {
     alert("Please enter an image description.");
     return;
@@ -47,10 +60,12 @@ function ImageAIPageContent() {
   setError("");
 
   try {
+    const idToken = await currentUser.getIdToken();
     const response = await fetch("/api/image-ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
       },
       body: JSON.stringify({
   prompt,
