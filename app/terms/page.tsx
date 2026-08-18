@@ -8,6 +8,6 @@ export default function TermsPage() {
     <section><h2>Subscriptions</h2><p>Paid features require an active subscription. Plan availability and included features may be described on the pricing page. Payment processing is provided by a third party. Failed, expired or cancelled subscriptions may lose paid access.</p></section>
     <section><h2>Your content</h2><p>You retain responsibility for content you submit. You grant Easy Platform the limited permission needed to host, process and transmit that content to provide the service.</p></section>
     <section><h2>Availability and liability</h2><p>The service may occasionally be unavailable or changed for maintenance, security or operational reasons. Any warranties, liability limitations and dispute provisions remain subject to applicable law.</p></section>
-    <section><h2>Required confirmation</h2><p>Before launch, the operator must confirm its legal name, governing law, dispute venue, minimum user age, intellectual-property terms, warranty exclusions and legally permitted liability limitations.</p></section>
+    <section><h2>Questions about these terms</h2><p>Questions about these terms may be submitted through the <a className="underline" href="/contact-support">Contact and Support page</a>. These terms apply subject to applicable law.</p></section>
   </LegalPage>;
 }
