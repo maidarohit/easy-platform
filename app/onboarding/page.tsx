@@ -72,6 +72,7 @@ useEffect(() => {
       return;
     }
 
+    await auth.authStateReady();
     const user = auth.currentUser;
 
     if (!user) {
