@@ -53,7 +53,13 @@ test("private beta access is server-only and limited to core testing categories"
   const contents = await source("app/lib/paid-entitlements.ts");
   assert.match(contents, /^import "server-only";/);
   assert.match(contents, /process\.env\.PRIVATE_BETA_UIDS/);
+  assert.match(contents, /process\.env\.PRIVATE_BETA_UIDS_EXTRA/);
+  assert.match(contents, /\[process\.env\.PRIVATE_BETA_UIDS, process\.env\.PRIVATE_BETA_UIDS_EXTRA\]/);
+  assert.match(contents, /\.flatMap\(\(value\) => \(value \?\? ""\)\.split\(","\)\)/);
+  assert.match(contents, /\.map\(\(item\) => item\.trim\(\)\)/);
+  assert.match(contents, /\.filter\(Boolean\)/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS/);
+  assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS_EXTRA/);
   assert.match(contents, /PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>\(\["projects", "standardAiTasks", "aiManagerRuns"\]\)/);
   assert.match(contents, /if \(!PRIVATE_BETA_CATEGORIES\.has\(category\)\) return false/);
 });
@@ -64,6 +70,7 @@ test("private beta bypass preserves category quotas and does not grant admin acc
   assert.match(contents, /used >= limit/);
   assert.match(contents, /const plan = subscription\?\.status === "active" \? subscription\.plan : "pro"/);
   assert.doesNotMatch(contents, /isBossAdmin\([^)]*PRIVATE_BETA|PRIVATE_BETA[^\n]*BOSS_ADMIN_UIDS/);
+  assert.match(contents, /export function isBossAdmin\(uid: string\): boolean \{\s+return new Set\(\(process\.env\.BOSS_ADMIN_UIDS/);
 });
 
 test("automation authorization applies its limit before route provider calls", async () => {

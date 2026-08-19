@@ -23,7 +23,12 @@ function categorySwitch(category: UsageCategory): string | null {
 
 function isPrivateBetaUser(userId: string, category: UsageCategory): boolean {
   if (!PRIVATE_BETA_CATEGORIES.has(category)) return false;
-  return new Set((process.env.PRIVATE_BETA_UIDS ?? "").split(",").map((item) => item.trim()).filter(Boolean)).has(userId);
+  return new Set(
+    [process.env.PRIVATE_BETA_UIDS, process.env.PRIVATE_BETA_UIDS_EXTRA]
+      .flatMap((value) => (value ?? "").split(","))
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ).has(userId);
 }
 
 export async function checkUsageAllowance(userId: string, category: UsageCategory) {
