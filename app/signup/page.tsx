@@ -4,11 +4,24 @@ import Link from "next/link";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
+
+function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-5 w-5">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.75" />
+      {visible && <path d="m4 4 16 16" />}
+    </svg>
+  );
+}
+
  export default function SignUpPage() {
   const [name, setName] = useState("");
 const [email, setEmail] = useState("");
 const [password, setPassword] = useState("");
 const [confirmPassword, setConfirmPassword] = useState("");
+const [showPassword, setShowPassword] = useState(false);
+const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 const handleSignUp = async () => {
   if (password !== confirmPassword) {
     alert("Passwords do not match");
@@ -94,11 +107,21 @@ window.location.href = "/login";
             </div>
             <div className="mt-5">
               <label htmlFor="password" className="mb-2.5 block text-[15px] font-semibold text-[#344039]">Password</label>
-              <input id="password" type="password" placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25" />
+              <div className="relative">
+                <input id="password" type={showPassword ? "text" : "password"} placeholder="Create a password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 pr-12 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25" />
+                <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-[14px] text-[#6F756F] transition hover:text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#173D32]">
+                  <PasswordVisibilityIcon visible={showPassword} />
+                </button>
+              </div>
             </div>
             <div className="mt-5">
               <label htmlFor="confirm-password" className="mb-2.5 block text-[15px] font-semibold text-[#344039]">Confirm Password</label>
-              <input id="confirm-password" type="password" placeholder="Confirm your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25" />
+              <div className="relative">
+                <input id="confirm-password" type={showConfirmPassword ? "text" : "password"} placeholder="Confirm your password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 pr-12 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25" />
+                <button type="button" aria-label={showConfirmPassword ? "Hide password" : "Show password"} onClick={() => setShowConfirmPassword((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-[14px] text-[#6F756F] transition hover:text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#173D32]">
+                  <PasswordVisibilityIcon visible={showConfirmPassword} />
+                </button>
+              </div>
             </div>
 
             <button onClick={handleSignUp} className="mt-8 h-14 w-full rounded-[14px] bg-[#173D32] text-[17px] font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] transition duration-300 hover:-translate-y-0.5 hover:bg-[#0E2C24] hover:shadow-[0_16px_34px_rgba(23,61,50,0.20)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#A8B8A7]/40">
