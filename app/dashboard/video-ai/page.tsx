@@ -146,7 +146,7 @@ setVideoUrl((previousUrl) => {
 
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = "easy-platform-video.mp4";
+      link.download = "buzypeezy-video.mp4";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

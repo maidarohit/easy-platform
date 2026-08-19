@@ -343,7 +343,7 @@ const currentPage =
     <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-[#A8B8A7]/35 bg-[#FCFBF7] p-3 shadow-xl">
       <div className="border-b border-[#A8B8A7]/30 px-3 py-2">
         <p className="font-semibold text-[#0E2C24]">Account</p>
-        <p className="text-xs text-[#46534D]">Easy Platform User</p>
+        <p className="text-xs text-[#46534D]">Buzypeezy User</p>
       </div>
 
       <a

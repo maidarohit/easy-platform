@@ -4,7 +4,7 @@
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
 
         <h2 className="text-3xl font-bold tracking-tight text-white">
-          Easy Platform
+          Buzypeezy
         </h2>
 
         <nav className="hidden items-center gap-10 text-gray-300 md:flex">

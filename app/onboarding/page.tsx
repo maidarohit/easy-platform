@@ -123,7 +123,7 @@ useEffect(() => {
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-6 sm:px-8 sm:py-8 lg:px-10">
         <header className="flex items-center justify-between gap-6 border-b border-[#D8DCCF] pb-5">
-          <span className="text-lg font-semibold tracking-[-0.02em] text-[#173D32]">Easy Platform</span>
+          <span className="text-lg font-semibold tracking-[-0.02em] text-[#173D32]">Buzypeezy</span>
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#606A64]">
             <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
             Business setup
@@ -158,7 +158,7 @@ useEffect(() => {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Let&apos;s begin</p>
                 <h1 className="mt-4 max-w-3xl text-[clamp(2.65rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.055em] text-[#173D32]">
-                  Tell Easy about your business.
+                  Tell Buzypeezy about your business.
                 </h1>
                 <p className="mt-6 text-lg leading-8 text-[#606A64] sm:text-xl">
                   Write naturally. You don&apos;t need to know technical terms.
@@ -268,7 +268,7 @@ useEffect(() => {
                 <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Setup complete</p>
                 <h1 className="mt-4 text-[clamp(2.75rem,6vw,5rem)] font-semibold leading-[1.02] tracking-[-0.055em] text-[#173D32]">Ready when you are.</h1>
                 <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#606A64] sm:text-xl">
-                  Easy will use this business understanding to prepare the right systems for you.
+                  Buzypeezy will use this business understanding to prepare the right systems for you.
                 </p>
                 <button type="button" disabled={isSaving || Boolean(completionMessage)} onClick={handleBuildBusiness} className={`${primaryButtonClass} mt-9`}>
                   {isSaving ? "Creating your business..." : completionMessage ? "Business created" : "Build My Business"}

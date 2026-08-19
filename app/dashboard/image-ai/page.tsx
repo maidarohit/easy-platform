@@ -140,7 +140,7 @@ if (!imageBlob.type.startsWith("image/")) {
 
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = "easy-platform-image.png";
+      link.download = "buzypeezy-image.png";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

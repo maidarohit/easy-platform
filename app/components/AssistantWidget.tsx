@@ -60,7 +60,7 @@ const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
     {
       role: "assistant",
       content:
-        "Hi, I’m Easy Assistant. Ask me anything about your current project.",
+        "Hi, I’m Buzypeezy Assistant. Ask me anything about your current project.",
     },
   ]);
 
@@ -148,7 +148,7 @@ if (handsFreeRef.current) {
         role: "assistant",
         content: projectId
           ? "Project connected. I can use your Project Memory and saved AI results."
-          : "Hi, I’m Easy Assistant. Open a project and I’ll become project-aware.",
+          : "Hi, I’m Buzypeezy Assistant. Open a project and I’ll become project-aware.",
       },
     ]);
 
@@ -207,7 +207,7 @@ if (handsFreeRef.current) {
         ...previous,
         {
           role: "assistant",
-          content: "Please sign in before using Easy Assistant.",
+          content: "Please sign in before using Buzypeezy Assistant.",
         },
       ]);
       return;
@@ -240,7 +240,7 @@ if (handsFreeRef.current) {
       const currentUser = auth.currentUser;
 
       if (!currentUser) {
-        throw new Error("Please sign in before using Easy Assistant.");
+        throw new Error("Please sign in before using Buzypeezy Assistant.");
       }
 
       const idToken = await currentUser.getIdToken();
@@ -383,11 +383,11 @@ const toggleSpeakMessage = (text: string, index: number) => {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-500">
-                  Easy Intelligence
+                  Buzypeezy Intelligence
                 </div>
 
                 <h2 className="mt-1 text-lg font-semibold text-[#083c32]">
-                  Easy Assistant
+                  Buzypeezy Assistant
                 </h2>
               </div>
 
@@ -631,7 +631,7 @@ const toggleSpeakMessage = (text: string, index: number) => {
         type="button"
         onClick={() => setOpen((previous) => !previous)}
         className="fixed bottom-6 right-6 z-[101] flex h-14 w-14 items-center justify-center rounded-full border border-cyan-300/50 bg-[#083c32] text-white shadow-xl transition hover:scale-105"
-        aria-label="Open Easy Assistant"
+        aria-label="Open Buzypeezy Assistant"
       >
         {open ? (
           <span className="text-xl">×</span>

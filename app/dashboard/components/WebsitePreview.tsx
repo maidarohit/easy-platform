@@ -314,7 +314,7 @@ export default function WebsitePreview({
           <p className="font-medium tracking-[-0.02em]">{businessName}</p>
 
           <p className="mt-2 text-sm text-slate-500">
-            Built with Easy Platform
+            Built with Buzypeezy
           </p>
         </div>
 

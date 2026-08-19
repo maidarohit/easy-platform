@@ -105,7 +105,7 @@ const buildBusiness = (idea: BusinessIdea) => {
           href="/"
           className="inline-flex items-center gap-2 text-sm font-semibold text-[#173D32]"
         >
-          ← Back to Easy Platform
+          ← Back to Buzypeezy
         </Link>
 
         <div className="mx-auto mt-12 max-w-3xl">
@@ -118,7 +118,7 @@ const buildBusiness = (idea: BusinessIdea) => {
           </h1>
 
           <p className="mt-5 max-w-2xl text-lg leading-8 text-[#6F756F]">
-            That&apos;s completely fine. Tell Easy a little about yourself and
+            That&apos;s completely fine. Tell Buzypeezy a little about yourself and
             we&apos;ll help you discover business ideas that fit you.
           </p>
 
@@ -261,7 +261,7 @@ const buildBusiness = (idea: BusinessIdea) => {
         </Link>
 
         <p className="mt-3 text-xs text-red-600">
-          Sign up to continue building your business with Easy Platform.
+          Sign up to continue building your business with Buzypeezy.
         </p>
       </div>
     )}
@@ -280,7 +280,7 @@ const buildBusiness = (idea: BusinessIdea) => {
       </h2>
 
       <p className="mt-3 text-base leading-7 text-[#6F756F]">
-        Easy matched these ideas to what you told us. Pick the one that feels
+        Buzypeezy matched these ideas to what you told us. Pick the one that feels
         most interesting — you can refine everything later.
       </p>
     </div>
@@ -378,7 +378,7 @@ const buildBusiness = (idea: BusinessIdea) => {
   onClick={() => buildBusiness(idea)}
   className="mt-7 h-13 w-full rounded-2xl bg-[#173D32] font-semibold text-white transition hover:bg-[#0E2C24]"
 >
-  Build this business with Easy →
+  Build this business with Buzypeezy →
 </button>
         </article>
       ))}

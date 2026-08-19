@@ -168,7 +168,7 @@ const handleDownloadContent = () => {
   const link = document.createElement("a");
 
   link.href = downloadUrl;
-  link.download = "easy-platform-generated-content.txt";
+  link.download = "buzypeezy-generated-content.txt";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -243,7 +243,7 @@ const handleDownloadEmail = () => {
   const link = document.createElement("a");
 
   link.href = downloadUrl;
-  link.download = "easy-platform-email.txt";
+  link.download = "buzypeezy-email.txt";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -321,7 +321,7 @@ const handleDownloadSocialPost = () => {
   const link = document.createElement("a");
 
   link.href = downloadUrl;
-  link.download = "easy-platform-social-post.txt";
+  link.download = "buzypeezy-social-post.txt";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -401,7 +401,7 @@ const handleDownloadWorkflow = () => {
   const link = document.createElement("a");
 
   link.href = downloadUrl;
-  link.download = "easy-platform-workflow.txt";
+  link.download = "buzypeezy-workflow.txt";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -475,7 +475,7 @@ const handleDownloadPipeline = () => {
   const link = document.createElement("a");
 
   link.href = downloadUrl;
-  link.download = "easy-platform-ai-pipeline.txt";
+  link.download = "buzypeezy-ai-pipeline.txt";
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

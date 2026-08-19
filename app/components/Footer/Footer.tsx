@@ -9,7 +9,7 @@
 
           <div>
             <h3 className="text-2xl font-bold text-white">
-              Easy Platform
+              Buzypeezy
             </h3>
 
             <p className="mt-4 text-slate-400">
@@ -66,7 +66,7 @@
         </div>
 
         <div className="mt-12 border-t border-white/10 pt-8 text-center text-sm text-slate-500">
-          © 2026 Easy Platform. All rights reserved.
+          © 2026 Buzypeezy. All rights reserved.
         </div>
 
       </div>

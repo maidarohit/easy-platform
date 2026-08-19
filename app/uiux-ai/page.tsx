@@ -384,7 +384,7 @@ if (projectId && project?.userId && result) {
 
               <input
                 type="text"
-                placeholder="Example: Easy Platform"
+                placeholder="Example: Buzypeezy"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
                 className={fieldClass}

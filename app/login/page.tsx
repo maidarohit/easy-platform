@@ -66,16 +66,16 @@ export default function LoginPage() {
 
         <Link href="/" className="relative z-10 inline-flex w-fit items-center gap-2 rounded-lg text-sm font-semibold text-[#173D32] transition hover:text-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">
           <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><path d="M16 10H4m4-4-4 4 4 4" /></svg>
-          Back to Easy Platform
+          Back to Buzypeezy
         </Link>
 
         <div className="relative z-10 mt-12 max-w-2xl sm:mt-16 lg:my-auto lg:py-16">
-          <p className="text-sm font-semibold tracking-[-0.02em] text-[#173D32]">Easy Platform</p>
+          <p className="text-sm font-semibold tracking-[-0.02em] text-[#173D32]">Buzypeezy</p>
           <h1 className="mt-6 [font-size:clamp(2.5rem,5.5vw,4.25rem)] font-semibold leading-[1.01] tracking-[-0.055em] text-[#0E2C24]">
             Welcome back to<br />your business.
           </h1>
           <p className="mt-6 max-w-xl [font-size:clamp(1rem,1.4vw,1.1875rem)] leading-[1.75] text-[#6F756F]">
-            Everything you’re building with Easy is waiting for you. Sign in and continue from where you left off.
+            Everything you’re building with Buzypeezy is waiting for you. Sign in and continue from where you left off.
           </p>
 
           <div className="mt-9 hidden space-y-3 sm:block lg:mt-12">
@@ -100,7 +100,7 @@ export default function LoginPage() {
           <div className="rounded-[28px] border border-[#173D32]/10 bg-[#FCFBF7] p-6 shadow-[0_24px_70px_rgba(40,52,45,0.08)] sm:p-10 lg:border-transparent lg:bg-transparent lg:p-0 lg:shadow-none">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8A713F]">Secure access</p>
             <h2 className="mt-4 [font-size:clamp(2.25rem,3.5vw,2.625rem)] font-semibold leading-tight tracking-[-0.045em] text-[#0E2C24]">Welcome back</h2>
-            <p className="mt-3 [font-size:clamp(1rem,1.3vw,1.1875rem)] leading-7 text-[#6F756F]">Sign in to continue with Easy.</p>
+            <p className="mt-3 [font-size:clamp(1rem,1.3vw,1.1875rem)] leading-7 text-[#6F756F]">Sign in to continue with Buzypeezy.</p>
 
             <div className="mt-9">
               <label htmlFor="email" className="mb-2.5 block text-[15px] font-semibold text-[#344039]">Email Address</label>
@@ -134,7 +134,7 @@ export default function LoginPage() {
             </button>
 
             <p className="mt-7 text-center text-base text-[#6F756F]">
-              New to Easy?{" "}
+              New to Buzypeezy?{" "}
               <Link href="/signup" className="font-semibold text-[#173D32] underline decoration-[#B89A61]/60 underline-offset-4 transition hover:text-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">
                 Start building →
               </Link>

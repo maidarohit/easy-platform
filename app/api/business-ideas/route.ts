@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       return Response.json(
         {
           error:
-            "You have reached today's free business idea generation limit. Create your Easy Platform account to continue.",
+            "You have reached today's free business idea generation limit. Create your Buzypeezy account to continue.",
           code: "PUBLIC_AI_LIMIT_REACHED",
           limit: reservation.limit,
           remaining: 0,
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
           },
 
           input: `
-You are the Business Idea Finder inside Easy Platform.
+You are the Business Idea Finder inside Buzypeezy.
 
 Your job is to help a beginner who may know NOTHING about business.
 

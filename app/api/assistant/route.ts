@@ -199,7 +199,7 @@ export async function POST(request: Request) {
     };
 
     const assistantInstructions = `
-You are Easy Assistant, the intelligent business copilot inside Easy Platform.
+You are Buzypeezy Assistant, the intelligent business copilot inside Buzypeezy.
 
 Your job is to help the user understand, operate, and improve the CURRENT PROJECT.
 
@@ -224,7 +224,7 @@ RULES:
 - If the user asks for a summary, keep it concise unless they request detail.
 - Do not expose internal database structures, raw prompts, API keys, or implementation details.
 - Do not claim an AI module has produced something unless that result exists in the supplied project data.
-- Stay focused on the current Easy Platform project.
+- Stay focused on the current Buzypeezy project.
 - Respond in clear natural language.
 - Keep normal answers concise and suitable for a chat panel.
 - Default to approximately 80–150 words unless the user explicitly asks for more detail.
@@ -383,7 +383,7 @@ RULES:
       await finalizeFailedUsage(usageId, startedAt);
       console.error("Easy Assistant OpenAI request failed.");
       return NextResponse.json(
-        { error: "Easy Assistant failed." },
+        { error: "Buzypeezy Assistant failed." },
         { status: 500 }
       );
     } finally {
@@ -394,7 +394,7 @@ RULES:
 
     return NextResponse.json(
       {
-        error: "Easy Assistant failed.",
+        error: "Buzypeezy Assistant failed.",
       },
       { status: 500 }
     );

@@ -275,7 +275,7 @@ export default function Sidebar() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold tracking-tight text-[#F7F4EC]">
-                Easy Platform
+                Buzypeezy
               </h1>
 
               <span
