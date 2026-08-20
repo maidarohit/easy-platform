@@ -8,9 +8,11 @@ import {
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const CONTENT_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/content-ai";
 const CONTENT_AI_WORKFLOW = "content-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -74,6 +76,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_CONTENT_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -97,9 +102,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const response = await fetch(CONTENT_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(contentPayload),
       cache: "no-store",
       signal: controller.signal,
@@ -110,9 +115,11 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       await finalizeUsage(usageId, "failed", startedAt);
-      return new Response(responseText || "Content generation failed.", {
-        status: response.status,
-      });
+      console.error("Content AI upstream request failed.", response.status);
+      return Response.json(
+        { error: "Content generation failed." },
+        { status: response.status }
+      );
     }
 
     if (!responseText.trim()) {

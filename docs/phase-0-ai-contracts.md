@@ -23,19 +23,19 @@ contracts without sending requests to n8n.
 
 | Module | Frontend | App endpoint / direct upstream | Request fields | Response consumed |
 | --- | --- | --- | --- | --- |
-| AI Manager | `/ai-manager` | `/api/ai-manager` -> n8n `/webhook/ai-manager` | `companyName`, `businessDescription`, `industry`, `businessGoal` | `output` object |
-| Analytics AI | `/analytics-ai` | `/api/analytics-ai` -> n8n `/webhook/analytics-ai` | company profile, traffic, leads, sales, revenue, budget and goal fields | `output` or raw JSON |
-| Branding AI | `/branding-ai` | direct n8n `/webhook/branding-api` | `companyName`, `industry`, `targetAudience`, `brandStyle`, `brandDescription` | `output` object |
+| AI Manager | `/ai-manager` | `/api/ai-manager` -> authenticated n8n webhook | `companyName`, `businessDescription`, `industry`, `businessGoal` | `output` object |
+| Analytics AI | `/analytics-ai` | `/api/analytics-ai` -> authenticated n8n webhook | company profile, traffic, leads, sales, revenue, budget and goal fields | `output` or raw JSON |
+| Branding AI | `/branding-ai` | `/api/branding-ai` -> authenticated n8n webhook | `companyName`, `industry`, `targetAudience`, `brandStyle`, `brandDescription` | `output` object |
 | Website AI | `/dashboard/website-ai` | direct n8n UUID webhook | same five brand fields | `output` object |
 | Marketing AI | `/marketing-ai` | `/api/marketing-ai` -> n8n UUID webhook | five brand fields; edit/regenerate calls add current result and section instructions | nested JSON normalized by the page |
 | Sales AI | `/sales-ai` | `/api/sales-ai` -> n8n UUID webhook | `companyName`, `industry`, `salesGoal`, `targetAudience`, `businessDescription` | `output` or raw JSON |
 | SEO AI | `/seo-ai` | `/api/seo-ai` -> n8n UUID webhook | five brand fields | nested JSON normalized by the page |
-| UI/UX AI | `/uiux-ai` | `/api/uiux-ai` -> n8n `/webhook/uiux-ai` | five brand fields | nested JSON normalized by the page |
-| Content AI | `/dashboard/content-ai` | `/api/content-ai` -> n8n `/webhook/content-ai` | `prompt`, `contentType`, `tone`, `audience`, `length`, `keywords` | content/output/text/result |
-| Logo AI | `/dashboard/logo-ai` | `/api/logo-ai` -> n8n `/webhook/logo-ai` | `companyName`, `industry`, `brandStyle`, `logoIdea` | `output` or raw JSON |
-| Image AI | `/dashboard/image-ai` | `/api/image-ai` -> n8n `/webhook/image-ai` | `prompt`, `style`, `size` | PNG blob |
-| Presentation AI | `/dashboard/presentation-ai` | `/api/presentation-ai` -> n8n `/webhook/presentation-ai` | topic, type, audience, tone, slide count, key points and design style | presentation/content/output/result/text |
-| Video AI | `/dashboard/video-ai` | `/api/video-ai` -> n8n `/webhook/video-ai` | prompt plus visual, camera, lighting, duration and aspect settings | MP4 blob |
+| UI/UX AI | `/uiux-ai` | `/api/uiux-ai` -> authenticated n8n webhook | five brand fields | nested JSON normalized by the page |
+| Content AI | `/dashboard/content-ai` | `/api/content-ai` -> authenticated n8n webhook | `prompt`, `contentType`, `tone`, `audience`, `length`, `keywords` | content/output/text/result |
+| Logo AI | `/dashboard/logo-ai` | `/api/logo-ai` -> authenticated n8n webhook | `companyName`, `industry`, `brandStyle`, `logoIdea` | `output` or raw JSON |
+| Image AI | `/dashboard/image-ai` | `/api/image-ai` -> authenticated n8n webhook | `prompt`, `style`, `size` | PNG blob |
+| Presentation AI | `/dashboard/presentation-ai` | `/api/presentation-ai` -> authenticated n8n webhook | topic, type, audience, tone, slide count, key points and design style | presentation/content/output/result/text |
+| Video AI | `/dashboard/video-ai` | `/api/video-ai` -> authenticated n8n webhook | prompt plus visual, camera, lighting, duration and aspect settings | MP4 blob |
 
 ## Automation Hub contracts
 

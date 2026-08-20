@@ -2,9 +2,11 @@ import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
 import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const IMAGE_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/image-ai";
 const IMAGE_AI_WORKFLOW = "image-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -65,6 +67,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_IMAGE_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -87,9 +92,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const response = await fetch(IMAGE_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(imagePayload),
       cache: "no-store",
       signal: controller.signal,

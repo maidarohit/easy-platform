@@ -5,10 +5,12 @@ import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-
-const LOGO_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/logo-ai";
 const LOGO_AI_WORKFLOW = "logo-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -74,6 +76,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_LOGO_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -97,9 +102,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 60_000);
 
   try {
-    const response = await fetch(LOGO_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(logoPayload),
       signal: controller.signal,
     });

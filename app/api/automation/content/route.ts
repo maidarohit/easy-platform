@@ -8,9 +8,7 @@ import {
 import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
-
-const WEBHOOK =
-  "https://rohitm2026.app.n8n.cloud/webhook/automation-content";
+import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 const WORKFLOW = "automation-content";
 
 async function finalizeUsage(
@@ -38,6 +36,9 @@ export async function POST(request: Request) {
   if (!authorization.ok) return authorization.response;
 
   const { body, projectId, userId } = authorization;
+  const webhook = getN8nWebhookConfig("N8N_AUTOMATION_CONTENT_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
 
   try {
@@ -60,9 +61,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const response = await fetch(WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });

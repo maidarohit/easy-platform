@@ -2,9 +2,11 @@ import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
 import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const VIDEO_AI_WEBHOOK = "https://rohitm2026.app.n8n.cloud/webhook/video-ai";
 const VIDEO_AI_WORKFLOW = "video-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -65,6 +67,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_VIDEO_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -85,19 +90,18 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
 
   try {
-    const response = await fetch(VIDEO_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(videoPayload),
       cache: "no-store",
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      await response.body?.cancel();
       await finalizeUsage(usageId, "failed", startedAt);
-      return new Response(errorText || "Video generation failed.", {
-        status: response.status,
-      });
+      console.error("Video AI upstream request failed.", response.status);
+      return new Response("Video generation failed.", { status: response.status });
     }
 
     const contentType = response.headers.get("content-type") ?? "";

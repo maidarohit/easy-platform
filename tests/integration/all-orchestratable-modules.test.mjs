@@ -47,9 +47,11 @@ test("every orchestratable module uses an existing internal API route", async ()
     const routeSource = await source(routePath);
     assert.match(
       routeSource,
-      /https:\/\/rohitm2026\.app\.n8n\.cloud\/webhook\//,
-      `${definition.id} must retain its server-side production webhook`
+      /getN8nWebhookConfig\("N8N_[A-Z_]+_WEBHOOK_URL"\)/,
+      `${definition.id} must use server-side webhook configuration`
     );
+    assert.match(routeSource, /webhook\.headers/);
+    assert.doesNotMatch(routeSource, /https?:\/\/[^"']*n8n\.cloud/i);
   }
 });
 

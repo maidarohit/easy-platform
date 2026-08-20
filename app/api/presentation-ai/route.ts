@@ -5,10 +5,11 @@ import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const PRESENTATION_AI_WEBHOOK =
-  "https://rohitm2026.app.n8n.cloud/webhook/presentation-ai";
 const PRESENTATION_AI_WORKFLOW = "presentation-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_PRESENTATION_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -97,9 +101,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const response = await fetch(PRESENTATION_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(presentationPayload),
       cache: "no-store",
       signal: controller.signal,
@@ -110,9 +114,11 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       await finalizeUsage(usageId, "failed", startedAt);
-      return new Response(responseText || "Presentation generation failed.", {
-        status: response.status,
-      });
+      console.error("Presentation AI upstream request failed.", response.status);
+      return Response.json(
+        { error: "Presentation generation failed." },
+        { status: response.status }
+      );
     }
 
     if (!responseText.trim()) {

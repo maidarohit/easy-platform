@@ -3,24 +3,24 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const routeContracts = [
-  ["app/api/ai-manager/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/ai-manager", "json"],
-  ["app/api/analytics-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/analytics-ai", "json"],
-  ["app/api/branding-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/branding-api", "json"],
-  ["app/api/content-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/content-ai", "json"],
-  ["app/api/image-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/image-ai", "image/png"],
-  ["app/api/logo-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/logo-ai", "json"],
-  ["app/api/marketing-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/658e225f-8eca-47c7-b5d7-643d15deed25", "json"],
-  ["app/api/presentation-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/presentation-ai", "json"],
-  ["app/api/sales-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/afe45d44-0079-4e61-8631-7b72059f5e17", "json"],
-  ["app/api/seo-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/dff50e4b-b682-4001-aa03-f83ef3abf782", "json"],
-  ["app/api/uiux-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/uiux-ai", "json"],
-  ["app/api/video-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/video-ai", "video/mp4"],
-  ["app/api/website-ai/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/c5d5e244-e62c-4634-b353-0175b9793c32", "json"],
-  ["app/api/automation/content/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/automation-content", "json"],
-  ["app/api/automation/email/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/automation-email", "json"],
-  ["app/api/automation/social/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/automation-social", "json"],
-  ["app/api/automation/workflow/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/automation-workflow", "json"],
-  ["app/api/automation/pipeline/route.ts", "https://rohitm2026.app.n8n.cloud/webhook/automation-pipeline", "json"],
+  ["app/api/ai-manager/route.ts", "N8N_AI_MANAGER_WEBHOOK_URL", "json"],
+  ["app/api/analytics-ai/route.ts", "N8N_ANALYTICS_AI_WEBHOOK_URL", "json"],
+  ["app/api/branding-ai/route.ts", "N8N_BRANDING_AI_WEBHOOK_URL", "json"],
+  ["app/api/content-ai/route.ts", "N8N_CONTENT_AI_WEBHOOK_URL", "json"],
+  ["app/api/image-ai/route.ts", "N8N_IMAGE_AI_WEBHOOK_URL", "image/png"],
+  ["app/api/logo-ai/route.ts", "N8N_LOGO_AI_WEBHOOK_URL", "json"],
+  ["app/api/marketing-ai/route.ts", "N8N_MARKETING_AI_WEBHOOK_URL", "json"],
+  ["app/api/presentation-ai/route.ts", "N8N_PRESENTATION_AI_WEBHOOK_URL", "json"],
+  ["app/api/sales-ai/route.ts", "N8N_SALES_AI_WEBHOOK_URL", "json"],
+  ["app/api/seo-ai/route.ts", "N8N_SEO_AI_WEBHOOK_URL", "json"],
+  ["app/api/uiux-ai/route.ts", "N8N_UIUX_AI_WEBHOOK_URL", "json"],
+  ["app/api/video-ai/route.ts", "N8N_VIDEO_AI_WEBHOOK_URL", "video/mp4"],
+  ["app/api/website-ai/route.ts", "N8N_WEBSITE_AI_WEBHOOK_URL", "json"],
+  ["app/api/automation/content/route.ts", "N8N_AUTOMATION_CONTENT_WEBHOOK_URL", "json"],
+  ["app/api/automation/email/route.ts", "N8N_AUTOMATION_EMAIL_WEBHOOK_URL", "json"],
+  ["app/api/automation/social/route.ts", "N8N_AUTOMATION_SOCIAL_WEBHOOK_URL", "json"],
+  ["app/api/automation/workflow/route.ts", "N8N_AUTOMATION_WORKFLOW_WEBHOOK_URL", "json"],
+  ["app/api/automation/pipeline/route.ts", "N8N_AUTOMATION_PIPELINE_WEBHOOK_URL", "json"],
 ];
 
 const frontendContracts = [
@@ -51,13 +51,22 @@ async function source(path) {
   return readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-for (const [path, webhook, outputKind] of routeContracts) {
+for (const [path, environmentVariable, outputKind] of routeContracts) {
   test(`${path} preserves its production proxy contract`, async () => {
     const contents = await source(path);
     assert.match(contents, /export\s+async\s+function\s+POST\s*\(/);
-    assert.ok(contents.includes(webhook), `Expected production webhook ${webhook}`);
+    assert.ok(contents.includes(environmentVariable), `Expected ${environmentVariable}`);
+    assert.match(contents, /getN8nWebhookConfig\(/);
+    assert.match(contents, /n8nConfigurationErrorResponse\(\)/);
+    assert.match(contents, /fetch\(webhook\.url/);
+    assert.match(contents, /webhook\.headers/);
+    assert.doesNotMatch(contents, /https?:\/\/[^"']*n8n\.cloud/i);
+    const configGuard = contents.indexOf("const webhook = getN8nWebhookConfig");
+    const usageStart = contents.indexOf("usageId = await startAiUsage");
+    const upstreamFetch = contents.indexOf("fetch(webhook.url");
+    assert.ok(configGuard >= 0 && configGuard < usageStart);
+    assert.ok(configGuard < upstreamFetch);
     assert.match(contents, /method:\s*["']POST["']/);
-    assert.match(contents, /["']Content-Type["']:\s*["']application\/json["']/);
     assert.match(
       contents,
       /body:\s*JSON\.stringify\((?:body|payload|[a-z]+Payload)\)/,
@@ -69,6 +78,22 @@ for (const [path, webhook, outputKind] of routeContracts) {
     }
   });
 }
+
+test("n8n webhook configuration is server-only and authenticated", async () => {
+  const contents = await source("app/lib/n8n-webhooks.ts");
+  assert.match(contents, /^import "server-only";/);
+  assert.match(contents, /process\.env\.N8N_WEBHOOK_SECRET/);
+  assert.match(contents, /X-Buzypeezy-Webhook-Secret/);
+  assert.doesNotMatch(contents, /NEXT_PUBLIC_/);
+});
+
+test("n8n proxy routes never return raw upstream error bodies", async () => {
+  for (const [path] of routeContracts) {
+    const contents = await source(path);
+    assert.doesNotMatch(contents, /n8nResponse\s*:/);
+    assert.doesNotMatch(contents, /new Response\((?:responseText|errorText)\s*\|\|/);
+  }
+});
 
 for (const [path, endpoint, fields] of frontendContracts) {
   test(`${path} preserves its generation request`, async () => {

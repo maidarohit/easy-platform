@@ -9,10 +9,9 @@ import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
 
-const WEBSITE_AI_WEBHOOK =
-  "https://rohitm2026.app.n8n.cloud/webhook/c5d5e244-e62c-4634-b353-0175b9793c32";
 const WEBSITE_AI_WORKFLOW = "website-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -83,6 +82,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_WEBSITE_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
 
   try {
@@ -110,9 +112,9 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const upstream = await fetch(WEBSITE_AI_WEBHOOK, {
+    const upstream = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(websitePayload),
       cache: "no-store",
       signal: controller.signal,
@@ -123,10 +125,11 @@ export async function POST(request: Request) {
 
     if (!upstream.ok) {
       await finalizeUsage(usageId, "failed", startedAt);
-      return new Response(responseText || "Website AI request failed.", {
-        status: upstream.status,
-        headers: { "Content-Type": "application/json" },
-      });
+      console.error("Website AI upstream request failed.", upstream.status);
+      return Response.json(
+        { error: "Website AI request failed." },
+        { status: upstream.status }
+      );
     }
 
     if (!responseText.trim()) {

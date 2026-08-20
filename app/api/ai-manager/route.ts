@@ -2,10 +2,11 @@ import { db } from "@/app/db";
 import { aiManagerJobs, projectMemory, projects } from "@/app/db/schema";
 import { failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import {
+  getN8nWebhookConfig,
+  n8nConfigurationErrorResponse,
+} from "@/app/lib/n8n-webhooks";
 import { and, eq, inArray } from "drizzle-orm";
-
-const AI_MANAGER_WEBHOOK_URL =
-  "https://rohitm2026.app.n8n.cloud/webhook/ai-manager";
 
 const text = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
@@ -120,6 +121,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unable to start AI Manager job." }, { status: 500 });
   }
 
+  const webhook = getN8nWebhookConfig("N8N_AI_MANAGER_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   const usageStartedAt = Date.now();
   let usageId: string;
 
@@ -180,9 +184,9 @@ export async function POST(request: Request) {
   };
 
   try {
-    const response = await fetch(AI_MANAGER_WEBHOOK_URL, {
+    const response = await fetch(webhook.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: webhook.headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(30_000),
     });

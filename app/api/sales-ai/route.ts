@@ -9,11 +9,10 @@ import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
-const SALES_AI_WEBHOOK =
-  "https://rohitm2026.app.n8n.cloud/webhook/afe45d44-0079-4e61-8631-7b72059f5e17";
 const SALES_AI_WORKFLOW = "sales-ai";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -99,6 +98,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const webhook = getN8nWebhookConfig("N8N_SALES_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
 
   try {
@@ -125,10 +127,10 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const response = await fetch(SALES_AI_WEBHOOK, {
+    const response = await fetch(webhook.url, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        ...webhook.headers,
       },
       body: JSON.stringify(salesPayload),
       signal: controller.signal,

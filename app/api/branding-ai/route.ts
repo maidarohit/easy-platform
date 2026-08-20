@@ -12,10 +12,8 @@ import {
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const BRANDING_AI_WEBHOOK =
-  "https://rohitm2026.app.n8n.cloud/webhook/branding-api";
 
 const BRANDING_AI_WORKFLOW = "branding-api";
 
@@ -122,6 +120,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const webhook = getN8nWebhookConfig("N8N_BRANDING_AI_WEBHOOK_URL");
+  if (!webhook) return n8nConfigurationErrorResponse();
+
   let usageId: string;
 
   try {
@@ -156,10 +157,10 @@ export async function POST(request: Request) {
   );
 
   try {
-    const upstream = await fetch(BRANDING_AI_WEBHOOK, {
+    const upstream = await fetch(webhook.url, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        ...webhook.headers,
       },
       body: JSON.stringify(brandingPayload),
       cache: "no-store",
@@ -181,14 +182,10 @@ export async function POST(request: Request) {
         startedAt
       );
 
-      return new Response(
-        responseText || "Branding AI request failed.",
-        {
-          status: upstream.status,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+      console.error("Branding AI upstream request failed.", upstream.status);
+      return Response.json(
+        { error: "Branding AI request failed." },
+        { status: upstream.status }
       );
     }
 

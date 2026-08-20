@@ -15,7 +15,7 @@ const brandInput = {
   brandDescription: "An AI business platform",
 };
 
-async function verifyProtectedProxy(post, routePath, expectedWebhook) {
+async function verifyProtectedProxy(post, routePath, environmentVariable) {
   const originalFetch = globalThis.fetch;
   let captured;
   globalThis.fetch = async (url, init) => {
@@ -38,7 +38,8 @@ async function verifyProtectedProxy(post, routePath, expectedWebhook) {
     assert.equal(response.status, 401);
     assert.equal(captured, undefined, "Unauthenticated requests must not reach n8n");
     const contents = await readFile(new URL(`../../${routePath}`, import.meta.url), "utf8");
-    assert.ok(contents.includes(expectedWebhook));
+    assert.ok(contents.includes(environmentVariable));
+    assert.doesNotMatch(contents, /https?:\/\/[^"']*n8n\.cloud/i);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -48,14 +49,14 @@ test("Branding AI protects its pinned proxy without a live n8n call", () =>
   verifyProtectedProxy(
     brandingPost,
     "app/api/branding-ai/route.ts",
-    "https://rohitm2026.app.n8n.cloud/webhook/branding-api"
+    "N8N_BRANDING_AI_WEBHOOK_URL"
   ));
 
 test("Website AI protects its pinned proxy without a live n8n call", () =>
   verifyProtectedProxy(
     websitePost,
     "app/api/website-ai/route.ts",
-    "https://rohitm2026.app.n8n.cloud/webhook/c5d5e244-e62c-4634-b353-0175b9793c32"
+    "N8N_WEBSITE_AI_WEBHOOK_URL"
   ));
 
 test("Branding AI and Website AI are registered for orchestration", () => {
