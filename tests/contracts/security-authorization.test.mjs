@@ -7,11 +7,21 @@ async function source(path) {
 }
 
 const protectedRoutes = [
+  "app/api/dashboard/summary/route.ts",
   "app/api/projects/route.ts",
   "app/api/project-memory/route.ts",
   "app/api/project-outputs/route.ts",
   "app/api/user/sync/route.ts",
 ];
+
+test("Dashboard summary is scoped solely to the verified UID", async () => {
+  const contents = await source("app/api/dashboard/summary/route.ts");
+  assert.match(contents, /userId = \(await verifyFirebaseIdToken\(request\)\)\.uid/);
+  assert.match(contents, /eq\(aiUsage\.userId, userId\)/);
+  assert.match(contents, /eq\(aiManagerJobs\.userId, userId\)/);
+  assert.match(contents, /inArray\(aiManagerJobs\.status, \["pending", "processing"\]\)/);
+  assert.doesNotMatch(contents, /searchParams|request\.json/);
+});
 
 for (const path of protectedRoutes) {
   test(`${path} requires a verified Firebase token`, async () => {

@@ -25,11 +25,21 @@ type Project = {
   originalBrief?: string;
 };
 
+type DashboardSummary = {
+  aiRequests: number;
+  availableAiTools: number;
+  activeAiJobs: number;
+};
+
 function DashboardPageContent() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [error, setError] = useState("");
+  const [dashboardSummary, setDashboardSummary] = useState<
+    DashboardSummary | null | undefined
+  >(undefined);
+  const [summaryError, setSummaryError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -69,6 +79,38 @@ function DashboardPageContent() {
 
     return unsubscribe;
   }, [router]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setSummaryError("");
+
+      if (!user) {
+        setDashboardSummary(undefined);
+        return;
+      }
+
+      try {
+        const response = await authenticatedFetch("/api/dashboard/summary");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load dashboard summary");
+        }
+
+        setDashboardSummary(data as DashboardSummary);
+      } catch (err) {
+        console.error("Load dashboard summary error:", err);
+        setDashboardSummary(null);
+        setSummaryError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load dashboard summary"
+        );
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const openInAIManager = (project: Project) => {
     router.push(`/ai-manager?projectId=${encodeURIComponent(project.id)}`);
@@ -127,7 +169,26 @@ function DashboardPageContent() {
     </div>
   </div>
 
-          <StatsCards projectCount={projects.length} />
+          <StatsCards
+            projectCount={projects.length}
+            aiRequests={
+              dashboardSummary === null ? null : dashboardSummary?.aiRequests
+            }
+            availableAiTools={
+              dashboardSummary === null
+                ? null
+                : dashboardSummary?.availableAiTools
+            }
+            activeAiJobs={
+              dashboardSummary === null ? null : dashboardSummary?.activeAiJobs
+            }
+          />
+
+          {summaryError && (
+            <p className="mt-3 text-sm text-red-300" role="alert">
+              {summaryError}
+            </p>
+          )}
 
           <div id="saved-projects" className="mt-10">
             <div className="mb-5 flex items-center justify-between">

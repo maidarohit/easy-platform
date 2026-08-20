@@ -1,14 +1,26 @@
 type StatsCardsProps = {
   projectCount?: number;
+  aiRequests: number | null | undefined;
+  availableAiTools: number | null | undefined;
+  activeAiJobs: number | null | undefined;
 };
 
 export default function StatsCards({
   projectCount = 0,
+  aiRequests,
+  availableAiTools,
+  activeAiJobs,
 }: StatsCardsProps) {
+  const displaySummaryValue = (value: number | null | undefined) => {
+    if (value === undefined) return "—";
+    if (value === null) return "Unavailable";
+    return String(value);
+  };
+
   const cards = [
     {
       title: "AI Requests",
-      value: "1,245",
+      value: displaySummaryValue(aiRequests),
       href: "/ai-manager",
       accent: "text-[#D7C49B]",
       icon: (
@@ -47,9 +59,9 @@ export default function StatsCards({
     },
 
     {
-      title: "Credits",
-      value: "8,450",
-      href: "/settings",
+      title: "Available AI Tools",
+      value: displaySummaryValue(availableAiTools),
+      href: "/ai-manager",
       accent: "text-[#F7F4EC]",
       icon: (
         <svg
@@ -66,8 +78,8 @@ export default function StatsCards({
     },
 
     {
-      title: "Active Agents",
-      value: "9",
+      title: "Active AI Jobs",
+      value: displaySummaryValue(activeAiJobs),
       href: "/ai-manager",
       accent: "text-cyan-300",
       icon: (
