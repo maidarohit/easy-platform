@@ -7,7 +7,7 @@ import { categoryForModule, PLAN_LIMITS, USAGE_CATEGORIES, type UsageCategory } 
 import { getUserSubscription } from "@/app/lib/subscriptions";
 
 const ACCESS_CATEGORY = "__paid_access__";
-const PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>(["projects", "standardAiTasks", "aiManagerRuns", "imageGenerations"]);
+const PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>(["projects", "standardAiTasks", "aiManagerRuns", "imageGenerations", "videoGenerations"]);
 
 function enabled(name: string): boolean {
   return process.env[name]?.trim().toLowerCase() === "true";
