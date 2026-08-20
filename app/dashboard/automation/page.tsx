@@ -481,6 +481,13 @@ const handleDownloadPipeline = () => {
   document.body.removeChild(link);
   URL.revokeObjectURL(downloadUrl);
 };
+  const handleSelectAutomation = (type: AutomationType) => {
+    if (type === selectedType) return;
+
+    setSelectedType(type);
+    setResult("");
+    setError("");
+  };
   const automationTypes = [
     {
       id: "content" as AutomationType,
@@ -547,7 +554,7 @@ const handleDownloadPipeline = () => {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSelectedType(item.id)}
+                    onClick={() => handleSelectAutomation(item.id)}
                     className={`group relative min-h-60 overflow-hidden rounded-[24px] border bg-[#FCFBF7] p-5 text-left shadow-[0_10px_30px_rgba(23,61,50,0.06)] transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]/30 ${
                       active
                         ? "border-[#A8B8A7] bg-[#F2F0E7] shadow-[0_14px_36px_rgba(23,61,50,0.11)]"
