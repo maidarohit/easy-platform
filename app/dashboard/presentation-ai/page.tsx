@@ -1,5 +1,6 @@
 "use client";
 
+import jsPDF from "jspdf";
 import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -218,6 +219,90 @@ function PresentationAIPageContent() {
 
   const presentationSlides = parsePresentationSlides(presentation);
 
+  const handleDownloadPDF = () => {
+    if (!presentation) return;
+
+    const doc = new jsPDF();
+    const margin = 20;
+    const maxWidth = 170;
+    const pageBottom = 277;
+    let y = 20;
+
+    const ensureSpace = (height: number) => {
+      if (y + height <= pageBottom) return;
+      doc.addPage();
+      y = 20;
+    };
+
+    const addSection = (label: string, value: string) => {
+      if (!value.trim()) return;
+      ensureSpace(14);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(14, 94, 84);
+      doc.text(label, margin, y);
+      y += 6;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 61);
+      const lines = doc.splitTextToSize(value, maxWidth) as string[];
+      for (const line of lines) {
+        ensureSpace(6);
+        doc.text(line, margin, y);
+        y += 6;
+      }
+      y += 5;
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(21);
+    doc.setTextColor(14, 44, 36);
+    doc.text("Presentation AI Deck", margin, y);
+    y += 4;
+    doc.setDrawColor(239, 112, 96);
+    doc.setLineWidth(0.8);
+    doc.line(margin, y, 190, y);
+    y += 12;
+
+    addSection("Presentation Topic", topic);
+    addSection("Presentation Type", presentationType);
+    addSection("Number of Slides", slideCount);
+    addSection("Target Audience", audience);
+    addSection("Tone", tone);
+    addSection("Design Style", designStyle);
+
+    if (presentationSlides.length === 0) {
+      addSection("Generated Presentation", presentation);
+    } else {
+      presentationSlides.forEach((slide) => {
+        doc.addPage();
+        y = 20;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(239, 112, 96);
+        doc.text(`SLIDE ${slide.number.padStart(2, "0")}`, margin, y);
+        y += 8;
+
+        doc.setFontSize(17);
+        doc.setTextColor(14, 44, 36);
+        const titleLines = doc.splitTextToSize(slide.heading, maxWidth) as string[];
+        for (const line of titleLines) {
+          ensureSpace(8);
+          doc.text(line, margin, y);
+          y += 8;
+        }
+        y += 5;
+
+        addSection(slide.contentLabel || "Main Slide Content", slide.content);
+        addSection(slide.visualLabel || "Visual Suggestion", slide.visualSuggestion);
+        addSection(slide.notesLabel || "Speaker Notes", slide.speakerNotes);
+      });
+    }
+
+    doc.save("Presentation-AI-Deck.pdf");
+  };
+
   return (
     <main className="flex min-h-screen bg-slate-950 text-white">
       <Sidebar />
@@ -257,27 +342,27 @@ function PresentationAIPageContent() {
             {presentation && (
               <section className="relative mt-8 overflow-hidden rounded-[26px] border border-red-500/25 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-red-950/15 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.3),0_0_35px_rgba(239,68,68,0.08)] sm:p-7">
                 <div className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-transparent via-red-500/80 to-transparent shadow-[0_0_14px_rgba(239,68,68,0.35)]"/><div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-red-500/10 blur-3xl"/>
-                <div className="relative mb-6 flex flex-wrap items-center justify-between gap-5 border-b border-white/[0.06] pb-6"><div className="flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/35 bg-slate-950/80 text-red-300 shadow-[0_0_22px_rgba(239,68,68,0.12)]"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4h16v12H4zM8 20l4-4 4 4"/></svg></div><div><div className="mb-1 flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]"/><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Deck output / ready</span></div><h2 className="text-2xl font-bold tracking-tight text-white">Generated Presentation</h2></div></div><div className="flex flex-wrap gap-2.5"><button type="button" onClick={handleCopyPresentation} className="flex min-h-10 items-center gap-2 rounded-xl border border-cyan-400/20 bg-slate-950/70 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition-all hover:-translate-y-0.5 hover:border-cyan-400/45 hover:bg-cyan-400/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><rect x="6.5" y="6.5" width="9" height="9" rx="1.5"/><path d="M13.5 6.5V5A1.5 1.5 0 0 0 12 3.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5"/></svg>Copy Presentation</button><button type="button" onClick={handleGeneratePresentation} disabled={loading} className="group flex min-h-10 items-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500/20 to-cyan-400/[0.08] px-4 py-2.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-red-300/60 hover:shadow-[0_0_22px_rgba(239,68,68,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 disabled:cursor-not-allowed disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300 transition-transform duration-300 group-hover:rotate-180" strokeWidth="1.5"><path d="M15.5 7A6 6 0 1 0 16 12"/><path d="M12.5 4.5H16V8"/></svg>Regenerate</button></div></div>
+                <div className="relative mb-6 flex flex-wrap items-center justify-between gap-5 border-b border-white/[0.06] pb-6"><div className="flex items-center gap-4"><div className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/35 bg-slate-950/80 text-red-300 shadow-[0_0_22px_rgba(239,68,68,0.12)]"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="1.5"><path d="M4 4h16v12H4zM8 20l4-4 4 4"/></svg></div><div><div className="mb-1 flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]"/><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Deck output / ready</span></div><h2 className="text-2xl font-bold tracking-tight text-white">Generated Presentation</h2></div></div><div className="flex flex-wrap gap-2.5"><button type="button" onClick={handleCopyPresentation} className="flex min-h-10 items-center gap-2 rounded-xl border border-cyan-400/20 bg-slate-950/70 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition-all hover:-translate-y-0.5 hover:border-cyan-400/45 hover:bg-cyan-400/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><rect x="6.5" y="6.5" width="9" height="9" rx="1.5"/><path d="M13.5 6.5V5A1.5 1.5 0 0 0 12 3.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5"/></svg>Copy Presentation</button><button type="button" onClick={handleDownloadPDF} className="flex min-h-10 items-center gap-2 rounded-xl border border-red-500/25 bg-slate-950/70 px-4 py-2.5 text-xs font-semibold text-red-100 transition-all hover:-translate-y-0.5 hover:border-red-400/50 hover:bg-red-500/10 hover:shadow-[0_0_20px_rgba(239,68,68,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-red-300" strokeWidth="1.5"><path d="M10 3.5v9m-3-3 3 3 3-3M4 15.5h12"/></svg>Download PDF</button><button type="button" onClick={handleGeneratePresentation} disabled={loading} className="group flex min-h-10 items-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500/20 to-cyan-400/[0.08] px-4 py-2.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-red-300/60 hover:shadow-[0_0_22px_rgba(239,68,68,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 disabled:cursor-not-allowed disabled:opacity-50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300 transition-transform duration-300 group-hover:rotate-180" strokeWidth="1.5"><path d="M15.5 7A6 6 0 1 0 16 12"/><path d="M12.5 4.5H16V8"/></svg>Regenerate</button></div></div>
                 <div className="relative mb-4 flex flex-wrap gap-2"><span className="rounded-lg border border-white/[0.07] bg-slate-950/60 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Type <span className="ml-1 text-cyan-300">{presentationType}</span></span><span className="rounded-lg border border-white/[0.07] bg-slate-950/60 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Slides <span className="ml-1 text-cyan-300">{slideCount}</span></span><span className="rounded-lg border border-white/[0.07] bg-slate-950/60 px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Design <span className="ml-1 text-cyan-300">{designStyle}</span></span></div>
                 {presentationSlides.length > 0 ? (
                   <div className="relative space-y-4">
                     {presentationSlides.map((slide, index) => (
-                      <details key={`${slide.number}-${index}`} className="group/slide relative overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/70 transition-all duration-300 open:border-red-400/35 open:shadow-[0_0_26px_rgba(239,68,68,0.08)] hover:border-red-400/25">
-                        <div className="pointer-events-none absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-red-500/55 to-transparent opacity-40 transition-opacity group-open/slide:opacity-100" />
+                      <details key={`${slide.number}-${index}`} className="group/slide relative overflow-hidden rounded-2xl border border-[#D8E3DD] bg-[#FCFBF7] shadow-[0_10px_30px_rgba(14,44,36,0.08)] transition-all duration-300 open:border-[#F0A094] open:shadow-[0_16px_36px_rgba(14,44,36,0.12)] hover:border-[#9FCBC4]">
+                        <div className="pointer-events-none absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-[#EF7060] via-[#65BFB4] to-[#EF7060] opacity-70 transition-opacity group-open/slide:opacity-100" />
                         <summary className="relative flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-400/40 sm:px-5 [&::-webkit-details-marker]:hidden">
                           <div className="flex min-w-0 items-center gap-4">
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/[0.07] font-mono text-[10px] font-bold tracking-wider text-red-300 shadow-[0_0_14px_rgba(239,68,68,0.08)]">{slide.number.padStart(2, "0")}</span>
-                            <div className="min-w-0"><span className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-cyan-400/75"><span className="h-1 w-1 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(34,211,238,0.8)]"/>Deck intelligence module</span><h3 className="mt-1 truncate text-sm font-semibold text-white sm:text-base">{slide.heading}</h3></div>
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#F0A094] bg-[#FFF0EC] font-mono text-[10px] font-bold tracking-wider text-[#B94639] shadow-[0_6px_16px_rgba(239,112,96,0.12)]">{slide.number.padStart(2, "0")}</span>
+                            <div className="min-w-0"><span className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-[#0E766E]"><span className="h-1 w-1 rounded-full bg-[#45AFA4]"/>Deck intelligence module</span><h3 className="mt-1 truncate text-sm font-semibold text-[#0E2C24] sm:text-base">{slide.heading}</h3></div>
                           </div>
-                          <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 text-slate-500 transition-all group-open/slide:rotate-45 group-open/slide:border-cyan-300/40 group-open/slide:bg-cyan-400/[0.08] group-open/slide:text-cyan-200"><span className="absolute h-px w-3 bg-current"/><span className="absolute h-3 w-px bg-current"/></span>
+                          <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#BCD3CC] bg-white text-[#35685E] transition-all group-open/slide:rotate-45 group-open/slide:border-[#65BFB4] group-open/slide:bg-[#EAF7F4] group-open/slide:text-[#0E766E]"><span className="absolute h-px w-3 bg-current"/><span className="absolute h-3 w-px bg-current"/></span>
                         </summary>
 
-                        <div className="relative border-t border-red-400/15 px-4 py-5 sm:px-6 sm:py-6">
-                          {slide.content && <section><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-red-300">{slide.contentLabel}</h4><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-slate-300">{slide.content}</pre></section>}
+                        <div className="relative border-t border-[#DCE7E1] bg-white/70 px-4 py-5 sm:px-6 sm:py-6">
+                          {slide.content && <section><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#B94639]">{slide.contentLabel}</h4><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-[#3F4B46]">{slide.content}</pre></section>}
                           {(slide.visualSuggestion || slide.speakerNotes) && (
                             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                              {slide.visualSuggestion && <section className="rounded-xl border border-cyan-400/10 bg-cyan-400/[0.025] p-4"><div className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_7px_rgba(34,211,238,0.8)]"/><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-300">{slide.visualLabel}</h4></div><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-slate-300">{slide.visualSuggestion}</pre></section>}
-                              {slide.speakerNotes && <section className="rounded-xl border border-red-500/15 bg-red-500/[0.025] p-4"><div className="flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-red-300" strokeWidth="1.4"><path d="M3 3h10v8H7l-3 2v-2H3z"/></svg><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-red-300">{slide.notesLabel}</h4></div><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-slate-300">{slide.speakerNotes}</pre></section>}
+                              {slide.visualSuggestion && <section className="rounded-xl border border-[#B9DDD7] bg-[#EDF8F5] p-4"><div className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-[#45AFA4]"/><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#0E766E]">{slide.visualLabel}</h4></div><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-[#3F4B46]">{slide.visualSuggestion}</pre></section>}
+                              {slide.speakerNotes && <section className="rounded-xl border border-[#F2C1B9] bg-[#FFF3F0] p-4"><div className="flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-[#C65345]" strokeWidth="1.4"><path d="M3 3h10v8H7l-3 2v-2H3z"/></svg><h4 className="text-[9px] font-semibold uppercase tracking-[0.2em] text-[#B94639]">{slide.notesLabel}</h4></div><pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-[#3F4B46]">{slide.speakerNotes}</pre></section>}
                             </div>
                           )}
                         </div>
@@ -285,7 +370,7 @@ function PresentationAIPageContent() {
                     ))}
                   </div>
                 ) : (
-                  <article className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/70 p-5 transition-all hover:border-red-400/30 hover:shadow-[0_0_24px_rgba(239,68,68,0.07)] sm:p-6"><div className="absolute left-0 top-0 h-px w-full bg-gradient-to-r from-transparent via-red-500/55 to-transparent"/><div className="mb-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/25 bg-red-500/[0.06] font-mono text-[9px] font-bold text-red-300">01</span><div><span className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-cyan-400/75"><span className="h-1 w-1 rounded-full bg-cyan-300"/>Deck intelligence module</span><h3 className="mt-0.5 text-sm font-semibold text-white">Presentation Content</h3></div></div><pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-slate-300">{presentation}</pre></article>
+                  <article className="group relative overflow-hidden rounded-2xl border border-[#D8E3DD] bg-[#FCFBF7] p-5 text-[#3F4B46] shadow-[0_10px_30px_rgba(14,44,36,0.08)] transition-all hover:border-[#9FCBC4] hover:shadow-[0_16px_36px_rgba(14,44,36,0.12)] sm:p-6"><div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-[#EF7060] via-[#65BFB4] to-[#EF7060]"/><div className="mb-5 flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#F0A094] bg-[#FFF0EC] font-mono text-[9px] font-bold text-[#B94639]">01</span><div><span className="flex items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.2em] text-[#0E766E]"><span className="h-1 w-1 rounded-full bg-[#45AFA4]"/>Deck intelligence module</span><h3 className="mt-0.5 text-sm font-semibold text-[#0E2C24]">Presentation Content</h3></div></div><pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-[#3F4B46]">{presentation}</pre></article>
                 )}
               </section>
             )}
