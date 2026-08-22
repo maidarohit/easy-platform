@@ -305,7 +305,7 @@ if (projectId && project?.userId && finalAnalyticsResult) {
   ];
   const fieldClass = "w-full rounded-xl border border-slate-700/70 bg-[#070b16]/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-red-500/30 focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10";
   const selectClass = `${fieldClass} appearance-none pr-11`;
-  const labelClass = "mb-2 flex items-center justify-between text-sm font-medium text-white";
+  const labelClass = "mb-2 flex items-center justify-between text-sm font-medium text-[#173D32]";
   const codeClass = "text-[9px] font-semibold tracking-[0.2em] text-cyan-400/70";
 
   return (
