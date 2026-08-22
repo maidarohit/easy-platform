@@ -3,7 +3,7 @@ import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq, sql } from "drizzle-orm";
-import { requirePaidEntitlement } from "@/app/lib/paid-entitlements";
+import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
 
 export async function POST(req: Request) {
   let userId: string;
@@ -68,8 +68,20 @@ export async function POST(req: Request) {
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtext(${`${userId}:projects`}))`
       );
-      const entitlement = await requirePaidEntitlement(userId, "projects");
-      if (!entitlement.ok) throw entitlement.response;
+      const [projectCount] = await transaction
+        .select({ count: sql<number>`count(*)` })
+        .from(projects)
+        .where(eq(projects.userId, userId));
+      const hasNoProjects = Number(projectCount?.count ?? 0) === 0;
+      const allowance = await checkUsageAllowance(userId, "projects");
+      const mayCreateInitialProject =
+        hasNoProjects &&
+        !allowance.ok &&
+        allowance.reason === "PAID_SUBSCRIPTION_REQUIRED";
+
+      if (!allowance.ok && !mayCreateInitialProject) {
+        throw allowanceError(allowance);
+      }
       const [createdProject] = await transaction
         .insert(projects)
         .values({ id, userId, name, ...optionalFields })

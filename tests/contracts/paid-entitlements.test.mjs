@@ -77,3 +77,14 @@ test("automation authorization applies its limit before route provider calls", a
   const contents = await source("app/lib/automation-auth.ts");
   assert.match(contents, /requirePaidEntitlement\(userId, "automationRuns"\)/);
 });
+
+test("only the first project may bypass a missing paid subscription", async () => {
+  const contents = await source("app/api/projects/route.ts");
+  const lock = contents.indexOf("pg_advisory_xact_lock");
+  const projectCount = contents.indexOf("hasNoProjects");
+  const insert = contents.indexOf(".insert(projects)");
+
+  assert.ok(lock >= 0 && lock < projectCount && projectCount < insert);
+  assert.match(contents, /hasNoProjects\s*&&[\s\S]*allowance\.reason === "PAID_SUBSCRIPTION_REQUIRED"/);
+  assert.match(contents, /if \(!allowance\.ok && !mayCreateInitialProject\)/);
+});
