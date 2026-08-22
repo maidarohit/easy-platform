@@ -44,6 +44,12 @@ type SEOResult = Record<string, unknown> & {
   websiteFeatures?: string;
 };
 
+const cleanGrowthRecommendations = (value?: string) =>
+  value?.replace(
+    /^[ \t]*Note:\s*Duplicate field per required schema\s*[—–-]\s*repeated condensed action plan\.[ \t]*(?:\r?\n)?/gim,
+    "",
+  );
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object";
 
@@ -169,7 +175,7 @@ Logo Concept:
 ${brandResult.seoContentPlan}
 
 SEO Recommendations:
-${brandResult.growthRecommendations}
+${cleanGrowthRecommendations(brandResult.growthRecommendations)}
 `;
     navigator.clipboard.writeText(content);
     toast.success("SEO Plan copied!");
@@ -211,7 +217,7 @@ ${brandResult.growthRecommendations}
     addSection("Technical SEO Suggestions", brandResult.technicalSEO);
     addSection("SEO Score", brandResult.seoScore);
     addSection("KPIs", brandResult.kpis);
-    addSection("Growth Recommendations", brandResult.growthRecommendations);
+    addSection("Growth Recommendations", cleanGrowthRecommendations(brandResult.growthRecommendations));
     doc.save(`${companyName}-SEO-Strategy.pdf`);
     toast.success("PDF downloaded!");
   };
@@ -371,7 +377,7 @@ if (projectId && project?.userId && finalSEOResult) {
     ["06", "Blog Topics", "CONTENT", brandResult.blogTopics],
     ["07", "Technical SEO Suggestions", "TECHNICAL", brandResult.technicalSEO],
     ["08", "SEO KPIs", "MEASUREMENT", brandResult.kpis],
-    ["09", "Growth Recommendations", "GROWTH", brandResult.growthRecommendations],
+    ["09", "Growth Recommendations", "GROWTH", cleanGrowthRecommendations(brandResult.growthRecommendations)],
   ] : [];
   const fieldClass = "w-full rounded-xl border border-slate-700/70 bg-[#070b16]/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-red-500/30 focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10";
   const selectClass = `${fieldClass} appearance-none pr-11`;
