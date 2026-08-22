@@ -5,6 +5,10 @@ import { projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq } from "drizzle-orm";
 import { requirePaidEntitlement } from "@/app/lib/paid-entitlements";
+import {
+  readValidatedAiRequest,
+  type AiRequestSchemaName,
+} from "@/app/lib/ai-request-validation";
 
 type AuthorizedAutomationRequest = {
   ok: true;
@@ -18,11 +22,9 @@ type RejectedAutomationRequest = {
   response: Response;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object" && !Array.isArray(value);
-
 export async function authorizeAutomationRequest(
-  request: Request
+  request: Request,
+  schema: Extract<AiRequestSchemaName, `automation-${string}`>,
 ): Promise<AuthorizedAutomationRequest | RejectedAutomationRequest> {
   let userId: string;
 
@@ -38,31 +40,9 @@ export async function authorizeAutomationRequest(
     };
   }
 
-  let body: Record<string, unknown>;
-
-  try {
-    const requestBody: unknown = await request.json();
-
-    if (!isRecord(requestBody)) {
-      return {
-        ok: false,
-        response: Response.json(
-          { error: "Invalid request body." },
-          { status: 400 }
-        ),
-      };
-    }
-
-    body = requestBody;
-  } catch {
-    return {
-      ok: false,
-      response: Response.json(
-        { error: "Invalid request body." },
-        { status: 400 }
-      ),
-    };
-  }
+  const validation = await readValidatedAiRequest(request, schema);
+  if (!validation.ok) return validation;
+  const body = validation.body;
 
   const projectId =
     typeof body.projectId === "string" ? body.projectId.trim() : "";

@@ -4,6 +4,7 @@ import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import {
   getN8nWebhookConfig,
@@ -11,9 +12,6 @@ import {
 } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
 const PRESENTATION_AI_WORKFLOW = "presentation-ai";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object";
 
 async function finalizeUsage(
   usageId: string,
@@ -43,16 +41,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "Authentication is required." }, { status: 401 });
   }
 
-  let body: Record<string, unknown>;
-  try {
-    const requestBody: unknown = await request.json();
-    if (!isRecord(requestBody)) {
-      return Response.json({ error: "Invalid request body." }, { status: 400 });
-    }
-    body = requestBody;
-  } catch {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
-  }
+  const validation = await readValidatedAiRequest(request, "presentation");
+  if (!validation.ok) return validation.response;
+  const body = validation.body;
 
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   if (!projectId) {

@@ -32,7 +32,7 @@ async function finalizeUsage(
 }
 
 export async function POST(request: Request) {
-  const authorization = await authorizeAutomationRequest(request);
+  const authorization = await authorizeAutomationRequest(request, "automation-content");
   if (!authorization.ok) return authorization.response;
 
   const { body, projectId, userId } = authorization;

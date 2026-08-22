@@ -19,7 +19,7 @@ async function finalizeUsage(usageId: string, status: "success" | "failed", star
 }
 
 export async function POST(request: Request) {
-  const authorization = await authorizeAutomationRequest(request);
+  const authorization = await authorizeAutomationRequest(request, "automation-email");
   if (!authorization.ok) return authorization.response;
 
   const { body, projectId, userId } = authorization;

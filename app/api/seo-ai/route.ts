@@ -8,15 +8,13 @@ import {
 import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 const SEO_AI_WORKFLOW = "seo-ai";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object";
 
 async function finalizeUsage(
   usageId: string,
@@ -51,25 +49,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let body: Record<string, unknown>;
-
-  try {
-    const requestBody: unknown = await request.json();
-
-    if (!isRecord(requestBody)) {
-      return NextResponse.json(
-        { error: "Invalid request body." },
-        { status: 400 }
-      );
-    }
-
-    body = requestBody;
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body." },
-      { status: 400 }
-    );
-  }
+  const validation = await readValidatedAiRequest(request, "seo");
+  if (!validation.ok) return validation.response;
+  const body = validation.body;
 
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
 
