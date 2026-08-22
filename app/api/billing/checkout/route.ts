@@ -2,12 +2,28 @@ import { eq } from "drizzle-orm";
 import { db } from "@/app/db";
 import { subscriptions } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { isSubscriptionPlan } from "@/app/lib/subscription-policy";
+import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "@/app/lib/request-body";
+import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscription-policy";
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
   getUserSubscription,
 } from "@/app/lib/subscriptions";
+
+const MAX_CHECKOUT_BODY_BYTES = 2 * 1024;
+
+export function validateCheckoutBody(body: unknown): SubscriptionPlan | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).length !== 1 || !("plan" in value)) return null;
+
+  return isSubscriptionPlan(value.plan) ? value.plan : null;
+}
 
 export async function POST(request: Request) {
   let token;
@@ -19,12 +35,16 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readLimitedJson(request, MAX_CHECKOUT_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return Response.json({ error: "Request body is too large" }, { status: 413 });
+    }
+    if (!(error instanceof MalformedJsonBodyError)) throw error;
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const plan = body && typeof body === "object" ? (body as Record<string, unknown>).plan : null;
-  if (!isSubscriptionPlan(plan)) {
+  const plan = validateCheckoutBody(body);
+  if (!plan) {
     return Response.json({ error: "Plan must be pro or business" }, { status: 400 });
   }
 
