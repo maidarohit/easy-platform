@@ -112,7 +112,7 @@ const pageOptions = [
   },
   {
     path: "/dashboard/logo-ai",
-    title: "Logo AI",
+    title: "Logo Concept AI",
     label: "Visual Identity",
     icon: "△",
   },

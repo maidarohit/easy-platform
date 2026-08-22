@@ -14,7 +14,7 @@ const modules = [
   { id: "seo-ai", name: "SEO AI", category: "strategy", frontendPath: "/seo-ai", integration: "internal-api", apiEndpoint: "/api/seo-ai", responseKind: "json", orchestrationReady: true },
   { id: "uiux-ai", name: "UI/UX AI", category: "strategy", frontendPath: "/uiux-ai", integration: "internal-api", apiEndpoint: "/api/uiux-ai", responseKind: "json", orchestrationReady: true },
   { id: "content-ai", name: "Content AI", category: "content", frontendPath: "/dashboard/content-ai", integration: "internal-api", apiEndpoint: "/api/content-ai", responseKind: "json", orchestrationReady: true },
-  { id: "logo-ai", name: "Logo AI", category: "creative", frontendPath: "/dashboard/logo-ai", integration: "internal-api", apiEndpoint: "/api/logo-ai", responseKind: "json", orchestrationReady: true },
+  { id: "logo-ai", name: "Logo Concept AI", category: "creative", frontendPath: "/dashboard/logo-ai", integration: "internal-api", apiEndpoint: "/api/logo-ai", responseKind: "json", orchestrationReady: true },
   { id: "image-ai", name: "Image AI", category: "creative", frontendPath: "/dashboard/image-ai", integration: "internal-api", apiEndpoint: "/api/image-ai", responseKind: "image", orchestrationReady: true },
   { id: "presentation-ai", name: "Presentation AI", category: "content", frontendPath: "/dashboard/presentation-ai", integration: "internal-api", apiEndpoint: "/api/presentation-ai", responseKind: "json", orchestrationReady: true },
   { id: "video-ai", name: "Video AI", category: "creative", frontendPath: "/dashboard/video-ai", integration: "internal-api", apiEndpoint: "/api/video-ai", responseKind: "video", orchestrationReady: true },

@@ -56,7 +56,7 @@ const handleGenerateCreativeProject = () => {
               </div>
               <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Creative Systems</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-                Generate logos, images, presentations, marketing content, videos and automate your social media—all from one place.
+                Create logo concepts, images, presentations, marketing content, videos and automate your social media—all from one place.
               </p>
             </div>
           </header>
@@ -124,8 +124,8 @@ const handleGenerateCreativeProject = () => {
                 <div className="absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-transparent via-red-500/70 to-transparent opacity-40 transition-opacity group-hover:opacity-100" />
                 <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-red-500/10 blur-3xl transition-colors group-hover:bg-red-500/20" />
                 <div className="relative flex items-start justify-between"><div className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-500/25 bg-slate-950/80 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.08)] transition-all group-hover:border-red-400/50 group-hover:shadow-[0_0_24px_rgba(239,68,68,0.18)]"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 fill-none stroke-current" strokeWidth="1.5"><path d="M12 3 21 8v8l-9 5-9-5V8l9-5Z"/><circle cx="12" cy="12" r="3"/><path d="M12 9V3M15 13.5l6 2.5M9 13.5 3 16"/></svg></div><span className="font-mono text-[9px] tracking-[0.2em] text-slate-600">CR-01</span></div>
-                <h3 className="relative mt-5 text-lg font-semibold text-white">Logo AI</h3>
-                <p className="relative mt-2 text-sm leading-6 text-slate-400">Generate professional logo concepts and branding ideas.</p>
+                <h3 className="relative mt-5 text-lg font-semibold text-white">Logo Concept AI</h3>
+                <p className="relative mt-2 text-sm leading-6 text-slate-400">Create a complete logo direction with symbol ideas, color palette, typography and brand meaning.</p>
                 <div className="relative mt-5 flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />System active</div>
               </Link>
 

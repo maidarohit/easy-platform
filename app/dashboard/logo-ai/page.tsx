@@ -59,7 +59,7 @@ function LogoAIPageContent() {
 });
 const formatResults = (): string => {
   return `
-Logo AI Results
+Logo Concept AI Results
 
 Concept:
 ${logoResult.concept}
@@ -81,7 +81,7 @@ ${logoResult.meaning}
 const handleCopyResults = async () => {
   try {
     await navigator.clipboard.writeText(formatResults());
-    alert("Logo AI results copied successfully!");
+    alert("Logo Concept AI results copied successfully!");
   } catch (error) {
     console.error(error);
     alert("Failed to copy results.");
@@ -93,7 +93,7 @@ const handleDownloadPDF = () => {
     const pdf = new jsPDF();
 
     pdf.setFontSize(20);
-    pdf.text("Logo AI Results", 20, 20);
+    pdf.text("Logo Concept AI Results", 20, 20);
 
     pdf.setFontSize(12);
 
@@ -101,7 +101,7 @@ const handleDownloadPDF = () => {
 
     pdf.text(lines, 20, 35);
 
-    pdf.save("Logo-AI-Results.pdf");
+    pdf.save("Logo-Concept-AI-Results.pdf");
   } catch (error) {
     console.error(error);
     alert("Failed to download PDF.");
@@ -149,7 +149,7 @@ const handleDownloadPDF = () => {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data?.error || "Logo AI request failed.");
+      throw new Error(data?.error || "Logo Concept AI request failed.");
     }
 
     const result = data.output ?? data;
@@ -169,7 +169,7 @@ const handleDownloadPDF = () => {
     alert(
       error instanceof Error
         ? error.message
-        : "Something went wrong while generating the logo."
+        : "Something went wrong while generating the logo concept."
     );
   } finally {
     setLoading(false);
@@ -200,8 +200,8 @@ const handleDownloadPDF = () => {
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
                 <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Visual Identity</span>
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Logo Intelligence</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Generate professional logos, brand identities and creative logo concepts using AI.</p>
+              <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">Logo Concept AI</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Create a complete logo direction with symbol ideas, color palette, typography and brand meaning.</p>
             </div>
           </header>
 
@@ -277,7 +277,7 @@ const handleDownloadPDF = () => {
 
             <button onClick={handleGenerateLogo} disabled={loading} className={`group/button relative mt-6 flex min-h-12 items-center gap-3 overflow-hidden rounded-xl border px-6 py-3 text-sm font-semibold transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 ${loading ? "cursor-not-allowed border-slate-700 bg-slate-800 text-slate-400 opacity-60" : "border-red-400/40 bg-gradient-to-r from-red-500/25 via-red-500/15 to-cyan-400/10 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_20px_rgba(239,68,68,0.1)] hover:-translate-y-0.5 hover:border-red-300/60 hover:shadow-[0_0_28px_rgba(239,68,68,0.2)]"}`}>
               <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-red-200" strokeWidth="1.5"><path d="m10 2 1.7 5.3L17 9l-5.3 1.7L10 16l-1.7-5.3L3 9l5.3-1.7L10 2Z"/></svg>
-              {loading ? "Generating..." : "Generate Logo"}
+              {loading ? "Generating..." : "Generate Logo Concept"}
               {!loading && <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300 transition-transform duration-300 group-hover/button:translate-x-1" strokeWidth="1.5"><path d="M4 10h12m-4-4 4 4-4 4"/></svg>}
             </button>
           </section>
@@ -290,7 +290,7 @@ const handleDownloadPDF = () => {
               <div className="relative flex flex-wrap items-center justify-between gap-5 border-b border-white/[0.06] pb-6">
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/35 bg-slate-950/80 text-red-300 shadow-[0_0_22px_rgba(239,68,68,0.12)]"><svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="1.5"><path d="M12 3 21 8v8l-9 5-9-5V8l9-5Z"/><circle cx="12" cy="12" r="3"/></svg></div>
-                  <div><div className="mb-1 flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]"/><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Identity output / ready</span></div><h2 className="text-2xl font-bold tracking-tight text-white">Logo AI Results</h2></div>
+                  <div><div className="mb-1 flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.9)]"/><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Identity output / ready</span></div><h2 className="text-2xl font-bold tracking-tight text-white">Generated Logo Concept</h2></div>
                 </div>
                 <div className="flex flex-wrap gap-2.5">
                   <button type="button" onClick={handleCopyResults} className="flex min-h-10 items-center gap-2 rounded-xl border border-cyan-400/20 bg-slate-950/70 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition-all hover:-translate-y-0.5 hover:border-cyan-400/45 hover:bg-cyan-400/[0.08] hover:shadow-[0_0_20px_rgba(34,211,238,0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><rect x="6.5" y="6.5" width="9" height="9" rx="1.5"/><path d="M13.5 6.5V5A1.5 1.5 0 0 0 12 3.5H5A1.5 1.5 0 0 0 3.5 5v7A1.5 1.5 0 0 0 5 13.5h1.5"/></svg>Copy Results</button>

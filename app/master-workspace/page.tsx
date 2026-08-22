@@ -284,7 +284,7 @@ function MasterWorkspaceContent() {
               </h3>
 
               <p className="mt-3 leading-7 text-[#6f7874]">
-                Logo, image, content, presentation and video generation
+                Logo concepts, image, content, presentation and video generation
                 connected to this business project.
               </p>
 

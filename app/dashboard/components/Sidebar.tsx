@@ -68,7 +68,7 @@ const creativeItems: MenuItem[] = [
     icon: "✧",
   },
   {
-    label: "Logo AI",
+    label: "Logo Concept AI",
     href: "/dashboard/logo-ai",
     icon: "△",
   },
