@@ -341,7 +341,7 @@ if (projectId && project?.userId && result) {
   };
   const fieldClass = "w-full rounded-xl border border-slate-700/70 bg-[#070b16]/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-red-500/30 focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10";
   const selectClass = `${fieldClass} appearance-none pr-11`;
-  const labelClass = "mb-2 flex items-center justify-between text-sm font-medium text-white";
+  const labelClass = "mb-2 flex items-center justify-between text-sm font-medium text-[#173D32]";
   const codeClass = "text-[9px] font-semibold tracking-[0.2em] text-cyan-400/70";
   const resultCardClass = "relative mt-5 overflow-hidden rounded-[24px] border border-red-500/15 bg-slate-950/65 p-5 shadow-[0_0_35px_rgba(239,68,68,0.04)] transition hover:border-red-400/30 hover:shadow-[0_0_40px_rgba(239,68,68,0.08)] sm:p-7";
   const resultCopyClass = "shrink-0 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/10";
@@ -554,7 +554,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 01</span><span className={moduleChipClass}>Strategy</span></span><span className="mt-2 block text-xl font-semibold text-white">UI/UX Strategy</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 01</span><span className={moduleChipClass}>Strategy</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">UI/UX Strategy</span>
                     </h2>
 
                     <button
@@ -578,7 +578,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
 
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 02</span><span className={moduleChipClass}>Audience</span></span><span className="mt-2 block text-xl font-semibold text-white">User Personas</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 02</span><span className={moduleChipClass}>Audience</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">User Personas</span>
                     </h2>
 
                     <button
@@ -602,7 +602,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 03</span><span className={moduleChipClass}>Journey</span></span><span className="mt-2 block text-xl font-semibold text-white">User Flow</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 03</span><span className={moduleChipClass}>Journey</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">User Flow</span>
                     </h2>
 
                     <button
@@ -623,7 +623,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 04</span><span className={moduleChipClass}>Wireframe</span></span><span className="mt-2 block text-xl font-semibold text-white">Wireframes</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 04</span><span className={moduleChipClass}>Wireframe</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Wireframes</span>
                     </h2>
 
                     <button
@@ -646,7 +646,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 05</span><span className={moduleChipClass}>Design System</span></span><span className="mt-2 block text-xl font-semibold text-white">Design System</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 05</span><span className={moduleChipClass}>Design System</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Design System</span>
                     </h2>
 
                     <button
@@ -669,7 +669,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 06</span><span className={moduleChipClass}>Mobile</span></span><span className="mt-2 block text-xl font-semibold text-white">Mobile Experience</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 06</span><span className={moduleChipClass}>Mobile</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Mobile Experience</span>
                     </h2>
 
                     <button
@@ -687,7 +687,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                 <div className={resultCardClass}>
                   <div className="flex items-start justify-between gap-4">
                     <h2>
-                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 07</span><span className={moduleChipClass}>Desktop</span></span><span className="mt-2 block text-xl font-semibold text-white">Desktop Experience</span>
+                      <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 07</span><span className={moduleChipClass}>Desktop</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Desktop Experience</span>
                     </h2>
 
                     <button
@@ -706,7 +706,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                   <div className={resultCardClass}>
                     <div className="flex items-start justify-between gap-4">
                       <h2>
-                        <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 08</span><span className={moduleChipClass}>Interaction</span></span><span className="mt-2 block text-xl font-semibold text-white">Micro Interactions</span>
+                        <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 08</span><span className={moduleChipClass}>Interaction</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Micro Interactions</span>
                       </h2>
 
                       <button
@@ -727,7 +727,7 @@ onChange={(e) => setUiuxGoal(e.target.value)}
                   <div className={resultCardClass}>
                     <div className="flex items-start justify-between gap-4">
                       <h2>
-                        <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 09</span><span className={moduleChipClass}>Accessibility</span></span><span className="mt-2 block text-xl font-semibold text-white">Accessibility</span>
+                        <span className="flex flex-wrap items-center gap-2"><span className={moduleLabelClass}>Module / 09</span><span className={moduleChipClass}>Accessibility</span></span><span className="mt-2 block text-xl font-semibold text-[#173D32]">Accessibility</span>
                       </h2>
 
                       <button
