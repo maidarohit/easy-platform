@@ -508,7 +508,7 @@ const handleDownloadPipeline = () => {
       icon: <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 fill-none stroke-current" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="7" r="2"/><circle cx="19" cy="7" r="2"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="m6.7 8 2.7 2M17.3 8l-2.7 2M6.7 16l2.7-2M17.3 16l-2.7-2"/></svg>,
       title: "Social Posting",
       description:
-        "Generate and automate content across your social platforms.",
+        "Generate social content and build reusable posting workflows.",
     },
     {
       id: "workflow" as AutomationType,

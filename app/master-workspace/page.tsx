@@ -306,7 +306,7 @@ function MasterWorkspaceContent() {
               </h3>
 
               <p className="mt-3 leading-7 text-[#6f7874]">
-                Connect workflows, approvals, publishing and operational
+                Connect workflows, approvals, content planning and operational
                 automations to the same project.
               </p>
 
