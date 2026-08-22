@@ -4,6 +4,99 @@ import {
   reservePublicBusinessIdeaUsage,
 } from "../../lib/public-ai-usage";
 
+const MAX_REQUEST_BODY_BYTES = 8 * 1024;
+const PROVIDER_TIMEOUT_MS = 30_000;
+
+const FIELD_LIMITS = {
+  interests: 500,
+  budget: 200,
+  businessType: 200,
+  workStyle: 200,
+  skills: 500,
+  speed: 200,
+} as const;
+
+type BusinessIdeasInput = {
+  -readonly [Field in keyof typeof FIELD_LIMITS]: string;
+};
+
+class RequestBodyTooLargeError extends Error {}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  (Object.getPrototypeOf(value) === Object.prototype ||
+    Object.getPrototypeOf(value) === null);
+
+export function validateBusinessIdeasInput(
+  value: unknown
+): BusinessIdeasInput | null {
+  if (!isPlainObject(value)) return null;
+
+  const expectedFields = Object.keys(FIELD_LIMITS) as Array<
+    keyof typeof FIELD_LIMITS
+  >;
+
+  if (
+    Object.keys(value).length !== expectedFields.length ||
+    Object.keys(value).some((field) => !(field in FIELD_LIMITS))
+  ) {
+    return null;
+  }
+
+  const input = {} as BusinessIdeasInput;
+
+  for (const field of expectedFields) {
+    const fieldValue = value[field];
+    if (typeof fieldValue !== "string") return null;
+
+    const trimmed = fieldValue.trim();
+    if (trimmed.length > FIELD_LIMITS[field]) return null;
+    input[field] = trimmed;
+  }
+
+  return input;
+}
+
+async function readLimitedJson(request: Request): Promise<unknown> {
+  const contentLength = request.headers.get("content-length")?.trim();
+
+  if (contentLength && /^\d+$/.test(contentLength)) {
+    if (Number(contentLength) > MAX_REQUEST_BODY_BYTES) {
+      throw new RequestBodyTooLargeError();
+    }
+  }
+
+  if (!request.body) return null;
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_REQUEST_BODY_BYTES) {
+      await reader.cancel();
+      throw new RequestBodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+}
+
 export async function POST(req: Request) {
   let usageId: string | null = null;
   let startedAt = 0;
@@ -16,25 +109,30 @@ export async function POST(req: Request) {
         usageId,
         durationMs: Date.now() - startedAt,
       });
-    } catch (trackingError) {
-      console.error(
-        "Business Idea usage failure finalization error:",
-        trackingError
-      );
+    } catch {
+      console.error("Business Idea usage failure finalization failed.");
     }
   };
 
   try {
-    const body = await req.json();
+    let parsedBody: unknown;
 
-    const {
-      interests = "",
-      budget = "Not sure",
-      businessType = "Not sure",
-      workStyle = "Not sure",
-      skills = "",
-      speed = "Not sure",
-    } = body;
+    try {
+      parsedBody = await readLimitedJson(req);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return Response.json({ error: "Request body is too large." }, { status: 413 });
+      }
+
+      return Response.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    const input = validateBusinessIdeasInput(parsedBody);
+    if (!input) {
+      return Response.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    const { interests, budget, businessType, workStyle, skills, speed } = input;
 
     const apiKey = process.env.OPENAI_API_KEY;
 
@@ -56,10 +154,8 @@ export async function POST(req: Request) {
       return Response.json(
         {
           error:
-            "You have reached today's free business idea generation limit. Create your Buzypeezy account to continue.",
+            "The free Business Idea generation limit has been reached. Create your Buzypeezy account to continue.",
           code: "PUBLIC_AI_LIMIT_REACHED",
-          limit: reservation.limit,
-          remaining: 0,
         },
         { status: 429 }
       );
@@ -194,16 +290,13 @@ Important rules:
           max_output_tokens: 1800,
         }),
         cache: "no-store",
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       }
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-
-      console.error(
-        "Business Idea AI error:",
-        errorText
-      );
+      await response.body?.cancel();
+      console.error("Business Idea AI request failed.");
 
       await safeFailUsage();
 
@@ -284,21 +377,15 @@ Important rules:
             ? data.model
             : "gpt-5-mini",
       });
-    } catch (trackingError) {
-      console.error(
-        "Business Idea usage completion error:",
-        trackingError
-      );
+    } catch {
+      console.error("Business Idea usage completion failed.");
     }
 
     return Response.json({
       ideas,
     });
-  } catch (error) {
-    console.error(
-      "Business Idea Finder error:",
-      error
-    );
+  } catch {
+    console.error("Business Idea Finder request failed.");
 
     await safeFailUsage();
 

@@ -24,6 +24,10 @@ export async function resolve(specifier, context, nextResolve) {
     return { url: "data:text/javascript,export%20{}", shortCircuit: true };
   }
 
+  if (specifier === "next/headers") {
+    return nextResolve("next/headers.js", context);
+  }
+
   if (specifier.startsWith("@/")) {
     const url = resolveAlias(specifier);
     if (url) return { url, shortCircuit: true };
@@ -32,6 +36,13 @@ export async function resolve(specifier, context, nextResolve) {
   try {
     return await nextResolve(specifier, context);
   } catch (error) {
+    if (
+      error?.code === "ERR_UNSUPPORTED_DIR_IMPORT" &&
+      (specifier.startsWith("./") || specifier.startsWith("../"))
+    ) {
+      return nextResolve(`${specifier}/index.ts`, context);
+    }
+
     if (
       error?.code === "ERR_MODULE_NOT_FOUND" &&
       (specifier.startsWith("./") || specifier.startsWith("../")) &&

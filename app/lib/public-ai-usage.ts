@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "crypto";
+import { isIP } from "net";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 
@@ -10,6 +11,9 @@ import { calculateTokenCostUsd } from "./ai-cost";
 
 const VISITOR_COOKIE = "easy_public_visitor";
 const DEFAULT_DAILY_LIMIT = 2;
+const DEFAULT_GLOBAL_DAILY_LIMIT = 50;
+const SHORT_WINDOW_LIMIT = 2;
+const SHORT_WINDOW_MS = 60_000;
 
 function getDailyLimit() {
   const value = Number(
@@ -31,6 +35,18 @@ function getIpDailyLimit() {
   }
 
   return getDailyLimit() * 3;
+}
+
+export function getGlobalDailyLimit() {
+  const configured = Number(
+    process.env.PUBLIC_BUSINESS_IDEAS_GLOBAL_DAILY_LIMIT
+  );
+
+  if (!Number.isSafeInteger(configured) || configured < 1) {
+    return DEFAULT_GLOBAL_DAILY_LIMIT;
+  }
+
+  return configured;
 }
 
 function getUtcDayStart() {
@@ -65,6 +81,26 @@ function hashIp(ip: string | null) {
     .digest("hex");
 }
 
+export function extractPublicClientIp(headers: Headers) {
+  const headerNames = [
+    "x-vercel-forwarded-for",
+    "x-forwarded-for",
+    "x-real-ip",
+  ] as const;
+
+  for (const headerName of headerNames) {
+    const value = headers.get(headerName);
+    if (!value) continue;
+
+    for (const candidate of value.split(",")) {
+      const ip = candidate.trim();
+      if (isIP(ip)) return ip;
+    }
+  }
+
+  return null;
+}
+
 async function getPublicVisitor(request: Request) {
   const cookieStore = await cookies();
 
@@ -82,16 +118,9 @@ async function getPublicVisitor(request: Request) {
     });
   }
 
-  const forwardedFor = request.headers.get("x-forwarded-for");
-
-  const ip =
-    forwardedFor?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    null;
-
   return {
     visitorId,
-    ipHash: hashIp(ip),
+    ipHash: hashIp(extractPublicClientIp(request.headers)),
   };
 }
 
@@ -101,10 +130,17 @@ export async function reservePublicBusinessIdeaUsage(
   const { visitorId, ipHash } = await getPublicVisitor(request);
 
   const startOfDay = getUtcDayStart();
+  const shortWindowStart = new Date(Date.now() - SHORT_WINDOW_MS);
   const visitorLimit = getDailyLimit();
   const ipLimit = getIpDailyLimit();
+  const globalLimit = getGlobalDailyLimit();
 
   return db.transaction(async (tx) => {
+    /* Serialize the global check and reservation across all instances. */
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended('public-business-ideas-global', 0))`
+    );
+
     /*
      * Serialize requests from the same browser.
      * This prevents rapid/concurrent requests from checking the
@@ -130,6 +166,25 @@ export async function reservePublicBusinessIdeaUsage(
           )
         `
       );
+    }
+
+    const [globalRow] = await tx
+      .select({ count: sql<number>`count(*)` })
+      .from(publicAiUsage)
+      .where(
+        and(
+          eq(publicAiUsage.module, "business-ideas"),
+          gte(publicAiUsage.createdAt, startOfDay)
+        )
+      );
+
+    if (Number(globalRow?.count ?? 0) >= globalLimit) {
+      return {
+        allowed: false as const,
+        reason: "global-limit" as const,
+        limit: visitorLimit,
+        remaining: 0,
+      };
     }
 
     const visitorRows = await tx
@@ -159,6 +214,26 @@ export async function reservePublicBusinessIdeaUsage(
     }
 
     if (ipHash) {
+      const [shortWindowRow] = await tx
+        .select({ count: sql<number>`count(*)` })
+        .from(publicAiUsage)
+        .where(
+          and(
+            eq(publicAiUsage.ipHash, ipHash),
+            eq(publicAiUsage.module, "business-ideas"),
+            gte(publicAiUsage.createdAt, shortWindowStart)
+          )
+        );
+
+      if (Number(shortWindowRow?.count ?? 0) >= SHORT_WINDOW_LIMIT) {
+        return {
+          allowed: false as const,
+          reason: "short-window-limit" as const,
+          limit: visitorLimit,
+          remaining: 0,
+        };
+      }
+
       const ipRows = await tx
         .select({
           count: sql<number>`count(*)`,
