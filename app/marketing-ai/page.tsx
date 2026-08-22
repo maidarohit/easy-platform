@@ -799,13 +799,13 @@ return (
                   const useFullWidthCard =
                     index === 0 ||
                     text.length > 700 ||
-                    ["typography", "marketingScore", "bestChannels", "contentMix"].includes(section.key);
+                    ["typography", "marketingScore", "growthRecommendations", "bestChannels", "campaignTimeline", "contentMix"].includes(section.key);
                   return (
                     <article key={section.key} className={useFullWidthCard ? moduleClass + " md:col-span-2" : moduleClass}>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">MODULE / {String(index + 1).padStart(2, "0")}</span><h3 className="mt-1 text-lg font-semibold text-white">{section.label}</h3></div>
                         <div className="flex flex-wrap gap-2">
-                          {"actionable" in section && section.actionable === true && <><button type="button" onClick={() => regenerateSection(section.label)} className="flex min-h-9 items-center gap-2 rounded-xl border border-red-400/25 bg-red-500/[0.06] px-3 py-2 text-xs font-semibold text-red-100 transition hover:border-red-300/45 hover:bg-red-500/10"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-red-300" strokeWidth="1.5"><path d="M15.5 7A6 6 0 1 0 16 12"/><path d="M12.5 4.5H16V8"/></svg>Regenerate</button><button type="button" onClick={() => setEditingSection(section.label)} className="flex min-h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-cyan-400/30 hover:text-cyan-100"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="m4 14.5-.5 2 2-.5L15 6.5 13.5 5zM12.5 6l1.5 1.5"/></svg>Edit with AI</button></>}
+                          {"actionable" in section && section.actionable === true && <><button type="button" onClick={() => regenerateSection(section.label)} className={copyButtonClass}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M15.5 7A6 6 0 1 0 16 12"/><path d="M12.5 4.5H16V8"/></svg>Regenerate</button><button type="button" onClick={() => setEditingSection(section.label)} className="flex min-h-9 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-cyan-400/30 hover:text-cyan-100"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="m4 14.5-.5 2 2-.5L15 6.5 13.5 5zM12.5 6l1.5 1.5"/></svg>Edit with AI</button></>}
                           <button type="button" onClick={() => copyToClipboard(text, section.label)} className={copyButtonClass}>{copyIcon}Copy</button>
                         </div>
                       </div>
