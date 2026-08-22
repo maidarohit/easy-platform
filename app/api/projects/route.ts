@@ -4,6 +4,14 @@ import { projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq, sql } from "drizzle-orm";
 import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
+import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "@/app/lib/request-body";
+import { validateProjectMutationBody } from "@/app/lib/project-request-validation";
+
+const MAX_PROJECT_BODY_BYTES = 32 * 1024;
 
 export async function POST(req: Request) {
   let userId: string;
@@ -14,17 +22,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
   }
 
+  let body: Record<string, string>;
   try {
-    const body: Record<string, unknown> = await req.json();
-    const id = typeof body.id === "string" ? body.id.trim() : "";
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-
-    if (!id || !name) {
-      return NextResponse.json(
-        { error: "Project id and name are required" },
-        { status: 400 }
-      );
+    const value = await readLimitedJson(req, MAX_PROJECT_BODY_BYTES);
+    const validated = validateProjectMutationBody(value);
+    if (!validated) {
+      return NextResponse.json({ error: "Invalid project request" }, { status: 400 });
     }
+    body = validated;
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+    }
+    if (error instanceof MalformedJsonBodyError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    throw error;
+  }
+
+  try {
+    const { id, name } = body;
 
     const asText = (value: unknown) => typeof value === "string" ? value.trim() : "";
     const optionalFields = {

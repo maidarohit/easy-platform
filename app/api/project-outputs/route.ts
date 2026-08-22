@@ -3,21 +3,14 @@ import { db } from "@/app/db";
 import { projectOutputs, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq } from "drizzle-orm";
+import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "@/app/lib/request-body";
+import { validateProjectOutputBody } from "@/app/lib/project-request-validation";
 
-const asText = (value: unknown) =>
-  typeof value === "string" ? value.trim() : "";
-
-function serializeResult(value: unknown) {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  return JSON.stringify(value);
-}
+const MAX_PROJECT_OUTPUT_BODY_BYTES = 256 * 1024;
 
 /*
   SAVE OR UPDATE MODULE OUTPUT
@@ -31,21 +24,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
   }
 
+  let body: { projectId: string; module: string; result: string };
   try {
-    const body: Record<string, unknown> = await req.json();
-
-    const projectId = asText(body.projectId);
-    const moduleName = asText(body.module).toLowerCase();
-    const result = serializeResult(body.result);
-
-    if (!projectId || !moduleName || !result) {
-      return NextResponse.json(
-        {
-          error: "projectId, module and result are required",
-        },
-        { status: 400 }
-      );
+    const value = await readLimitedJson(req, MAX_PROJECT_OUTPUT_BODY_BYTES);
+    const validated = validateProjectOutputBody(value);
+    if (!validated) {
+      return NextResponse.json({ error: "Invalid project output request" }, { status: 400 });
     }
+    body = validated;
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+    }
+    if (error instanceof MalformedJsonBodyError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    throw error;
+  }
+
+  try {
+    const projectId = body.projectId;
+    const moduleName = body.module.toLowerCase();
+    const result = body.result;
 
     const [ownedProject] = await db
       .select({ id: projects.id })

@@ -3,6 +3,14 @@ import { db } from "@/app/db";
 import { projectMemory, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { and, eq } from "drizzle-orm";
+import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "@/app/lib/request-body";
+import { validateProjectMemoryBody } from "@/app/lib/project-request-validation";
+
+const MAX_PROJECT_MEMORY_BODY_BYTES = 32 * 1024;
 
 export async function POST(req: Request) {
   let userId: string;
@@ -13,9 +21,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
   }
 
+  let body: Record<string, string>;
   try {
-    const body = await req.json();
+    const value = await readLimitedJson(req, MAX_PROJECT_MEMORY_BODY_BYTES);
+    const validated = validateProjectMemoryBody(value);
+    if (!validated) {
+      return NextResponse.json({ error: "Invalid project memory request" }, { status: 400 });
+    }
+    body = validated;
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json({ error: "Request body is too large" }, { status: 413 });
+    }
+    if (error instanceof MalformedJsonBodyError) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    throw error;
+  }
 
+  try {
     const {
       projectId,
       businessName,
@@ -30,13 +54,6 @@ export async function POST(req: Request) {
       marketingGoal,
       additionalContext,
     } = body;
-
-    if (!projectId) {
-      return NextResponse.json(
-        { error: "projectId is required" },
-        { status: 400 }
-      );
-    }
 
     const [ownedProject] = await db
       .select({ id: projects.id })
