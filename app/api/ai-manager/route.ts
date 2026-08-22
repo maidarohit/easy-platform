@@ -3,6 +3,11 @@ import { aiManagerJobs, projectMemory, projects } from "@/app/db/schema";
 import { failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "@/app/lib/request-body";
+import {
   getN8nWebhookConfig,
   n8nConfigurationErrorResponse,
 } from "@/app/lib/n8n-webhooks";
@@ -11,7 +16,114 @@ import { and, eq, inArray } from "drizzle-orm";
 const text = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object";
+  Boolean(value) &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  (Object.getPrototypeOf(value) === Object.prototype ||
+    Object.getPrototypeOf(value) === null);
+
+const MAX_REQUEST_BODY_BYTES = 32 * 1024;
+const MAX_ID_LENGTH = 128;
+const MAX_SHORT_FIELD_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 4_000;
+const MAX_ANALYTICS_CONTEXT_BYTES = 16 * 1024;
+const MAX_CONTEXT_DEPTH = 8;
+const MAX_CONTEXT_ENTRIES = 100;
+
+type AiManagerRequestBody = {
+  projectId: string;
+  companyName: string;
+  businessDescription: string;
+  industry: string;
+  businessGoal: string;
+  analyticsContext: unknown;
+};
+
+function isBoundedJson(value: unknown, depth = 0): boolean {
+  if (depth > MAX_CONTEXT_DEPTH) return false;
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value))
+  ) {
+    return true;
+  }
+  if (typeof value === "string") return value.length <= MAX_DESCRIPTION_LENGTH;
+  if (Array.isArray(value)) {
+    return (
+      value.length <= MAX_CONTEXT_ENTRIES &&
+      value.every((item) => isBoundedJson(item, depth + 1))
+    );
+  }
+  if (!isRecord(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= MAX_CONTEXT_ENTRIES &&
+    entries.every(
+      ([key, item]) =>
+        key.length <= MAX_SHORT_FIELD_LENGTH &&
+        isBoundedJson(item, depth + 1)
+    )
+  );
+}
+
+export function validateAiManagerRequestBody(
+  value: unknown
+): AiManagerRequestBody | null {
+  if (!isRecord(value)) return null;
+
+  const expectedKeys = new Set([
+    "projectId",
+    "companyName",
+    "businessDescription",
+    "industry",
+    "businessGoal",
+    "analyticsContext",
+  ]);
+  if (Object.keys(value).some((key) => !expectedKeys.has(key))) return null;
+
+  const projectId = text(value.projectId);
+  const companyName = text(value.companyName);
+  const businessDescription = text(value.businessDescription);
+  const industry = text(value.industry);
+  const businessGoal = text(value.businessGoal);
+  if (!projectId || projectId.length > MAX_ID_LENGTH) return null;
+  if (!companyName || companyName.length > MAX_SHORT_FIELD_LENGTH) return null;
+  if (!industry || industry.length > MAX_SHORT_FIELD_LENGTH) return null;
+  if (!businessDescription || businessDescription.length > MAX_DESCRIPTION_LENGTH) {
+    return null;
+  }
+  if (!businessGoal || businessGoal.length > MAX_DESCRIPTION_LENGTH) return null;
+
+  const analyticsContext = value.analyticsContext ?? null;
+  if (
+    analyticsContext !== null &&
+    !Array.isArray(analyticsContext) &&
+    !isRecord(analyticsContext)
+  ) {
+    return null;
+  }
+  if (!isBoundedJson(analyticsContext)) return null;
+
+  let serializedContext: string;
+  try {
+    serializedContext = JSON.stringify(analyticsContext);
+  } catch {
+    return null;
+  }
+  if (Buffer.byteLength(serializedContext, "utf8") > MAX_ANALYTICS_CONTEXT_BYTES) {
+    return null;
+  }
+
+  return {
+    projectId,
+    companyName,
+    businessDescription,
+    industry,
+    businessGoal,
+    analyticsContext,
+  };
+}
 
 function callbackBaseUrl() {
   const configuredUrl = text(
@@ -51,36 +163,29 @@ export async function POST(request: Request) {
     return Response.json({ error: "Authentication is required." }, { status: 401 });
   }
 
-  let body: Record<string, unknown>;
+  let parsedBody: unknown;
 
   try {
-    const requestBody: unknown = await request.json();
-
-    if (!isRecord(requestBody)) {
-      return Response.json({ error: "Invalid request body." }, { status: 400 });
+    parsedBody = await readLimitedJson(request, MAX_REQUEST_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return Response.json({ error: "Request body is too large." }, { status: 413 });
     }
-
-    body = requestBody;
-  } catch {
+    if (!(error instanceof MalformedJsonBodyError)) throw error;
     return Response.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const projectId = text(body.projectId);
-  const companyName = text(body.companyName);
-  const businessDescription = text(body.businessDescription);
-  const industry = text(body.industry);
-  const businessGoal = text(body.businessGoal);
+  const body = validateAiManagerRequestBody(parsedBody);
+  if (!body) return Response.json({ error: "Invalid request body." }, { status: 400 });
 
-  if (!projectId) {
-    return Response.json({ error: "projectId is required." }, { status: 400 });
-  }
-
-  if (!companyName || !businessDescription || !industry || !businessGoal) {
-    return Response.json(
-      { error: "All business strategy fields are required." },
-      { status: 400 }
-    );
-  }
+  const {
+    projectId,
+    companyName,
+    businessDescription,
+    industry,
+    businessGoal,
+    analyticsContext,
+  } = body;
 
   let memory = null;
 
@@ -177,7 +282,7 @@ export async function POST(request: Request) {
     businessDescription,
     industry,
     businessGoal,
-    analyticsContext: body.analyticsContext ?? null,
+    analyticsContext,
     projectMemory: memory,
     jobId,
     callbackUrl,

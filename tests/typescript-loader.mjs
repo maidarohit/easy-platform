@@ -28,6 +28,10 @@ export async function resolve(specifier, context, nextResolve) {
     return nextResolve("next/headers.js", context);
   }
 
+  if (specifier === "next/server") {
+    return nextResolve("next/server.js", context);
+  }
+
   if (specifier.startsWith("@/")) {
     const url = resolveAlias(specifier);
     if (url) return { url, shortCircuit: true };

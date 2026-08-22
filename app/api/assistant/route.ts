@@ -8,6 +8,11 @@ import {
   startAiUsage,
 } from "../../lib/ai-usage";
 import { verifyFirebaseIdToken } from "../../lib/firebase-admin";
+import {
+  MalformedJsonBodyError,
+  readLimitedJson,
+  RequestBodyTooLargeError,
+} from "../../lib/request-body";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -17,6 +22,10 @@ type ChatMessage = {
 type UnknownRecord = Record<string, unknown>;
 
 const MAX_HISTORY = 10;
+const MAX_REQUEST_BODY_BYTES = 32 * 1024;
+const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_CURRENT_PAGE_LENGTH = 500;
+const MAX_ID_LENGTH = 128;
 const MAX_OUTPUT_LENGTH = 6000;
 const ASSISTANT_MODEL = "gpt-5-mini";
 const ASSISTANT_WORKFLOW = "openai-responses";
@@ -34,15 +43,72 @@ function clipText(value: unknown, maxLength = MAX_OUTPUT_LENGTH) {
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null)
+  );
 }
 
-function isChatMessage(value: unknown): value is ChatMessage {
-  return (
-    isRecord(value) &&
-    (value.role === "user" || value.role === "assistant") &&
-    typeof value.content === "string"
-  );
+type AssistantRequestBody = {
+  projectId: string;
+  message: string;
+  messages: ChatMessage[];
+  currentPage: string;
+};
+
+export function validateAssistantRequestBody(
+  value: unknown
+): AssistantRequestBody | null {
+  if (!isRecord(value)) return null;
+
+  const expectedKeys = new Set(["projectId", "message", "messages", "currentPage"]);
+  if (Object.keys(value).some((key) => !expectedKeys.has(key))) return null;
+
+  if (typeof value.projectId !== "string" || typeof value.message !== "string") {
+    return null;
+  }
+
+  const projectId = value.projectId.trim();
+  const message = value.message.trim();
+  if (!projectId || projectId.length > MAX_ID_LENGTH) return null;
+  if (!message || message.length > MAX_MESSAGE_LENGTH) return null;
+
+  const currentPage = value.currentPage === undefined ? "" : value.currentPage;
+  if (
+    typeof currentPage !== "string" ||
+    currentPage.length > MAX_CURRENT_PAGE_LENGTH
+  ) {
+    return null;
+  }
+
+  const messages = value.messages === undefined ? [] : value.messages;
+  if (!Array.isArray(messages)) return null;
+
+  const validatedMessages: ChatMessage[] = [];
+  for (const item of messages) {
+    if (!isRecord(item)) return null;
+    if (Object.keys(item).some((key) => key !== "role" && key !== "content")) {
+      return null;
+    }
+    if (item.role !== "user" && item.role !== "assistant") return null;
+    if (
+      typeof item.content !== "string" ||
+      item.content.length > MAX_MESSAGE_LENGTH
+    ) {
+      return null;
+    }
+    validatedMessages.push({ role: item.role, content: item.content });
+  }
+
+  return {
+    projectId,
+    message,
+    messages: validatedMessages.slice(-MAX_HISTORY),
+    currentPage,
+  };
 }
 
 function extractResponseText(data: unknown) {
@@ -90,27 +156,32 @@ export async function POST(request: Request) {
   }
 
   try {
-    const parsedBody: unknown = await request.json();
-    const body = isRecord(parsedBody) ? parsedBody : {};
-    const projectId = body.projectId;
-    const message = body.message;
-    const messages = body.messages ?? [];
-    const currentPage =
-      typeof body.currentPage === "string" ? body.currentPage : "";
-
-    if (!projectId || typeof projectId !== "string") {
+    let parsedBody: unknown;
+    try {
+      parsedBody = await readLimitedJson(request, MAX_REQUEST_BODY_BYTES);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) {
+        return NextResponse.json(
+          { error: "Request body is too large." },
+          { status: 413 }
+        );
+      }
+      if (!(error instanceof MalformedJsonBodyError)) throw error;
       return NextResponse.json(
-        { error: "projectId is required." },
+        { error: "Invalid request body." },
         { status: 400 }
       );
     }
 
-    if (!message || typeof message !== "string" || !message.trim()) {
+    const body = validateAssistantRequestBody(parsedBody);
+    if (!body) {
       return NextResponse.json(
-        { error: "Message is required." },
+        { error: "Invalid request body." },
         { status: 400 }
       );
     }
+
+    const { projectId, message, messages, currentPage } = body;
 
     const [ownedProject] = await db
       .select({ id: projects.id })
@@ -242,11 +313,7 @@ RULES:
     // 4. KEEP RECENT CHAT HISTORY
     // --------------------------------------------------
 
-    const recentMessages: ChatMessage[] = Array.isArray(messages)
-      ? messages
-          .filter(isChatMessage)
-          .slice(-MAX_HISTORY)
-      : [];
+    const recentMessages = messages;
 
     const input = [
       {
