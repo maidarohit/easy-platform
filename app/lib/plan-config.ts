@@ -17,7 +17,7 @@ export type PaidPlan = "pro" | "business" | "enterprise";
 // NON-COMMERCIAL PLACEHOLDERS. Replace after pre-launch usage validation.
 export const PLAN_LIMITS: Record<PaidPlan, Record<UsageCategory, number>> = {
   pro: { projects: 3, standardAiTasks: 50, aiManagerRuns: 5, imageGenerations: 10, videoGenerations: 2, presentationGenerations: 5, automationRuns: 20, assistantMessages: 100 },
-  business: { projects: 10, standardAiTasks: 200, aiManagerRuns: 20, imageGenerations: 40, videoGenerations: 8, presentationGenerations: 20, automationRuns: 100, assistantMessages: 500 },
+  business: { projects: 10, standardAiTasks: 200, aiManagerRuns: 20, imageGenerations: 40, videoGenerations: 3, presentationGenerations: 20, automationRuns: 100, assistantMessages: 500 },
   enterprise: { projects: 0, standardAiTasks: 0, aiManagerRuns: 0, imageGenerations: 0, videoGenerations: 0, presentationGenerations: 0, automationRuns: 0, assistantMessages: 0 },
 };
 
