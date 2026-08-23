@@ -33,6 +33,9 @@ const [brandStyle, setBrandStyle] = useState("Minimal");
 const [brandDescription, setBrandDescription] = useState("");
 const [loading, setLoading] = useState(false);
 const [brandResult, setBrandResult] = useState<WebsiteAiOutput | null>(null);
+const [publication, setPublication] = useState<{ status: "unpublished" | "active" | "inactive"; slug?: string; currentVersion?: number; internalUrl?: string; futureUrl?: string } | null>(null);
+const [publicationSlug, setPublicationSlug] = useState("");
+const [publicationLoading, setPublicationLoading] = useState(false);
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
 >("desktop");
@@ -97,6 +100,47 @@ useEffect(() => {
     active = false;
   };
 }, [projectId, project?.userId]);
+useEffect(() => {
+  if (!projectId) return;
+  let active = true;
+  const loadPublication = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/website-publications?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load publication status.");
+      if (!active) return;
+      setPublication(data.publication);
+      setPublicationSlug(data.publication.slug || data.suggestedSlug || "");
+    } catch {
+      if (active) setPublication({ status: "unpublished" });
+    }
+  };
+  loadPublication();
+  return () => { active = false; };
+}, [projectId]);
+const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
+  if (!projectId || !brandResult) return;
+  setPublicationLoading(true);
+  try {
+    const body = method === "POST"
+      ? { projectId, slug: publicationSlug, template: brandStyle }
+      : { projectId };
+    const response = await authenticatedFetch("/api/website-publications", {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Publication request failed.");
+    setPublication(data.publication);
+    setPublicationSlug(data.publication.slug || publicationSlug);
+    toast.success(method === "DELETE" ? "Website unpublished." : method === "PATCH" ? "Website republished." : "Website is live.");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Publication request failed.");
+  } finally {
+    setPublicationLoading(false);
+  }
+};
 const colors =
   brandResult?.colourScheme?.match(/#[0-9A-Fa-f]{6}/g) || [];
 const copyToClipboard = (text: string, label: string) => {
@@ -433,6 +477,34 @@ return (
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
                     <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult}/>
+                  </div>
+                </div>
+              </section>
+
+              <section className="relative mt-7 rounded-[24px] border border-cyan-400/20 bg-slate-950/70 p-5 sm:p-6">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Website publication</p>
+                    <h3 className="mt-2 text-xl font-semibold text-white">Status: {(publication?.status || "unpublished").toUpperCase()}</h3>
+                    {publication?.status === "unpublished" ? (
+                      <label className="mt-4 block max-w-xl">
+                        <span className="mb-2 block text-xs text-slate-400">Choose your website address</span>
+                        <div className="flex overflow-hidden rounded-xl border border-white/10 bg-slate-950">
+                          <span className="hidden items-center border-r border-white/10 px-3 text-xs text-slate-500 sm:flex">sites.buzypeezy.ai/</span>
+                          <input value={publicationSlug} onChange={(event) => setPublicationSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} maxLength={63} className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none" aria-label="Website slug" />
+                        </div>
+                        <span className="mt-2 block text-xs text-slate-500">Phase 1 publishes to the internal test route. The dedicated domain is not configured yet.</span>
+                      </label>
+                    ) : (
+                      <p className="mt-3 truncate text-sm text-slate-400">Future URL: {publication?.futureUrl}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2.5">
+                    <button type="button" onClick={() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" })} className={copyButtonClass}>Preview Website</button>
+                    {publication?.status === "unpublished" && <button type="button" disabled={publicationLoading || !publicationSlug} onClick={() => updatePublication("POST")} className={copyButtonClass}>Approve &amp; Go Live</button>}
+                    {publication?.status === "active" && <a href={publication.internalUrl} target="_blank" rel="noopener noreferrer" className={copyButtonClass}>View Live Site</a>}
+                    {publication && publication.status !== "unpublished" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("PATCH")} className={copyButtonClass}>Republish Changes</button>}
+                    {publication?.status === "active" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("DELETE")} className={copyButtonClass}>Unpublish</button>}
                   </div>
                 </div>
               </section>

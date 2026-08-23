@@ -9,6 +9,7 @@ import {
   index,
   uniqueIndex,
   varchar,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -149,6 +150,53 @@ export const publicAiUsage = pgTable("public_ai_usage", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export type PublishedWebsiteStatus = "active" | "inactive";
+export type WebsitePublicationAction = "publish" | "republish" | "unpublish" | "rollback";
+
+export const publishedWebsites = pgTable(
+  "published_websites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerUid: text("owner_uid").notNull(),
+    projectId: text("project_id").notNull(),
+    slug: varchar("slug", { length: 63 }).notNull(),
+    status: varchar("status", { length: 16 }).$type<PublishedWebsiteStatus>().notNull().default("active"),
+    template: varchar("template", { length: 32 }).notNull(),
+    currentVersion: integer("current_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    firstPublishedAt: timestamp("first_published_at", { withTimezone: true }).notNull(),
+    lastPublishedAt: timestamp("last_published_at", { withTimezone: true }).notNull(),
+    unpublishedAt: timestamp("unpublished_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("published_websites_slug_unique").on(table.slug),
+    uniqueIndex("published_websites_project_unique").on(table.projectId),
+    index("published_websites_owner_uid_idx").on(table.ownerUid),
+  ],
+);
+
+export const websitePublicationVersions = pgTable(
+  "website_publication_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    publishedWebsiteId: uuid("published_website_id")
+      .notNull()
+      .references(() => publishedWebsites.id, { onDelete: "restrict" }),
+    versionNumber: integer("version_number").notNull(),
+    action: varchar("action", { length: 16 }).$type<WebsitePublicationAction>().notNull(),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("website_publication_versions_site_version_unique").on(
+      table.publishedWebsiteId,
+      table.versionNumber,
+    ),
+    index("website_publication_versions_site_idx").on(table.publishedWebsiteId),
+  ],
+);
 
 export type SubscriptionPlan = "pro" | "business";
 export type SubscriptionStatus =
