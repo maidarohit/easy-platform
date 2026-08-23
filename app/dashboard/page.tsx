@@ -41,6 +41,7 @@ function DashboardPageContent() {
   >(undefined);
   const [summaryError, setSummaryError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [customerName, setCustomerName] = useState("");
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
@@ -49,9 +50,18 @@ function DashboardPageContent() {
 
         if (!user) {
           setProjects([]);
+          setCustomerName("");
           router.replace("/login");
           return;
         }
+
+        if (!user.emailVerified) {
+          setProjects([]);
+          router.replace("/verify-email");
+          return;
+        }
+
+        setCustomerName(user.displayName?.trim().slice(0, 100) || "");
 
         const response = await authenticatedFetch(
           `/api/projects?userId=${encodeURIComponent(user.uid)}`
@@ -85,6 +95,11 @@ function DashboardPageContent() {
       setSummaryError("");
 
       if (!user) {
+        setDashboardSummary(undefined);
+        return;
+      }
+
+      if (!user.emailVerified) {
         setDashboardSummary(undefined);
         return;
       }
@@ -160,7 +175,7 @@ function DashboardPageContent() {
       </div>
 
       <h1 className="text-4xl font-bold tracking-tight text-white">
-        Dashboard
+        Welcome, {customerName || "there"} <span aria-hidden="true">👋</span>
       </h1>
 
       <p className="mt-2 text-sm text-slate-400">

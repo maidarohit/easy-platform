@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/app/db";
 import { users } from "@/app/db/schema";
-import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { verifyFirebaseIdTokenAllowUnverified } from "@/app/lib/firebase-admin";
 
 export async function POST(req: Request) {
   let id: string;
   let email: string;
 
   try {
-    const verifiedToken = await verifyFirebaseIdToken(req);
+    const verifiedToken = await verifyFirebaseIdTokenAllowUnverified(req);
     id = verifiedToken.uid;
     email = typeof verifiedToken.email === "string" ? verifiedToken.email.trim() : "";
   } catch {

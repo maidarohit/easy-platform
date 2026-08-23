@@ -34,6 +34,29 @@ function getFirebaseAdminApp(): App {
 export async function verifyFirebaseIdToken(
   request: Request
 ): Promise<DecodedIdToken> {
+  const token = await verifyFirebaseIdTokenAllowUnverified(request);
+  requireVerifiedEmail(token);
+  return token;
+}
+
+export class EmailVerificationRequiredError extends Error {
+  readonly code = "EMAIL_VERIFICATION_REQUIRED";
+
+  constructor() {
+    super("Email verification is required.");
+    this.name = "EmailVerificationRequiredError";
+  }
+}
+
+export function requireVerifiedEmail(token: Pick<DecodedIdToken, "email_verified">): void {
+  if (token.email_verified !== true) {
+    throw new EmailVerificationRequiredError();
+  }
+}
+
+export async function verifyFirebaseIdTokenAllowUnverified(
+  request: Request
+): Promise<DecodedIdToken> {
   const authorization = request.headers.get("authorization")?.trim();
   const match = authorization?.match(/^Bearer ([^\s]+)$/i);
 

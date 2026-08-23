@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/app/db";
 import { entitlementOverrides } from "@/app/db/schema";
-import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { verifyFirebaseIdTokenAllowUnverified } from "@/app/lib/firebase-admin";
 import { getCurrentUsageCounters, isBossAdmin } from "@/app/lib/paid-entitlements";
 import { isUsageCategory } from "@/app/lib/plan-config";
 import { getUserEntitlements, getUserSubscription } from "@/app/lib/subscriptions";
@@ -69,7 +69,7 @@ async function readEntitlementBody(request: Request) {
 
 async function authorize(request: Request) {
   try {
-    const token = await verifyFirebaseIdToken(request);
+    const token = await verifyFirebaseIdTokenAllowUnverified(request);
     return isBossAdmin(token.uid);
   } catch {
     return false;

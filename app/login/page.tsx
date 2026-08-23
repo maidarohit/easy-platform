@@ -1,10 +1,12 @@
  "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
+import { firebaseAuthErrorMessage } from "../lib/firebase-auth-errors";
 
 function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
   return (
@@ -17,17 +19,30 @@ function PasswordVisibilityIcon({ visible }: { visible: boolean }) {
 }
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const handleLogin = async () => {
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setErrorMessage("");
+
     try {
-      await signInWithEmailAndPassword(
+      const credential = await signInWithEmailAndPassword(
         auth,
-        email,
+        email.trim(),
         password
       );
+
+      if (!credential.user.emailVerified) {
+        router.replace("/verify-email");
+        return;
+      }
 
       const response = await authenticatedFetch("/api/projects", {
         cache: "no-store",
@@ -59,12 +74,10 @@ export default function LoginPage() {
           ? payload.projects
           : [];
 
-      window.location.href =
-        projects.length === 0 ? "/onboarding" : "/dashboard";
+      router.replace(projects.length === 0 ? "/onboarding" : "/dashboard");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Login failed.";
-      alert(message);
-      console.error(error);
+      setErrorMessage(firebaseAuthErrorMessage(error, "Unable to sign in. Please try again."));
+      setIsSubmitting(false);
     }
   };
 
@@ -113,7 +126,8 @@ export default function LoginPage() {
             <h2 className="mt-4 [font-size:clamp(2.25rem,3.5vw,2.625rem)] font-semibold leading-tight tracking-[-0.045em] text-[#0E2C24]">Welcome back</h2>
             <p className="mt-3 [font-size:clamp(1rem,1.3vw,1.1875rem)] leading-7 text-[#6F756F]">Sign in to continue with Buzypeezy.</p>
 
-            <div className="mt-9">
+            <form className="mt-9" onSubmit={handleLogin}>
+            <div>
               <label htmlFor="email" className="mb-2.5 block text-[15px] font-semibold text-[#344039]">Email Address</label>
               <input
                 id="email"
@@ -121,6 +135,8 @@ export default function LoginPage() {
                 placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
                 className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25"
               />
             </div>
@@ -134,6 +150,8 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
                   className="h-14 w-full rounded-[14px] border border-[#173D32]/15 bg-white px-4 pr-12 text-base text-[#1B211E] outline-none transition placeholder:text-[#999F9A] hover:border-[#173D32]/25 focus:border-[#173D32]/60 focus:ring-4 focus:ring-[#A8B8A7]/25"
                 />
                 <button
@@ -147,12 +165,22 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <div className="mt-4 flex justify-end">
+              <Link href="/forgot-password" className="text-sm font-semibold text-[#173D32] underline decoration-[#B89A61]/60 underline-offset-4 transition hover:text-[#0E2C24]">
+                Forgot password?
+              </Link>
+            </div>
+
+            {errorMessage && <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>}
+
             <button
-              onClick={handleLogin}
+              type="submit"
+              disabled={isSubmitting}
               className="mt-8 h-14 w-full rounded-[14px] bg-[#173D32] text-[17px] font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] transition duration-300 hover:-translate-y-0.5 hover:bg-[#0E2C24] hover:shadow-[0_16px_34px_rgba(23,61,50,0.20)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#A8B8A7]/40"
             >
-              Continue
+              {isSubmitting ? "Signing in…" : "Continue"}
             </button>
+            </form>
 
             <p className="mt-7 text-center text-base text-[#6F756F]">
               New to Buzypeezy?{" "}
