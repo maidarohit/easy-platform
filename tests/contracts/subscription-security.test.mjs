@@ -27,17 +27,22 @@ test("plan IDs, prices, and credentials remain server-side", async () => {
   assert.doesNotMatch(contents, /NEXT_PUBLIC_RAZORPAY/);
 });
 
-test("webhook verifies raw body and updates only the provider subscription", async () => {
+test("webhook verifies raw body and transactionally updates only the provider subscription", async () => {
   const contents = await source("app/api/billing/webhook/route.ts");
   assert.match(contents, /readLimitedRawBody/);
   assert.match(contents, /MAX_WEBHOOK_BODY_BYTES\s*=\s*256\s*\*\s*1024/);
   assert.match(contents, /verifyRazorpayWebhook/);
   assert.match(contents, /subscriptions\.providerSubscriptionId/);
-  assert.match(contents, /notInArray\(subscriptions\.status, \["cancelled", "expired"\]\)/);
+  assert.match(contents, /x-razorpay-event-id/);
+  assert.match(contents, /database\.transaction/);
+  assert.match(contents, /onConflictDoNothing/);
+  assert.match(contents, /pg_advisory_xact_lock/);
+  assert.match(contents, /UnknownSubscriptionError/);
   assert.doesNotMatch(contents, /userId/);
   assert.ok(
-    contents.indexOf("readLimitedRawBody(request") < contents.indexOf("db.update(subscriptions)"),
-    "oversized webhook bodies must be rejected before subscription mutation",
+    contents.indexOf("readLimitedRawBody(request") <
+      contents.indexOf("processValidatedSubscriptionEvent(validated)"),
+    "oversized webhook bodies must be rejected before transactional processing",
   );
 });
 

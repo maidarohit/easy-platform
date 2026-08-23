@@ -8,6 +8,7 @@ import {
   boolean,
   index,
   uniqueIndex,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -181,6 +182,31 @@ export const subscriptions = pgTable(
     ),
     index("subscriptions_user_id_idx").on(table.userId),
   ]
+);
+
+export type RazorpayWebhookEventOutcome =
+  | "processed"
+  | "ignored_stale"
+  | "ignored_terminal"
+  | "ignored_unsupported";
+
+export const razorpayWebhookEvents = pgTable(
+  "razorpay_webhook_events",
+  {
+    providerEventId: varchar("provider_event_id", { length: 200 }).primaryKey(),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    providerSubscriptionId: varchar("provider_subscription_id", { length: 200 }).notNull(),
+    providerCreatedAt: timestamp("provider_created_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    outcome: varchar("outcome", { length: 32 }).$type<RazorpayWebhookEventOutcome>(),
+  },
+  (table) => [
+    index("razorpay_webhook_events_subscription_created_idx").on(
+      table.providerSubscriptionId,
+      table.providerCreatedAt,
+    ),
+  ],
 );
 
 export const entitlementOverrides = pgTable(
