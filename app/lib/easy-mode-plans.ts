@@ -2,20 +2,9 @@ import "server-only";
 
 import type { EasyModeGoalId } from "@/app/lib/easy-mode-goal-options";
 import { isEasyModeGoalId } from "@/app/lib/easy-mode-goal-options";
+import type { EasyModePlannedModuleId } from "@/app/lib/easy-mode-execution-contracts";
 
-export type EasyModeModule =
-  | "ai-manager"
-  | "analytics"
-  | "branding"
-  | "branding-context"
-  | "content"
-  | "image"
-  | "logo"
-  | "marketing"
-  | "sales"
-  | "seo"
-  | "uiux"
-  | "website";
+export type EasyModeModule = EasyModePlannedModuleId;
 
 const EASY_MODE_PLANS: Record<EasyModeGoalId, readonly EasyModeModule[]> = {
   build_everything: ["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"],
