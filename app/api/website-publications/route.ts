@@ -17,6 +17,7 @@ import {
   buildWebsitePublicationSnapshot,
   suggestWebsiteSlug,
   validatePublicationMutationBody,
+  validateWebsiteEdits,
 } from "@/app/lib/website-publication";
 
 const MAX_BODY_BYTES = 16 * 1024;
@@ -80,18 +81,27 @@ function parseStoredOutput(result: string): unknown {
   try { return JSON.parse(result); } catch { return null; }
 }
 
+function storedWebsiteEdits(result: string) {
+  const output = parseStoredOutput(result);
+  return output && typeof output === "object" && !Array.isArray(output) && "websiteEdits" in output
+    ? output.websiteEdits
+    : undefined;
+}
+
 function snapshotFor(
   project: typeof projects.$inferSelect,
   template: string,
   outputResult: string,
 ) {
+  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
   return buildWebsitePublicationSnapshot({
-    companyName: project.companyName || project.name,
+    companyName: websiteEdits?.companyName || project.companyName || project.name,
     industry: project.industry || "Business",
     websiteGoal: project.goal || project.targetAudience || "",
     websiteRequirements: project.brandDescription || project.originalBrief || "",
-    template,
+    template: websiteEdits?.template || template,
     websiteOutput: parseStoredOutput(outputResult),
+    ...(websiteEdits && { websiteEdits }),
   });
 }
 

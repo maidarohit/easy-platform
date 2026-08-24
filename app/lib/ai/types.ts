@@ -82,6 +82,22 @@ export interface WebsiteAiOutput {
   typography: string;
   recommendedTechStack: string;
   seoRecommendations: string;
+  websiteEdits?: WebsiteEdits;
+}
+
+export interface WebsiteEdits {
+  companyName: string;
+  heroHeadline: string;
+  heroDescription: string;
+  aboutText: string;
+  servicesText: string;
+  phone: string;
+  email: string;
+  address: string;
+  whatsapp: string;
+  primaryCtaLabel: string;
+  primaryCtaLink: string;
+  template: string;
 }
 
 export interface AiManagerInput {

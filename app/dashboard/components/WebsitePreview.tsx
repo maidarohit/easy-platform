@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { WebsiteAiOutput } from "../../lib/ai";
+import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 
 import { websiteThemes } from "./websiteThemes";
 import ModernTemplate from "./website-templates/ModernTemplate";
@@ -19,6 +19,7 @@ type WebsitePreviewProps = {
   previewMode: "desktop" | "tablet" | "mobile";
   websiteRequirements?: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  websiteEdits?: WebsiteEdits;
 };
 
 export default function WebsitePreview({
@@ -29,11 +30,16 @@ export default function WebsitePreview({
   previewMode,
   websiteRequirements,
   brandResult,
+  websiteEdits,
 }: WebsitePreviewProps) {
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
 
   const primaryColor = theme.primaryColor;
-  const businessName = companyName || "Your Business";
+  const businessName = websiteEdits?.companyName || companyName || "Your Business";
+  const editedBrandResult = websiteEdits && brandResult
+    ? { ...brandResult, heroHeadline: websiteEdits.heroHeadline, websiteOverview: websiteEdits.heroDescription }
+    : brandResult;
+  const editedGoal = websiteEdits?.primaryCtaLabel || websiteGoal;
 
   const headline = `Build a stronger ${
     industry || "business"
@@ -59,10 +65,10 @@ export default function WebsitePreview({
     case "Modern":
       selectedTemplate = (
         <ModernTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
-          brandResult={brandResult}
+          websiteGoal={editedGoal}
+          brandResult={editedBrandResult}
           previewMode={previewMode}
         />
       );
@@ -71,12 +77,12 @@ export default function WebsitePreview({
     case "Luxury":
       selectedTemplate = (
         <LuxuryTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
+          websiteGoal={editedGoal}
           websiteRequirements={websiteRequirements}
           previewMode={previewMode}
-          brandResult={brandResult}
+          brandResult={editedBrandResult}
         />
       );
       break;
@@ -84,10 +90,10 @@ export default function WebsitePreview({
     case "Corporate":
       selectedTemplate = (
         <CorporateTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
-          brandResult={brandResult}
+          websiteGoal={editedGoal}
+          brandResult={editedBrandResult}
         />
       );
       break;
@@ -95,10 +101,10 @@ export default function WebsitePreview({
     case "Creative":
       selectedTemplate = (
         <CreativeTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
-          brandResult={brandResult}
+          websiteGoal={editedGoal}
+          brandResult={editedBrandResult}
         />
       );
       break;
@@ -106,10 +112,10 @@ export default function WebsitePreview({
     case "Minimal":
       selectedTemplate = (
         <MinimalTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
-          brandResult={brandResult}
+          websiteGoal={editedGoal}
+          brandResult={editedBrandResult}
         />
       );
       break;
@@ -117,10 +123,10 @@ export default function WebsitePreview({
     case "Dark":
       selectedTemplate = (
         <DarkTemplate
-          companyName={companyName}
+          companyName={businessName}
           industry={industry}
-          websiteGoal={websiteGoal}
-          brandResult={brandResult}
+          websiteGoal={editedGoal}
+          brandResult={editedBrandResult}
         />
       );
       break;
@@ -135,6 +141,32 @@ export default function WebsitePreview({
         className={`easy-website-preview mx-auto overflow-hidden rounded-[32px] border border-cyan-500/20 bg-slate-950/70 shadow-[0_0_70px_rgba(6,182,212,0.16)] backdrop-blur-xl transition-all duration-500 ${previewWidthClass}`}
       >
         {selectedTemplate}
+        {websiteEdits && (
+          <section className="grid gap-8 border-t border-slate-200 bg-white px-8 py-14 text-slate-900 lg:grid-cols-2 lg:px-14">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">About</p>
+              <h2 className="mt-3 text-3xl font-bold">About {businessName}</h2>
+              <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-slate-600">{websiteEdits.aboutText}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Services</p>
+              <h2 className="mt-3 text-3xl font-bold">How we can help</h2>
+              <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-slate-600">{websiteEdits.servicesText}</p>
+            </div>
+            <div className="lg:col-span-2 rounded-2xl bg-slate-950 p-7 text-white">
+              <h2 className="text-2xl font-bold">Contact {businessName}</h2>
+              <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+                {websiteEdits.phone && <p>Phone: {websiteEdits.phone}</p>}
+                {websiteEdits.email && <p>Email: {websiteEdits.email}</p>}
+                {websiteEdits.whatsapp && <p>WhatsApp: {websiteEdits.whatsapp}</p>}
+                {websiteEdits.address && <p>Address: {websiteEdits.address}</p>}
+              </div>
+              <a href={websiteEdits.primaryCtaLink} className="mt-6 inline-flex rounded-xl px-5 py-3 font-semibold text-white" style={{ backgroundColor: primaryColor }}>
+                {websiteEdits.primaryCtaLabel}
+              </a>
+            </div>
+          </section>
+        )}
       </div>
     );
   }

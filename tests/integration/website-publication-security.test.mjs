@@ -6,6 +6,7 @@ import {
   normalizeWebsiteSlug,
   validatePublicationMutationBody,
   validateWebsiteAiOutput,
+  validateWebsiteEdits,
   validateWebsitePublicationSnapshot,
   validateWebsiteSlug,
 } from "../../app/lib/website-publication.ts";
@@ -16,6 +17,12 @@ const output = Object.fromEntries([
   "websiteFeatures", "designRecommendations", "colourScheme", "typography",
   "recommendedTechStack", "seoRecommendations",
 ].map((key) => [key, `${key} value`]));
+const edits = {
+  companyName: "Edited Business", heroHeadline: "A better headline", heroDescription: "Clear hero copy",
+  aboutText: "About the company", servicesText: "Our services", phone: "+91 12345 67890",
+  email: "hello@example.com", address: "Mumbai", whatsapp: "+91 12345 67890",
+  primaryCtaLabel: "Book now", primaryCtaLink: "/contact", template: "Modern",
+};
 
 test("strict Website AI output accepts only bounded text fields", () => {
   assert.ok(validateWebsiteAiOutput(output));
@@ -27,11 +34,19 @@ test("strict Website AI output accepts only bounded text fields", () => {
 });
 
 test("publication snapshot is exact and template allowlisted", () => {
-  const snapshot = buildWebsitePublicationSnapshot({ companyName: "Example", industry: "Retail", websiteGoal: "Leads", websiteRequirements: "Simple", template: "Modern", websiteOutput: output });
+  const snapshot = buildWebsitePublicationSnapshot({ companyName: "Example", industry: "Retail", websiteGoal: "Leads", websiteRequirements: "Simple", template: "Modern", websiteOutput: output, websiteEdits: edits });
   assert.ok(snapshot);
   assert.deepEqual(validateWebsitePublicationSnapshot(snapshot), snapshot);
   assert.equal(buildWebsitePublicationSnapshot({ companyName: "Example", industry: "Retail", websiteGoal: "Leads", websiteRequirements: "Simple", template: "Injected", websiteOutput: output }), null);
   assert.equal(validateWebsitePublicationSnapshot({ ...snapshot, ownerUid: "private" }), null);
+});
+
+test("structured website edits allow safe text and reject executable content or untrusted templates", () => {
+  assert.deepEqual(validateWebsiteEdits(edits), edits);
+  assert.equal(validateWebsiteEdits({ ...edits, heroHeadline: "<script>alert(1)</script>" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "javascript:alert(1)" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, template: "Injected" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, customScript: "alert(1)" }), null);
 });
 
 test("website slug normalization and validation are safe", () => {

@@ -32,6 +32,22 @@ export type WebsitePublicationSnapshot = {
   websiteRequirements: string;
   template: WebsiteTemplate;
   websiteOutput: Record<(typeof OUTPUT_FIELDS)[number], string>;
+  websiteEdits?: WebsiteEdits;
+};
+
+export type WebsiteEdits = {
+  companyName: string;
+  heroHeadline: string;
+  heroDescription: string;
+  aboutText: string;
+  servicesText: string;
+  phone: string;
+  email: string;
+  address: string;
+  whatsapp: string;
+  primaryCtaLabel: string;
+  primaryCtaLink: string;
+  template: WebsiteTemplate;
 };
 
 export const RESERVED_WEBSITE_SLUGS = new Set([
@@ -44,6 +60,10 @@ export const RESERVED_WEBSITE_SLUGS = new Set([
 const MAX_SHORT = 200;
 const MAX_LONG = 4_000;
 const FORBIDDEN_CONTENT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
+const EDIT_FIELDS = [
+  "companyName", "heroHeadline", "heroDescription", "aboutText", "servicesText",
+  "phone", "email", "address", "whatsapp", "primaryCtaLabel", "primaryCtaLink", "template",
+] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -95,7 +115,7 @@ export function suggestWebsiteSlug(value: string): string {
 }
 
 export function validateWebsiteAiOutput(value: unknown): WebsitePublicationSnapshot["websiteOutput"] | null {
-  if (!isPlainObject(value) || Object.keys(value).some((key) => !OUTPUT_FIELDS.includes(key as never))) {
+  if (!isPlainObject(value) || Object.keys(value).some((key) => key !== "websiteEdits" && !OUTPUT_FIELDS.includes(key as never))) {
     return null;
   }
   const output = {} as WebsitePublicationSnapshot["websiteOutput"];
@@ -107,6 +127,28 @@ export function validateWebsiteAiOutput(value: unknown): WebsitePublicationSnaps
   return output;
 }
 
+export function validateWebsiteEdits(value: unknown): WebsiteEdits | null {
+  if (!isPlainObject(value) || Object.keys(value).some((key) => !EDIT_FIELDS.includes(key as never))) return null;
+  if (EDIT_FIELDS.some((field) => !(field in value))) return null;
+  const template = validateWebsiteTemplate(value.template);
+  const companyName = safeString(value.companyName, MAX_SHORT);
+  const heroHeadline = safeString(value.heroHeadline, MAX_SHORT);
+  const heroDescription = safeString(value.heroDescription, MAX_LONG);
+  const aboutText = safeString(value.aboutText, MAX_LONG);
+  const servicesText = safeString(value.servicesText, MAX_LONG);
+  const phone = safeString(value.phone, MAX_SHORT, false);
+  const email = safeString(value.email, MAX_SHORT, false);
+  const address = safeString(value.address, MAX_LONG, false);
+  const whatsapp = safeString(value.whatsapp, MAX_SHORT, false);
+  const primaryCtaLabel = safeString(value.primaryCtaLabel, MAX_SHORT);
+  const primaryCtaLink = safeString(value.primaryCtaLink, MAX_SHORT);
+  if (!template || companyName === null || heroHeadline === null || heroDescription === null ||
+      aboutText === null || servicesText === null || phone === null || email === null ||
+      address === null || whatsapp === null || primaryCtaLabel === null || primaryCtaLink === null) return null;
+  if (!/^(?:https?:\/\/|mailto:|tel:|\/|#)[^\s]*$/i.test(primaryCtaLink)) return null;
+  return { companyName, heroHeadline, heroDescription, aboutText, servicesText, phone, email, address, whatsapp, primaryCtaLabel, primaryCtaLink, template };
+}
+
 export function buildWebsitePublicationSnapshot(input: {
   companyName: unknown;
   industry: unknown;
@@ -114,6 +156,7 @@ export function buildWebsitePublicationSnapshot(input: {
   websiteRequirements: unknown;
   template: unknown;
   websiteOutput: unknown;
+  websiteEdits?: unknown;
 }): WebsitePublicationSnapshot | null {
   const companyName = safeString(input.companyName, MAX_SHORT);
   const industry = safeString(input.industry, MAX_SHORT);
@@ -121,14 +164,15 @@ export function buildWebsitePublicationSnapshot(input: {
   const websiteRequirements = safeString(input.websiteRequirements, MAX_LONG, false);
   const template = validateWebsiteTemplate(input.template);
   const websiteOutput = validateWebsiteAiOutput(input.websiteOutput);
+  const websiteEdits = input.websiteEdits === undefined ? undefined : validateWebsiteEdits(input.websiteEdits);
   if (companyName === null || industry === null || websiteGoal === null ||
-      websiteRequirements === null || !template || !websiteOutput) return null;
-  return { schemaVersion: 1, companyName, industry, websiteGoal, websiteRequirements, template, websiteOutput };
+      websiteRequirements === null || !template || !websiteOutput || (input.websiteEdits !== undefined && !websiteEdits)) return null;
+  return { schemaVersion: 1, companyName, industry, websiteGoal, websiteRequirements, template, websiteOutput, ...(websiteEdits && { websiteEdits }) };
 }
 
 export function validateWebsitePublicationSnapshot(value: unknown): WebsitePublicationSnapshot | null {
   if (!isPlainObject(value)) return null;
-  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput"];
+  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput", "websiteEdits"];
   if (Object.keys(value).some((key) => !expected.includes(key)) || value.schemaVersion !== 1) return null;
   return buildWebsitePublicationSnapshot({
     companyName: value.companyName,
@@ -137,6 +181,7 @@ export function validateWebsitePublicationSnapshot(value: unknown): WebsitePubli
     websiteRequirements: value.websiteRequirements,
     template: value.template,
     websiteOutput: value.websiteOutput,
+    websiteEdits: value.websiteEdits,
   });
 }
 

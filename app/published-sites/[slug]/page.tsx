@@ -41,10 +41,11 @@ export default async function PublishedWebsitePage({
         companyName={snapshot.companyName}
         industry={snapshot.industry}
         websiteGoal={snapshot.websiteGoal}
-        websiteStyle={snapshot.template}
+        websiteStyle={snapshot.websiteEdits?.template || snapshot.template}
         websiteRequirements={snapshot.websiteRequirements}
         previewMode="desktop"
         brandResult={snapshot.websiteOutput}
+        websiteEdits={snapshot.websiteEdits}
       />
     </main>
   );

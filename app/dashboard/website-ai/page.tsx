@@ -6,7 +6,7 @@ import jsPDF from "jspdf";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import WebsitePreview from "../components/WebsitePreview";
-import type { WebsiteAiOutput } from "../../lib/ai";
+import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 import auth from "../../lib/auth";
 import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
@@ -24,6 +24,44 @@ const WEBSITE_GOALS = [
   "Other",
 ] as const;
 
+const WEBSITE_TEMPLATES = ["Modern", "Luxury", "Corporate", "Creative", "Minimal", "Dark"] as const;
+const FORBIDDEN_EDIT_CONTENT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
+const RESERVED_WEBSITE_SLUGS = new Set([
+  "admin", "api", "assets", "billing", "boss", "contact-support", "dashboard", "favicon",
+  "forgot-password", "help", "login", "logout", "onboarding", "privacy", "published-sites",
+  "refund-cancellation", "robots", "signup", "sitemap", "support", "terms", "verify-email", "www", "_next",
+]);
+
+function isValidWebsiteSlug(value: string) {
+  return value.length >= 3 && value.length <= 63 &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && !RESERVED_WEBSITE_SLUGS.has(value);
+}
+
+function isValidCustomDomain(value: string) {
+  if (!value || value.length > 253 || value.includes("://") || /[\s/?#]/.test(value)) return false;
+  const labels = value.toLowerCase().replace(/\.$/, "").split(".");
+  return labels.length >= 2 && labels.every((label) =>
+    label.length >= 1 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+  ) && /^[a-z]{2,63}$/.test(labels.at(-1) || "");
+}
+
+function initialWebsiteEdits(companyName: string, industry: string, template: string, result: WebsiteAiOutput): WebsiteEdits {
+  return {
+    companyName: companyName || "Your Business",
+    heroHeadline: `Build a stronger ${industry || "business"} presence online`,
+    heroDescription: result.websiteOverview,
+    aboutText: result.designRecommendations,
+    servicesText: result.websiteFeatures,
+    phone: "",
+    email: "",
+    address: "",
+    whatsapp: "",
+    primaryCtaLabel: "Get Started",
+    primaryCtaLink: "#contact",
+    template: WEBSITE_TEMPLATES.includes(template as (typeof WEBSITE_TEMPLATES)[number]) ? template : "Modern",
+  };
+}
+
 function WebsiteAIPageContent() {
     const { project, projectId } = useProjectMemory();
     const [companyName, setCompanyName] = useState("");
@@ -33,9 +71,16 @@ const [brandStyle, setBrandStyle] = useState("Minimal");
 const [brandDescription, setBrandDescription] = useState("");
 const [loading, setLoading] = useState(false);
 const [brandResult, setBrandResult] = useState<WebsiteAiOutput | null>(null);
+const [websiteEdits, setWebsiteEdits] = useState<WebsiteEdits | null>(null);
+const [draftEdits, setDraftEdits] = useState<WebsiteEdits | null>(null);
+const [editingWebsite, setEditingWebsite] = useState(false);
+const [savingEdits, setSavingEdits] = useState(false);
 const [publication, setPublication] = useState<{ status: "unpublished" | "active" | "inactive"; slug?: string; currentVersion?: number; internalUrl?: string; futureUrl?: string } | null>(null);
 const [publicationSlug, setPublicationSlug] = useState("");
 const [publicationLoading, setPublicationLoading] = useState(false);
+const [showGoLiveReview, setShowGoLiveReview] = useState(false);
+const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">("buzypeezy");
+const [customDomain, setCustomDomain] = useState("");
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
 >("desktop");
@@ -49,6 +94,10 @@ useEffect(() => {
     const projectGoal = activeProject?.goal || "";
 
     setBrandResult(null);
+    setWebsiteEdits(null);
+    setDraftEdits(null);
+    setEditingWebsite(false);
+    setShowGoLiveReview(false);
     setCompanyName(activeProject?.companyName || "");
     setIndustry(activeProject?.industry || "");
     setTargetAudience(
@@ -88,7 +137,14 @@ useEffect(() => {
           ? JSON.parse(data.output.result)
           : data.output.result;
 
-      setBrandResult(savedResult as WebsiteAiOutput);
+      const restoredResult = savedResult as WebsiteAiOutput;
+      setBrandResult(restoredResult);
+      setWebsiteEdits(restoredResult.websiteEdits || initialWebsiteEdits(
+        project?.companyName || "",
+        project?.industry || "",
+        project?.brandStyle || "Modern",
+        restoredResult,
+      ));
     } catch (error) {
       console.error("Failed to restore Website AI output:", error);
     }
@@ -99,7 +155,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [projectId, project?.userId]);
+}, [projectId, project?.brandStyle, project?.companyName, project?.industry, project?.userId]);
 useEffect(() => {
   if (!projectId) return;
   let active = true;
@@ -123,7 +179,7 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
   setPublicationLoading(true);
   try {
     const body = method === "POST"
-      ? { projectId, slug: publicationSlug, template: brandStyle }
+      ? { projectId, slug: publicationSlug, template: websiteEdits?.template || brandStyle }
       : { projectId };
     const response = await authenticatedFetch("/api/website-publications", {
       method,
@@ -134,6 +190,7 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
     if (!response.ok) throw new Error(data.error || "Publication request failed.");
     setPublication(data.publication);
     setPublicationSlug(data.publication.slug || publicationSlug);
+    setShowGoLiveReview(false);
     toast.success(method === "DELETE" ? "Website unpublished." : method === "PATCH" ? "Website republished." : "Website is live.");
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Publication request failed.");
@@ -141,6 +198,55 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
     setPublicationLoading(false);
   }
 };
+const beginEditingWebsite = () => {
+  if (!brandResult) return;
+  setDraftEdits(websiteEdits || initialWebsiteEdits(companyName, industry, brandStyle, brandResult));
+  setEditingWebsite(true);
+  setShowGoLiveReview(false);
+};
+const cancelEditingWebsite = () => {
+  setDraftEdits(null);
+  setEditingWebsite(false);
+};
+const updateDraftEdit = (field: keyof WebsiteEdits, value: string) => {
+  setDraftEdits((current) => current ? { ...current, [field]: value } : current);
+};
+const saveWebsiteEdits = async () => {
+  if (!projectId || !brandResult || !draftEdits || savingEdits) return;
+  const values = Object.values(draftEdits);
+  if ([draftEdits.companyName, draftEdits.heroHeadline, draftEdits.heroDescription, draftEdits.aboutText, draftEdits.servicesText, draftEdits.primaryCtaLabel, draftEdits.primaryCtaLink].some((value) => !value.trim())) {
+    toast.error("Complete all required website fields.");
+    return;
+  }
+  if (values.some((value) => value.length > 4_000 || FORBIDDEN_EDIT_CONTENT.test(value)) ||
+      !/^(?:https?:\/\/|mailto:|tel:|\/|#)[^\s]*$/i.test(draftEdits.primaryCtaLink)) {
+    toast.error("Use plain text and a safe CTA link.");
+    return;
+  }
+  setSavingEdits(true);
+  try {
+    const updatedResult: WebsiteAiOutput = { ...brandResult, websiteEdits: draftEdits };
+    const response = await authenticatedFetch("/api/project-outputs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, module: "website", result: updatedResult }),
+    });
+    if (!response.ok) throw new Error("Unable to save website changes.");
+    setBrandResult(updatedResult);
+    setWebsiteEdits(draftEdits);
+    setEditingWebsite(false);
+    setDraftEdits(null);
+    setShowGoLiveReview(true);
+    toast.success("Website changes saved.");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Unable to save website changes.");
+  } finally {
+    setSavingEdits(false);
+  }
+};
+const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
+const publicationSlugIsValid = isValidWebsiteSlug(publicationSlug);
+const customDomainIsValid = isValidCustomDomain(customDomain.trim().toLowerCase());
 const colors =
   brandResult?.colourScheme?.match(/#[0-9A-Fa-f]{6}/g) || [];
 const copyToClipboard = (text: string, label: string) => {
@@ -334,6 +440,9 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
+setWebsiteEdits(initialWebsiteEdits(companyName, industry, brandStyle, parsed));
+setDraftEdits(null);
+setEditingWebsite(false);
 
 if (projectId) {
   const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
@@ -371,6 +480,10 @@ const handleNewWebsite = () => {
   setBrandStyle("Minimal");
   setBrandDescription("");
   setBrandResult(null);
+  setWebsiteEdits(null);
+  setDraftEdits(null);
+  setEditingWebsite(false);
+  setShowGoLiveReview(false);
   setPreviewMode("desktop");
 };
 
@@ -464,10 +577,42 @@ return (
               <section className="relative mt-7 overflow-hidden rounded-[24px] border border-red-500/20 bg-slate-950/60 p-4 shadow-[0_0_30px_rgba(239,68,68,0.06)] sm:p-6">
                 <div className="mb-5 flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center lg:justify-between">
                   <div><div className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Web preview / active</span></div><h3 className="mt-2 text-xl font-semibold text-white">Live Website Preview</h3><p className="mt-1 text-xs leading-5 text-slate-500">Inspect the generated experience across responsive viewport systems.</p></div>
-                  <div className="grid grid-cols-3 gap-2 rounded-xl border border-white/[0.07] bg-slate-900/70 p-1.5">
-                    {(["desktop", "tablet", "mobile"] as const).map((mode) => <button key={mode} type="button" onClick={() => setPreviewMode(mode)} className={previewMode === mode ? "flex items-center justify-center gap-2 rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs font-semibold capitalize text-white shadow-[0_0_16px_rgba(239,68,68,0.12)]" : "flex items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-xs font-semibold capitalize text-slate-400 transition hover:border-cyan-400/20 hover:text-cyan-200"}><svg aria-hidden="true" viewBox="0 0 20 20" className="hidden h-4 w-4 fill-none stroke-cyan-300 sm:block" strokeWidth="1.5">{mode === "desktop" ? <><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 16.5h6M10 13.5v3"/></> : mode === "tablet" ? <rect x="4.5" y="2" width="11" height="16" rx="1.5"/> : <rect x="6" y="2" width="8" height="16" rx="1.5"/>}</svg>{mode}</button>)}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={beginEditingWebsite} disabled={editingWebsite} className={copyButtonClass}>Edit Website</button>
+                    <div className="grid grid-cols-3 gap-2 rounded-xl border border-white/[0.07] bg-slate-900/70 p-1.5">
+                      {(["desktop", "tablet", "mobile"] as const).map((mode) => <button key={mode} type="button" onClick={() => setPreviewMode(mode)} className={previewMode === mode ? "flex items-center justify-center gap-2 rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs font-semibold capitalize text-white shadow-[0_0_16px_rgba(239,68,68,0.12)]" : "flex items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-2 text-xs font-semibold capitalize text-slate-400 transition hover:border-cyan-400/20 hover:text-cyan-200"}><svg aria-hidden="true" viewBox="0 0 20 20" className="hidden h-4 w-4 fill-none stroke-cyan-300 sm:block" strokeWidth="1.5">{mode === "desktop" ? <><rect x="2.5" y="3.5" width="15" height="10" rx="1.5"/><path d="M7 16.5h6M10 13.5v3"/></> : mode === "tablet" ? <rect x="4.5" y="2" width="11" height="16" rx="1.5"/> : <rect x="6" y="2" width="8" height="16" rx="1.5"/>}</svg>{mode}</button>)}
+                    </div>
                   </div>
                 </div>
+
+                {editingWebsite && draftEdits && (
+                  <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-slate-900/85 p-5">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div><h4 className="font-semibold text-white">Edit Website</h4><p className="mt-1 text-xs text-slate-400">Changes appear in the preview immediately. Save before publishing.</p></div>
+                      <div className="flex gap-2"><button type="button" onClick={cancelEditingWebsite} disabled={savingEdits} className={copyButtonClass}>Cancel</button><button type="button" onClick={saveWebsiteEdits} disabled={savingEdits} className={copyButtonClass}>{savingEdits ? "Saving…" : "Save Changes"}</button></div>
+                    </div>
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      {([
+                        ["companyName", "Business / company name", "text"],
+                        ["heroHeadline", "Hero headline", "text"],
+                        ["phone", "Phone number", "tel"],
+                        ["email", "Email address", "email"],
+                        ["address", "Address / location", "text"],
+                        ["whatsapp", "WhatsApp number", "tel"],
+                        ["primaryCtaLabel", "Primary CTA label", "text"],
+                        ["primaryCtaLink", "Primary CTA link", "text"],
+                      ] as const).map(([field, label, type]) => (
+                        <label key={field} className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">{label}</span><input type={type} value={draftEdits[field]} onChange={(event) => updateDraftEdit(field, event.target.value)} maxLength={field === "address" ? 4_000 : 200} required={!(["phone", "email", "address", "whatsapp"] as string[]).includes(field)} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
+                      ))}
+                      {([[
+                        "heroDescription", "Hero description",
+                      ], ["aboutText", "About text"], ["servicesText", "Services text"]] as const).map(([field, label]) => (
+                        <label key={field} className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">{label}</span><textarea value={draftEdits[field]} onChange={(event) => updateDraftEdit(field, event.target.value)} maxLength={4_000} required rows={4} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
+                      ))}
+                      <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">Website template / style</span><select value={draftEdits.template} onChange={(event) => updateDraftEdit("template", event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50">{WEBSITE_TEMPLATES.map((template) => <option key={template}>{template}</option>)}</select></label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="relative overflow-hidden rounded-2xl border border-red-500/20 bg-black shadow-[0_25px_80px_rgba(0,0,0,0.5),0_0_25px_rgba(239,68,68,0.08)]">
                   <div className="flex items-center gap-3 border-b border-white/[0.08] bg-slate-900/95 px-4 py-3">
@@ -476,38 +621,72 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult}/>
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined}/>
                   </div>
                 </div>
               </section>
 
-              <section className="relative mt-7 rounded-[24px] border border-cyan-400/20 bg-slate-950/70 p-5 sm:p-6">
+              {publication?.status === "unpublished" && showGoLiveReview && websiteEdits && (
+                <section className="relative mt-7 rounded-[24px] border border-cyan-400/25 bg-slate-950/80 p-5 sm:p-7">
+                  <div className="border-b border-white/10 pb-6">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Final review</p>
+                    <h3 className="mt-2 text-3xl font-semibold text-white">Your website is ready</h3>
+                    <p className="mt-3 text-sm leading-6 text-slate-400">Choose how customers will find your website.</p>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 rounded-2xl border border-white/10 bg-slate-900/70 p-5 sm:grid-cols-3">
+                    <div><p className="text-xs text-slate-500">Business name</p><p className="mt-1 font-semibold text-white">{websiteEdits.companyName}</p></div>
+                    <div><p className="text-xs text-slate-500">Selected template</p><p className="mt-1 font-semibold text-white">{websiteEdits.template}</p></div>
+                    <div><p className="text-xs text-slate-500">Website summary</p><p className="mt-1 text-sm text-slate-300">Your saved headline, business details, services and contact information are ready.</p></div>
+                    <button type="button" onClick={beginEditingWebsite} className={`${copyButtonClass} sm:col-span-3 sm:w-fit`}>Edit Website</button>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                    <label className={`block cursor-pointer rounded-2xl border p-5 ${publishingOption === "buzypeezy" ? "border-cyan-400/45 bg-cyan-400/[0.06]" : "border-white/10 bg-slate-900/60"}`}>
+                      <span className="flex items-start gap-3"><input type="radio" name="publishing-option" value="buzypeezy" checked={publishingOption === "buzypeezy"} onChange={() => setPublishingOption("buzypeezy")} className="mt-1" /><span><span className="block font-semibold text-white">Use my Buzypeezy website address</span><span className="mt-1 block text-xs leading-5 text-slate-400">Publish now using your included Buzypeezy address.</span></span></span>
+                      <span className="mt-5 block text-xs font-semibold text-slate-300">Choose your address</span>
+                      <span className="mt-2 flex overflow-hidden rounded-xl border border-white/10 bg-slate-950"><span className="hidden items-center border-r border-white/10 px-3 text-xs text-slate-500 sm:flex">sites.buzypeezy.ai/</span><input value={publicationSlug} onChange={(event) => setPublicationSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} onFocus={() => setPublishingOption("buzypeezy")} maxLength={63} className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none" aria-label="Buzypeezy website address" /></span>
+                      <span className={`mt-2 block text-xs ${publicationSlugIsValid ? "text-cyan-300" : "text-red-300"}`}>{publicationSlugIsValid ? `Final address: /published-sites/${publicationSlug}` : "Use 3–63 lowercase letters, numbers or single hyphens."}</span>
+                    </label>
+
+                    <label className={`block cursor-pointer rounded-2xl border p-5 ${publishingOption === "custom" ? "border-cyan-400/45 bg-cyan-400/[0.06]" : "border-white/10 bg-slate-900/60"}`}>
+                      <span className="flex items-start gap-3"><input type="radio" name="publishing-option" value="custom" checked={publishingOption === "custom"} onChange={() => setPublishingOption("custom")} className="mt-1" /><span><span className="block font-semibold text-white">Connect my own domain</span><span className="mt-1 block text-xs leading-5 text-slate-400">Use an address you already own, such as www.mybusiness.com.</span></span></span>
+                      <span className="mt-5 block text-xs font-semibold text-slate-300">Your domain</span>
+                      <input value={customDomain} onChange={(event) => setCustomDomain(event.target.value.trim().toLowerCase())} onFocus={() => setPublishingOption("custom")} placeholder="www.mybusiness.com" maxLength={253} className="mt-2 h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" aria-label="Custom domain" />
+                      {customDomain && !customDomainIsValid && <span className="mt-2 block text-xs text-red-300">Enter a domain only, without http, paths or spaces.</span>}
+                      <span className="mt-3 block text-xs leading-5 text-amber-200">Connecting a custom domain requires DNS verification. This domain is not connected yet, and Buzypeezy will not change your DNS automatically.</span>
+                    </label>
+                  </div>
+
+                  {publishingOption === "custom" && customDomainIsValid && <p className="mt-4 rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-100">Your domain format looks valid. Custom-domain verification is not available yet, so it cannot be connected or published from this screen.</p>}
+
+                  <div className="mt-7 flex flex-wrap justify-end gap-3 border-t border-white/10 pt-6">
+                    <button type="button" onClick={beginEditingWebsite} className={copyButtonClass}>Back to Edit</button>
+                    <button type="button" disabled={publicationLoading || publishingOption !== "buzypeezy" || !publicationSlugIsValid} onClick={() => updatePublication("POST")} className={copyButtonClass}>{publicationLoading ? "Publishing…" : "Approve & Go Live"}</button>
+                  </div>
+                </section>
+              )}
+
+              {!(publication?.status === "unpublished" && showGoLiveReview) && <section className="relative mt-7 rounded-[24px] border border-cyan-400/20 bg-slate-950/70 p-5 sm:p-6">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Website publication</p>
                     <h3 className="mt-2 text-xl font-semibold text-white">Status: {(publication?.status || "unpublished").toUpperCase()}</h3>
                     {publication?.status === "unpublished" ? (
-                      <label className="mt-4 block max-w-xl">
-                        <span className="mb-2 block text-xs text-slate-400">Choose your website address</span>
-                        <div className="flex overflow-hidden rounded-xl border border-white/10 bg-slate-950">
-                          <span className="hidden items-center border-r border-white/10 px-3 text-xs text-slate-500 sm:flex">sites.buzypeezy.ai/</span>
-                          <input value={publicationSlug} onChange={(event) => setPublicationSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} maxLength={63} className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none" aria-label="Website slug" />
-                        </div>
-                        <span className="mt-2 block text-xs text-slate-500">Phase 1 publishes to the internal test route. The dedicated domain is not configured yet.</span>
-                      </label>
+                      <p className="mt-3 text-sm text-slate-400">Review your saved website and choose its address before going live.</p>
                     ) : (
                       <p className="mt-3 truncate text-sm text-slate-400">Future URL: {publication?.futureUrl}</p>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2.5">
                     <button type="button" onClick={() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" })} className={copyButtonClass}>Preview Website</button>
-                    {publication?.status === "unpublished" && <button type="button" disabled={publicationLoading || !publicationSlug} onClick={() => updatePublication("POST")} className={copyButtonClass}>Approve &amp; Go Live</button>}
+                    {publication?.status === "unpublished" && <button type="button" disabled={!websiteEdits} onClick={() => setShowGoLiveReview(true)} className={copyButtonClass}>Review &amp; Go Live</button>}
                     {publication?.status === "active" && <a href={publication.internalUrl} target="_blank" rel="noopener noreferrer" className={copyButtonClass}>View Live Site</a>}
                     {publication && publication.status !== "unpublished" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("PATCH")} className={copyButtonClass}>Republish Changes</button>}
                     {publication?.status === "active" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("DELETE")} className={copyButtonClass}>Unpublish</button>}
                   </div>
                 </div>
-              </section>
+              </section>}
             </section>
           )}
 
