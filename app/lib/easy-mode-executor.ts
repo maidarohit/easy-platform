@@ -16,6 +16,11 @@ import {
   loadCanonicalBrandingInput,
 } from "@/app/lib/branding-execution";
 import {
+  CONTENT_AI_WORKFLOW,
+  executeContentService,
+  loadCanonicalContentInput,
+} from "@/app/lib/content-execution";
+import {
   completeAiUsage,
   failAiUsage,
   startAiUsage,
@@ -23,9 +28,19 @@ import {
 import {
   buildBrandingContext,
   getModuleAdapter,
+  type ModuleExecutionInput,
   type NormalizedModuleOutput,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
+import {
+  executeLogoService,
+  loadCanonicalLogoInput,
+  LOGO_AI_WORKFLOW,
+} from "@/app/lib/logo-execution";
+import {
+  SpecialistExecutionError,
+  type SpecialistExecutionResult,
+} from "@/app/lib/specialist-execution";
 import {
   bindEasyModeAttemptUsage,
   claimNextEasyModeTask,
@@ -38,7 +53,7 @@ import {
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
 
-const ENABLED_MODULES = ["branding-context", "branding"] as const;
+const ENABLED_MODULES = ["branding-context", "branding", "logo", "content"] as const;
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
 export type EasyModeCustomerProgress = Readonly<{
@@ -60,6 +75,10 @@ type ExecutorDependencies = Readonly<{
   claim: typeof claimNextEasyModeTask;
   loadBrandingInput: typeof loadCanonicalBrandingInput;
   executeBranding: typeof executeBrandingService;
+  loadLogoInput: typeof loadCanonicalLogoInput;
+  executeLogo: typeof executeLogoService;
+  loadContentInput: typeof loadCanonicalContentInput;
+  executeContent: typeof executeContentService;
   startUsage: typeof startAiUsage;
   bindUsage: typeof bindEasyModeAttemptUsage;
   markDispatching: typeof markEasyModeAttemptDispatching;
@@ -71,6 +90,8 @@ type ExecutorDependencies = Readonly<{
   failUsage: typeof failAiUsage;
   loadBrandingContext: typeof loadBrandingContextInput;
   persistBranding: typeof persistBrandingOutputAndMemory;
+  persistLogo: typeof persistLogoOutputAndMemory;
+  persistContent: typeof persistContentOutputAndMemory;
   persistContext: typeof persistBrandingContextOutput;
   progress: typeof getEasyModeCustomerProgress;
 }>;
@@ -84,6 +105,10 @@ const defaultDependencies: ExecutorDependencies = {
   claim: claimNextEasyModeTask,
   loadBrandingInput: loadCanonicalBrandingInput,
   executeBranding: executeBrandingService,
+  loadLogoInput: loadCanonicalLogoInput,
+  executeLogo: executeLogoService,
+  loadContentInput: loadCanonicalContentInput,
+  executeContent: executeContentService,
   startUsage: startAiUsage,
   bindUsage: bindEasyModeAttemptUsage,
   markDispatching: markEasyModeAttemptDispatching,
@@ -95,6 +120,8 @@ const defaultDependencies: ExecutorDependencies = {
   failUsage: failAiUsage,
   loadBrandingContext: loadBrandingContextInput,
   persistBranding: persistBrandingOutputAndMemory,
+  persistLogo: persistLogoOutputAndMemory,
+  persistContent: persistContentOutputAndMemory,
   persistContext: persistBrandingContextOutput,
   progress: getEasyModeCustomerProgress,
 };
@@ -158,7 +185,21 @@ export async function executeNextEasyModeTask(
   if (claim.moduleId === "branding-context") {
     return executeLocalBrandingContext(claim, dependencies);
   }
-  return executeBrandingTask(claim, dependencies);
+  if (claim.moduleId === "branding") return executeBrandingTask(claim, dependencies);
+  if (claim.moduleId === "logo") {
+    return executeAdditionalSpecialistTask(claim, dependencies, {
+      module: "logo", workflow: LOGO_AI_WORKFLOW, label: "Logo",
+      loadInput: dependencies.loadLogoInput,
+      execute: dependencies.executeLogo,
+      persist: dependencies.persistLogo,
+    });
+  }
+  return executeAdditionalSpecialistTask(claim, dependencies, {
+    module: "content", workflow: CONTENT_AI_WORKFLOW, label: "Content",
+    loadInput: dependencies.loadContentInput,
+    execute: dependencies.executeContent,
+    persist: dependencies.persistContent,
+  });
 }
 
 async function executeLocalBrandingContext(
@@ -262,10 +303,92 @@ async function executeBrandingTask(
   }
 }
 
+type AdditionalSpecialistConfig = Readonly<{
+  module: "logo" | "content";
+  workflow: string;
+  label: string;
+  loadInput: (context: TrustedModuleExecutionContext) => Promise<ModuleExecutionInput>;
+  execute: (options: Readonly<{
+    context: TrustedModuleExecutionContext;
+    input?: unknown;
+  }>) => Promise<SpecialistExecutionResult>;
+  persist: (context: TrustedModuleExecutionContext, value: unknown) => Promise<PersistedOutput>;
+}>;
+
+async function executeAdditionalSpecialistTask(
+  claim: ClaimedEasyModeTask,
+  dependencies: ExecutorDependencies,
+  config: AdditionalSpecialistConfig,
+): Promise<ExecuteNextResult> {
+  const lease = leaseInput(claim);
+  const startedAt = Date.now();
+  let usageId: string | null = null;
+  let usageFinalized = false;
+  let providerStarted = false;
+  const failUsageOnce = async () => {
+    if (!usageId || usageFinalized) return;
+    usageFinalized = true;
+    await dependencies.failUsage({ usageId, durationMs: Math.max(0, Date.now() - startedAt) });
+  };
+  try {
+    const moduleInput = await config.loadInput(claim.context);
+    usageId = await dependencies.startUsage({
+      userId: claim.context.userId,
+      projectId: claim.context.projectId,
+      module: config.module,
+      workflow: config.workflow,
+      model: null,
+    });
+    await dependencies.bindUsage({ ...lease, usageId });
+    await dependencies.markDispatching(lease);
+    providerStarted = true;
+    const result = await config.execute({ context: claim.context, input: moduleInput });
+    await dependencies.markRunning({
+      ...lease,
+      ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
+    });
+    const persisted = await config.persist(claim.context, result.output);
+    usageFinalized = true;
+    await dependencies.completeUsage({
+      usageId,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      usageComponents: result.usageComponents,
+    });
+    await dependencies.completeAttempt({ ...lease, projectOutputId: persisted.id });
+    return {
+      state: "completed",
+      message: `${config.label} completed.`,
+      progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+    };
+  } catch (error) {
+    try {
+      await failUsageOnce();
+    } catch {
+      // Usage failure finalization is attempted once.
+    }
+    const uncertain = providerStarted &&
+      !(error instanceof SpecialistExecutionError && error.failurePoint === "before_dispatch");
+    try {
+      if (uncertain) {
+        await dependencies.failUncertain({ ...lease, safeErrorCode: "DELIVERY_UNCERTAIN" });
+      } else {
+        await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+      }
+    } catch {
+      // Never expose lease or transition details.
+    }
+    return {
+      state: "needs_attention",
+      message: `${config.label} needs attention.`,
+      progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+    };
+  }
+}
+
 async function insertProjectOutput(
   transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
   context: TrustedModuleExecutionContext,
-  module: "branding" | "branding-context",
+  module: "branding" | "branding-context" | "logo" | "content",
   output: NormalizedModuleOutput,
 ): Promise<PersistedOutput> {
   const result = JSON.stringify(output);
@@ -319,6 +442,56 @@ export async function persistBrandingOutputAndMemory(
     }
     return persisted;
   });
+}
+
+function appendMemorySummary(current: string | null, summary: string) {
+  const prior = current?.trim().slice(-1_000);
+  return [prior, summary.trim().slice(0, 1_000)].filter(Boolean).join("\n");
+}
+
+async function persistAdditionalSpecialistOutput(
+  context: TrustedModuleExecutionContext,
+  module: "logo" | "content",
+  value: unknown,
+): Promise<PersistedOutput> {
+  const output = getModuleAdapter(module)?.validateOutput?.(value);
+  if (!output) throw new Error("Invalid specialist output.");
+  return db.transaction(async (transaction) => {
+    const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
+      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
+    )).limit(1).for("update");
+    if (!project) throw new Error("Project not found.");
+    const persisted = await insertProjectOutput(transaction, context, module, output);
+    const [memory] = await transaction.select({
+      id: projectMemory.id,
+      additionalContext: projectMemory.additionalContext,
+    }).from(projectMemory).where(and(
+      eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
+    )).limit(1);
+    const summary = module === "logo"
+      ? `Logo concept: ${String(output.concept)}`
+      : `Latest content: ${String(output.content).slice(0, 500)}`;
+    const additionalContext = appendMemorySummary(memory?.additionalContext ?? null, summary);
+    if (memory) {
+      await transaction.update(projectMemory).set({ additionalContext, updatedAt: new Date() })
+        .where(eq(projectMemory.id, memory.id));
+    } else {
+      await transaction.insert(projectMemory).values({
+        projectId: context.projectId,
+        userId: context.userId,
+        additionalContext,
+      });
+    }
+    return persisted;
+  });
+}
+
+export function persistLogoOutputAndMemory(context: TrustedModuleExecutionContext, value: unknown) {
+  return persistAdditionalSpecialistOutput(context, "logo", value);
+}
+
+export function persistContentOutputAndMemory(context: TrustedModuleExecutionContext, value: unknown) {
+  return persistAdditionalSpecialistOutput(context, "content", value);
 }
 
 export async function loadBrandingContextInput(context: TrustedModuleExecutionContext) {

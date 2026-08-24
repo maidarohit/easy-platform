@@ -1,18 +1,15 @@
 import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
 import { completeAiUsage, failAiUsage, startAiUsage } from "@/app/lib/ai-usage";
-import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
+import { createTrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
-import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
-import {
-  getN8nWebhookConfig,
-  n8nConfigurationErrorResponse,
-} from "@/app/lib/n8n-webhooks";
+import { executeLogoService, LOGO_AI_WORKFLOW } from "@/app/lib/logo-execution";
+import { SpecialistExecutionError } from "@/app/lib/specialist-execution";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-const LOGO_AI_WORKFLOW = "logo-ai";
 
 async function finalizeUsage(
   usageId: string,
@@ -66,9 +63,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to authorize project." }, { status: 500 });
   }
 
-  const webhook = getN8nWebhookConfig("N8N_LOGO_AI_WEBHOOK_URL");
-  if (!webhook) return n8nConfigurationErrorResponse();
-
   let usageId: string;
   try {
     usageId = await startAiUsage({
@@ -87,56 +81,31 @@ export async function POST(request: Request) {
   const logoPayload = { ...body };
   delete logoPayload.projectId;
   delete logoPayload.userId;
-  const controller = new AbortController();
   const startedAt = Date.now();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
 
   try {
-    const response = await fetch(webhook.url, {
-      method: "POST",
-      headers: webhook.headers,
-      body: JSON.stringify(logoPayload),
-      signal: controller.signal,
+    const result = await executeLogoService({
+      context: createTrustedModuleExecutionContext({ userId, projectId }),
+      input: logoPayload,
     });
-    const usageMetadata = parseAiUsageMetadata(response.headers);
-    const n8nExecutionId = parseN8nExecutionId(response.headers);
-    const rawResponse = await response.text();
-
-    if (!response.ok) {
-      await finalizeUsage(usageId, "failed", startedAt);
-      return NextResponse.json({ error: "Logo AI request failed." }, { status: response.status });
-    }
-
-    if (!rawResponse.trim()) {
-      await finalizeUsage(usageId, "failed", startedAt);
-      return NextResponse.json({ error: "Logo AI returned an empty response." }, { status: 502 });
-    }
-
-    let data: unknown;
-    try {
-      data = JSON.parse(rawResponse);
-    } catch {
-      await finalizeUsage(usageId, "failed", startedAt);
-      return NextResponse.json({ error: "Logo AI returned invalid JSON." }, { status: 502 });
-    }
-
-    const usageFinalized = await finalizeUsage(usageId, "success", startedAt, usageMetadata?.components);
-    if (n8nExecutionId) {
+    const usageFinalized = await finalizeUsage(usageId, "success", startedAt, result.usageComponents);
+    if (result.providerExecutionId) {
       try {
-        await associateN8nExecution({ usageId, executionId: n8nExecutionId, metadataAlreadyApplied: Boolean(usageMetadata) && usageFinalized });
+        await associateN8nExecution({
+          usageId,
+          executionId: result.providerExecutionId,
+          metadataAlreadyApplied: Boolean(result.usageComponents) && usageFinalized,
+        });
       } catch {
         console.error("Logo AI execution association failed.");
       }
     }
-    return NextResponse.json(data);
+    return NextResponse.json({ output: result.output });
   } catch (error) {
     await finalizeUsage(usageId, "failed", startedAt);
     console.error("Logo AI request failed.");
-    if (error instanceof Error && error.name === "AbortError") {
-      return NextResponse.json({ error: "Logo AI timed out after 60 seconds." }, { status: 504 });
-    }
-    return NextResponse.json({ error: "Logo AI failed." }, { status: 500 });
-  } finally {
-    clearTimeout(timeout);
+    return NextResponse.json({ error: "Logo AI failed." }, {
+      status: error instanceof SpecialistExecutionError ? error.httpStatus : 500,
+    });
   }
 }
