@@ -175,7 +175,8 @@ function DashboardPageContent() {
       </div>
 
       <h1 className="text-4xl font-bold tracking-tight text-white">
-        Welcome, {customerName || "there"} <span aria-hidden="true">👋</span>
+        {customerName ? `Welcome, ${customerName}` : "Welcome"}{" "}
+        <span aria-hidden="true">👋</span>
       </h1>
 
       <p className="mt-2 text-sm text-slate-400">

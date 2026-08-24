@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import auth from "../../lib/auth";
 
 type NavbarProps = {
@@ -16,8 +16,17 @@ export default function Navbar({
 }: NavbarProps = {}) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [avatarInitial, setAvatarInitial] = useState("");
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      const customerIdentifier = user?.displayName?.trim() || user?.email?.trim();
+      setAvatarInitial(customerIdentifier?.charAt(0).toUpperCase() || "");
+    });
+  }, []);
+
   const handleSignOut = async () => {
   try {
     await signOut(auth);
@@ -325,7 +334,7 @@ const currentPage =
       bg-clip-text text-sm font-bold text-transparent
     "
   >
-    R
+    {avatarInitial}
   </span>
 
   <span
