@@ -312,7 +312,7 @@ export async function POST(request: Request) {
 
     return Response.json({ jobId, status: "processing" }, { status: 202 });
   } catch {
-    const [failedJob] = await db
+    const failedJobs = await db
       .update(aiManagerJobs)
       .set({
         status: "failed",
@@ -331,7 +331,7 @@ export async function POST(request: Request) {
         return [];
       });
 
-    if (failedJob) {
+    if (failedJobs.length > 0) {
       await finalizeFailedUsage(usageId, jobStartedAt);
     }
 

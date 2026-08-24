@@ -5,18 +5,17 @@ import {
   failAiUsage,
   startAiUsage,
 } from "@/app/lib/ai-usage";
-import {
-  parseAiUsageMetadata,
-  type AiUsageComponent,
-} from "@/app/lib/ai-usage-metadata";
+import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
+import {
+  BRANDING_AI_WORKFLOW,
+  BrandingExecutionError,
+  executeBrandingService,
+} from "@/app/lib/branding-execution";
+import { createTrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
-import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
-import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { and, eq } from "drizzle-orm";
-
-const BRANDING_AI_WORKFLOW = "branding-api";
 
 async function finalizeUsage(
   usageId: string,
@@ -102,9 +101,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const webhook = getN8nWebhookConfig("N8N_BRANDING_AI_WEBHOOK_URL");
-  if (!webhook) return n8nConfigurationErrorResponse();
-
   let usageId: string;
 
   try {
@@ -126,82 +122,26 @@ export async function POST(request: Request) {
   }
 
   const brandingPayload = { ...body };
-
   delete brandingPayload.projectId;
-  delete brandingPayload.userId;
-
-  const controller = new AbortController();
   const startedAt = Date.now();
 
-  const timeout = setTimeout(
-    () => controller.abort(),
-    120_000
-  );
-
   try {
-    const upstream = await fetch(webhook.url, {
-      method: "POST",
-      headers: {
-        ...webhook.headers,
-      },
-      body: JSON.stringify(brandingPayload),
-      cache: "no-store",
-      signal: controller.signal,
+    const result = await executeBrandingService({
+      context: createTrustedModuleExecutionContext({ userId: uid, projectId }),
+      input: brandingPayload,
     });
-
-    const usageMetadata =
-      parseAiUsageMetadata(upstream.headers);
-
-    const n8nExecutionId =
-      parseN8nExecutionId(upstream.headers);
-
-    const responseText = await upstream.text();
-
-    if (!upstream.ok) {
-      await finalizeUsage(
-        usageId,
-        "failed",
-        startedAt
-      );
-
-      console.error("Branding AI upstream request failed.", upstream.status);
-      return Response.json(
-        { error: "Branding AI request failed." },
-        { status: upstream.status }
-      );
-    }
-
-    if (!responseText.trim()) {
-      await finalizeUsage(
-        usageId,
-        "failed",
-        startedAt
-      );
-
-      return Response.json(
-        {
-          error:
-            "Branding AI returned an empty response.",
-        },
-        { status: 502 }
-      );
-    }
-
     const usageFinalized = await finalizeUsage(
       usageId,
       "success",
       startedAt,
-      usageMetadata?.components
+      result.usageComponents
     );
-
-    if (n8nExecutionId) {
+    if (result.providerExecutionId) {
       try {
         await associateN8nExecution({
           usageId,
-          executionId: n8nExecutionId,
-          metadataAlreadyApplied:
-            Boolean(usageMetadata) &&
-            usageFinalized,
+          executionId: result.providerExecutionId,
+          metadataAlreadyApplied: Boolean(result.usageComponents) && usageFinalized,
         });
       } catch {
         console.error(
@@ -210,14 +150,8 @@ export async function POST(request: Request) {
       }
     }
 
-    return new Response(responseText, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch {
+    return Response.json({ output: result.output }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
     await finalizeUsage(
       usageId,
       "failed",
@@ -226,11 +160,8 @@ export async function POST(request: Request) {
 
     console.error("Branding AI request failed.");
 
-    return Response.json(
-      { error: "Branding AI failed." },
-      { status: 500 }
-    );
-  } finally {
-    clearTimeout(timeout);
+    return Response.json({ error: "Branding AI failed." }, {
+      status: error instanceof BrandingExecutionError ? error.httpStatus : 500,
+    });
   }
 }

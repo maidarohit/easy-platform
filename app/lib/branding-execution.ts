@@ -1,0 +1,138 @@
+import "server-only";
+
+import { and, eq } from "drizzle-orm";
+import { db } from "@/app/db";
+import { projectMemory, projects } from "@/app/db/schema";
+import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import { parseAiUsageMetadata } from "@/app/lib/ai-usage-metadata";
+import {
+  getModuleAdapter,
+  type ModuleExecutionInput,
+  type NormalizedModuleOutput,
+  type TrustedModuleExecutionContext,
+} from "@/app/lib/easy-mode-execution-contracts";
+import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
+import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
+
+export const BRANDING_AI_WORKFLOW = "branding-api";
+const PROVIDER_TIMEOUT_MS = 120_000;
+const MAX_PROVIDER_RESPONSE_BYTES = 256 * 1024;
+
+export type BrandingFailurePoint = "before_dispatch" | "uncertain";
+export type BrandingSafeErrorCode = "PROVIDER_UNAVAILABLE" | "OUTPUT_INVALID" | "DELIVERY_UNCERTAIN";
+
+export class BrandingExecutionError extends Error {
+  readonly code: BrandingSafeErrorCode;
+  readonly failurePoint: BrandingFailurePoint;
+  readonly httpStatus: number;
+
+  constructor(code: BrandingSafeErrorCode, failurePoint: BrandingFailurePoint, httpStatus = 502) {
+    super(code);
+    this.name = "BrandingExecutionError";
+    this.code = code;
+    this.failurePoint = failurePoint;
+    this.httpStatus = httpStatus;
+  }
+}
+
+export type BrandingExecutionResult = Readonly<{
+  output: NormalizedModuleOutput;
+  usageComponents?: readonly AiUsageComponent[];
+  providerExecutionId?: string;
+}>;
+
+type BrandingWebhookConfig = Readonly<{
+  url: string;
+  headers: Readonly<Record<string, string>>;
+}>;
+
+export type BrandingExecutionOptions = Readonly<{
+  context: TrustedModuleExecutionContext;
+  input?: unknown;
+  fetcher?: typeof fetch;
+  webhookConfig?: BrandingWebhookConfig;
+}>;
+
+export async function loadCanonicalBrandingInput(
+  context: TrustedModuleExecutionContext,
+): Promise<ModuleExecutionInput> {
+  const [project] = await db.select().from(projects).where(and(
+    eq(projects.id, context.projectId),
+    eq(projects.userId, context.userId),
+  )).limit(1);
+  if (!project) throw new BrandingExecutionError("PROVIDER_UNAVAILABLE", "before_dispatch", 404);
+
+  const [memory] = await db.select().from(projectMemory).where(and(
+    eq(projectMemory.projectId, context.projectId),
+    eq(projectMemory.userId, context.userId),
+  )).limit(1);
+  const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
+  const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
+  const candidate = {
+    companyName,
+    industry,
+    targetAudience: memory?.targetAudience?.trim() || project.targetAudience?.trim() || `Customers interested in ${industry}`,
+    brandStyle: memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional",
+    brandDescription: memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
+      project.originalBrief?.trim() || `${companyName} provides ${industry.toLowerCase()} products or services.`,
+  };
+  const validated = getModuleAdapter("branding")?.validateInput(candidate);
+  if (!validated) throw new BrandingExecutionError("OUTPUT_INVALID", "before_dispatch", 400);
+  return validated;
+}
+
+export async function executeBrandingService(options: BrandingExecutionOptions): Promise<BrandingExecutionResult> {
+  const input = options.input === undefined
+    ? await loadCanonicalBrandingInput(options.context)
+    : getModuleAdapter("branding")?.validateInput(options.input);
+  if (!input) throw new BrandingExecutionError("OUTPUT_INVALID", "before_dispatch", 400);
+
+  const webhook = options.webhookConfig ?? getN8nWebhookConfig("N8N_BRANDING_AI_WEBHOOK_URL");
+  if (!webhook) throw new BrandingExecutionError("PROVIDER_UNAVAILABLE", "before_dispatch", 503);
+  const fetcher = options.fetcher ?? fetch;
+  let response: Response;
+  try {
+    response = await fetcher(webhook.url, {
+      method: "POST",
+      headers: webhook.headers,
+      body: JSON.stringify(input),
+      cache: "no-store",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    });
+  } catch {
+    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502);
+  }
+
+  if (!response.ok) throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", response.status);
+  const declaredLength = Number(response.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+  }
+
+  let raw: string;
+  try {
+    raw = await response.text();
+  } catch {
+    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502);
+  }
+  if (!raw.trim() || Buffer.byteLength(raw, "utf8") > MAX_PROVIDER_RESPONSE_BYTES) {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+  }
+  const output = getModuleAdapter("branding")?.validateOutput?.(parsed);
+  if (!output) throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+
+  const usageMetadata = parseAiUsageMetadata(response.headers);
+  const providerExecutionId = parseN8nExecutionId(response.headers);
+  return Object.freeze({
+    output,
+    ...(usageMetadata ? { usageComponents: usageMetadata.components } : {}),
+    ...(providerExecutionId ? { providerExecutionId } : {}),
+  });
+}

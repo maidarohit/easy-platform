@@ -24,6 +24,11 @@ type EasyModeRunView = {
   progress: { total: number; queued: number; completed: number; failed: number };
 };
 
+type CustomerProgress = {
+  runStatus: "In progress" | "Completed" | "Needs attention";
+  tasks: Array<{ label: string; status: "Waiting" | "In progress" | "Completed" | "Needs attention" }>;
+};
+
 const taskLabel = (moduleId: string) => moduleId
   .replace("ai-manager", "Business plan")
   .replace("branding-context", "Brand foundation")
@@ -41,6 +46,9 @@ function EasyModeContent() {
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
   const [runView, setRunView] = useState<EasyModeRunView | null>(null);
+  const [customerProgress, setCustomerProgress] = useState<CustomerProgress | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [executionMessage, setExecutionMessage] = useState("");
   const [error, setError] = useState(projectId ? "" : "Open a business project to continue.");
   const idempotencyKey = useRef("");
 
@@ -97,11 +105,34 @@ function EasyModeContent() {
       if (!runResponse.ok) throw new Error(runData.error || "Unable to prepare your business build.");
       setProject((current) => current ? { ...current, industry: industry.trim(), goal: goalId } : current);
       setRunView(runData as EasyModeRunView);
+      setCustomerProgress(null);
+      setExecutionMessage("");
       setReady(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to prepare your business.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleExecuteNext() {
+    if (!runView || executing) return;
+    setExecuting(true);
+    setError("");
+    try {
+      const response = await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runView.run.id)}/execute-next`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json() as { message?: string; progress?: CustomerProgress; error?: string };
+      if (data.progress) setCustomerProgress(data.progress);
+      setExecutionMessage(data.message || "This step could not be started.");
+      if (!response.ok && !data.message) throw new Error(data.error || "Unable to start the next step.");
+    } catch (executeError) {
+      setError(executeError instanceof Error ? executeError.message : "Unable to start the next step.");
+    } finally {
+      setExecuting(false);
     }
   }
 
@@ -143,7 +174,7 @@ function EasyModeContent() {
 
                 <button type="button" onClick={handlePreflight} disabled={submitting || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Getting things ready…" : "Build My Business"}</button>
 
-                {ready && runView && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Your business build is ready to start.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. No AI work has started yet.</p><div className="mt-4 space-y-2">{runView.tasks.map((task) => <div key={task.id} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{task.status}</span></div>)}</div></div>}
+                {ready && runView && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Your business build is ready to start.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. Start one step at a time and review the progress here.</p><div className="mt-4 space-y-2">{customerProgress ? customerProgress.tasks.map((task) => <div key={task.label} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{task.label}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{task.status}</span></div>) : runView.tasks.map((task) => <div key={task.id} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">Waiting</span></div>)}</div>{executionMessage && <p className="mt-4 text-sm font-medium text-[#344039]">{executionMessage}</p>}<button type="button" onClick={handleExecuteNext} disabled={executing || customerProgress?.runStatus === "Completed"} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{executing ? "Starting the next step…" : "Start Building"}</button></div>}
               </div>
             </div>
           )}
