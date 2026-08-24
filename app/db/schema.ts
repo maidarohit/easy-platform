@@ -123,6 +123,13 @@ export const projectOutputs = pgTable("project_outputs", {
 
 export type EasyModeRunStatus = "queued" | "running" | "partially_completed" | "completed" | "failed" | "cancelled";
 export type EasyModeTaskStatus = "queued" | "running" | "completed" | "failed" | "skipped";
+export type EasyModeTaskAttemptStatus =
+  | "claimed"
+  | "dispatching"
+  | "running"
+  | "completed"
+  | "failed_before_dispatch"
+  | "failed_uncertain";
 
 export const easyModeRuns = pgTable(
   "easy_mode_runs",
@@ -169,6 +176,40 @@ export const easyModeTasks = pgTable(
     check("easy_mode_tasks_status_check", sql`${table.status} in ('queued','running','completed','failed','skipped')`),
     check("easy_mode_tasks_position_check", sql`${table.position} >= 0`),
     check("easy_mode_tasks_attempt_count_check", sql`${table.attemptCount} >= 0`),
+  ],
+);
+
+export const easyModeTaskAttempts = pgTable(
+  "easy_mode_task_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull().references(() => easyModeTasks.id, { onDelete: "cascade" }),
+    runId: uuid("run_id").notNull().references(() => easyModeRuns.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    executionKey: varchar("execution_key", { length: 128 }).notNull(),
+    status: varchar("status", { length: 32 }).$type<EasyModeTaskAttemptStatus>().notNull().default("claimed"),
+    usageId: uuid("usage_id").references(() => aiUsage.id, { onDelete: "restrict" }),
+    providerExecutionId: varchar("provider_execution_id", { length: 200 }),
+    leaseToken: uuid("lease_token").notNull(),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    safeErrorCode: varchar("safe_error_code", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("easy_mode_task_attempts_task_number_unique").on(table.taskId, table.attemptNumber),
+    uniqueIndex("easy_mode_task_attempts_execution_key_unique").on(table.executionKey),
+    uniqueIndex("easy_mode_task_attempts_usage_id_unique").on(table.usageId),
+    uniqueIndex("easy_mode_task_attempts_one_active_per_run_unique")
+      .on(table.runId)
+      .where(sql`${table.status} in ('claimed','dispatching','running')`),
+    index("easy_mode_task_attempts_run_idx").on(table.runId),
+    index("easy_mode_task_attempts_task_idx").on(table.taskId),
+    check("easy_mode_task_attempts_status_check", sql`${table.status} in ('claimed','dispatching','running','completed','failed_before_dispatch','failed_uncertain')`),
+    check("easy_mode_task_attempts_attempt_number_check", sql`${table.attemptNumber} > 0`),
   ],
 );
 export const publicAiUsage = pgTable("public_ai_usage", {
