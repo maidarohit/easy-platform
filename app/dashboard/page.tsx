@@ -130,6 +130,9 @@ function DashboardPageContent() {
   const openInAIManager = (project: Project) => {
     router.push(`/ai-manager?projectId=${encodeURIComponent(project.id)}`);
   };
+  const continueBuilding = (project: Project) => {
+    router.push(`/easy-mode?projectId=${encodeURIComponent(project.id)}`);
+  };
   const filteredProjects = projects.filter((project) => {
   const query = searchQuery.toLowerCase();
 
@@ -214,7 +217,7 @@ function DashboardPageContent() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-400">
-                  Open a saved project inside AI Manager.
+                  Continue building your business or open advanced tools.
                 </p>
               </div>
 
@@ -393,11 +396,18 @@ function DashboardPageContent() {
     </div>
   </div>
 
-  {/* OPEN PROJECT BUTTON */}
+  {/* PROJECT ACTIONS */}
+  <button
+    onClick={() => continueBuilding(project)}
+    className="relative mt-6 flex w-full items-center justify-between overflow-hidden rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3.5 font-semibold text-white transition-all duration-300 hover:border-cyan-300/60 hover:bg-cyan-400/15"
+  >
+    <span>Continue Building</span>
+    <span aria-hidden="true">→</span>
+  </button>
   <button
     onClick={() => openInAIManager(project)}
     className="
-      relative mt-6 flex w-full items-center justify-between
+      relative mt-3 flex w-full items-center justify-between
       overflow-hidden rounded-xl
       border border-red-500/30
       bg-gradient-to-r from-red-500/15 via-red-500/10 to-cyan-400/10
@@ -411,7 +421,7 @@ function DashboardPageContent() {
   >
     <span className="flex items-center gap-3">
       <span className="text-red-300">◉</span>
-      Open in AI Manager
+      Open Advanced Tools
     </span>
 
     <span

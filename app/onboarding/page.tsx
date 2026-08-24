@@ -109,7 +109,9 @@ useEffect(() => {
 
       setCompletionMessage("Your business project is ready.");
       sessionStorage.removeItem("easy-selected-business-idea");
-      window.setTimeout(() => router.push("/dashboard"), 650);
+      const createdProjectId = data.project?.id;
+      if (!createdProjectId) throw new Error("Your project was created, but could not be opened.");
+      window.setTimeout(() => router.push(`/easy-mode?projectId=${encodeURIComponent(createdProjectId)}`), 650);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "We couldn't create your business project. Please try again.");
       setIsSaving(false);
