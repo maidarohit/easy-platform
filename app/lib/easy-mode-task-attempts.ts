@@ -230,13 +230,20 @@ async function loadLeasedAttempt(
 }
 
 async function transitionActiveAttempt(
-  input: LeasedAttemptInput,
+  input: LeasedAttemptInput & Readonly<{ providerExecutionId?: string }>,
   from: readonly EasyModeTaskAttemptStatus[],
   status: "dispatching" | "running",
 ) {
   return db.transaction(async (transaction) => {
     const attempt = await loadLeasedAttempt(transaction, input, from);
-    const [updated] = await transaction.update(easyModeTaskAttempts).set({ status })
+    const providerExecutionId = input.providerExecutionId?.trim();
+    if (providerExecutionId && (providerExecutionId.length > 128 || !/^[A-Za-z0-9_-]+$/.test(providerExecutionId))) {
+      throw new EasyModeAttemptError("INVALID_REQUEST");
+    }
+    const [updated] = await transaction.update(easyModeTaskAttempts).set({
+      status,
+      ...(providerExecutionId ? { providerExecutionId } : {}),
+    })
       .where(and(eq(easyModeTaskAttempts.id, attempt.id), inArray(easyModeTaskAttempts.status, [...from])))
       .returning({ id: easyModeTaskAttempts.id, status: easyModeTaskAttempts.status });
     if (!updated) throw new EasyModeAttemptError("INVALID_TRANSITION");
@@ -247,7 +254,9 @@ async function transitionActiveAttempt(
 export const markEasyModeAttemptDispatching = (input: LeasedAttemptInput) =>
   transitionActiveAttempt(input, ["claimed"], "dispatching");
 
-export const markEasyModeAttemptRunning = (input: LeasedAttemptInput) =>
+export const markEasyModeAttemptRunning = (
+  input: LeasedAttemptInput & Readonly<{ providerExecutionId?: string }>,
+) =>
   transitionActiveAttempt(input, ["claimed", "dispatching"], "running");
 
 export async function bindEasyModeAttemptUsage(input: LeasedAttemptInput & Readonly<{ usageId: string }>) {

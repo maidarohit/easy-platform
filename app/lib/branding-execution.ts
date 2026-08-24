@@ -125,7 +125,13 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
   } catch {
     throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
   }
-  const output = getModuleAdapter("branding")?.validateOutput?.(parsed);
+  const validator = getModuleAdapter("branding")?.validateOutput;
+  const responseItem = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
+  const wrappedOutput = responseItem !== null && typeof responseItem === "object" && !Array.isArray(responseItem) &&
+      Object.hasOwn(responseItem, "output")
+    ? { output: (responseItem as Record<string, unknown>).output }
+    : responseItem;
+  const output = validator?.(responseItem) ?? validator?.(wrappedOutput);
   if (!output) throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
 
   const usageMetadata = parseAiUsageMetadata(response.headers);

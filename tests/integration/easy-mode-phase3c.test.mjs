@@ -57,9 +57,10 @@ function claim(moduleId) {
 function dependencies(moduleId = "branding") {
   const events = [];
   const calls = {};
+  const received = {};
   const count = (name) => { calls[name] = (calls[name] ?? 0) + 1; events.push(name); };
   return {
-    calls, events,
+    calls, events, received,
     values: {
       enabled: () => true,
       claim: async () => { count("claim"); return claim(moduleId); },
@@ -68,7 +69,7 @@ function dependencies(moduleId = "branding") {
       startUsage: async () => { count("startUsage"); return ids.usage; },
       bindUsage: async () => { count("bindUsage"); },
       markDispatching: async () => { count("markDispatching"); },
-      markRunning: async () => { count("markRunning"); },
+      markRunning: async (input) => { count("markRunning"); received.markRunning = input; },
       completeAttempt: async () => { count("completeAttempt"); },
       failBeforeDispatch: async () => { count("failBeforeDispatch"); },
       failUncertain: async () => { count("failUncertain"); },
@@ -217,6 +218,53 @@ test("shared branding service uses strict validation and hides provider payloads
     }),
     (error) => error instanceof BrandingExecutionError && error.code === "OUTPUT_INVALID" && !error.message.includes("secret"),
   );
+});
+
+test("shared branding service accepts the successful single-item n8n response", async () => {
+  const n8nResponse = [{
+    output: brandingOutput,
+    workflowStatus: "success",
+  }];
+  const result = await executeBrandingService({
+    context,
+    input: brandingInput,
+    fetcher: async () => new Response(JSON.stringify(n8nResponse), {
+      status: 200,
+      headers: { "x-easy-n8n-execution-id": "branding-execution-123" },
+    }),
+    webhookConfig: { url: "https://example.invalid/branding", headers: {} },
+  });
+  assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput(brandingOutput));
+  assert.equal(result.providerExecutionId, "branding-execution-123");
+});
+
+test("successful n8n envelope persists, finalizes usage, records execution, and completes", async () => {
+  const fixture = dependencies();
+  const result = await executeNextEasyModeTask(
+    { runId: ids.run, userId: "firebase-user" },
+    {
+      ...fixture.values,
+      executeBranding: (options) => executeBrandingService({
+        ...options,
+        fetcher: async () => new Response(JSON.stringify([{
+          output: brandingOutput,
+          workflowStatus: "success",
+        }]), {
+          status: 200,
+          headers: { "x-easy-n8n-execution-id": "branding-execution-123" },
+        }),
+        webhookConfig: { url: "https://example.invalid/branding", headers: {} },
+      }),
+    },
+  );
+  assert.equal(result.state, "completed");
+  assert.equal(fixture.calls.persistBranding, 1);
+  assert.equal(fixture.calls.completeUsage, 1);
+  assert.equal(fixture.calls.completeAttempt, 1);
+  assert.equal(fixture.calls.failUsage, undefined);
+  assert.equal(fixture.received.markRunning.providerExecutionId, "branding-execution-123");
+  assert.ok(fixture.events.indexOf("persistBranding") < fixture.events.indexOf("completeUsage"));
+  assert.ok(fixture.events.indexOf("completeUsage") < fixture.events.indexOf("completeAttempt"));
 });
 
 test("route, persistence, UI, and AI Manager race contracts remain controlled", async () => {

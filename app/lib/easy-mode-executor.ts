@@ -221,7 +221,10 @@ async function executeBrandingTask(
     await dependencies.markDispatching(lease);
     providerStarted = true;
     const result = await dependencies.executeBranding({ context: claim.context, input: brandingInput });
-    await dependencies.markRunning(lease);
+    await dependencies.markRunning({
+      ...lease,
+      ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
+    });
     const persisted = await dependencies.persistBranding(claim.context, result.output);
     usageFinalized = true;
     await dependencies.completeUsage({
