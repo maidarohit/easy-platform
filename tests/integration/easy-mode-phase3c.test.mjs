@@ -44,6 +44,9 @@ const brandingOutput = {
   logoConcept: "A simple forward-moving mark.", marketingSuggestions: "Lead with customer outcomes.",
   brandStyleGuide: "Use clear language and consistent colors.",
 };
+const productionBrandingOutput = Object.fromEntries(
+  Object.entries(brandingOutput).filter(([key]) => key !== "brandStyleGuide"),
+);
 const progress = { runStatus: "In progress", tasks: [{ label: "Brand identity", status: "Waiting" }] };
 
 function claim(moduleId) {
@@ -222,8 +225,7 @@ test("shared branding service uses strict validation and hides provider payloads
 
 test("shared branding service accepts the successful single-item n8n response", async () => {
   const n8nResponse = [{
-    output: brandingOutput,
-    workflowStatus: "success",
+    output: productionBrandingOutput,
   }];
   const result = await executeBrandingService({
     context,
@@ -234,7 +236,14 @@ test("shared branding service accepts the successful single-item n8n response", 
     }),
     webhookConfig: { url: "https://example.invalid/branding", headers: {} },
   });
-  assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput(brandingOutput));
+  assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput({
+    ...productionBrandingOutput,
+    brandStyleGuide: [
+      `Brand voice: ${productionBrandingOutput.brandVoice}`,
+      `Color palette: ${productionBrandingOutput.colorPalette}`,
+      `Typography: ${productionBrandingOutput.typography}`,
+    ].join("\n"),
+  }));
   assert.equal(result.providerExecutionId, "branding-execution-123");
 });
 
@@ -247,8 +256,7 @@ test("successful n8n envelope persists, finalizes usage, records execution, and 
       executeBranding: (options) => executeBrandingService({
         ...options,
         fetcher: async () => new Response(JSON.stringify([{
-          output: brandingOutput,
-          workflowStatus: "success",
+          output: productionBrandingOutput,
         }]), {
           status: 200,
           headers: { "x-easy-n8n-execution-id": "branding-execution-123" },

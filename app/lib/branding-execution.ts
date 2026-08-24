@@ -127,11 +127,25 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
   }
   const validator = getModuleAdapter("branding")?.validateOutput;
   const responseItem = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
-  const wrappedOutput = responseItem !== null && typeof responseItem === "object" && !Array.isArray(responseItem) &&
+  const responseOutput = responseItem !== null && typeof responseItem === "object" && !Array.isArray(responseItem) &&
       Object.hasOwn(responseItem, "output")
-    ? { output: (responseItem as Record<string, unknown>).output }
+    ? (responseItem as Record<string, unknown>).output
     : responseItem;
-  const output = validator?.(responseItem) ?? validator?.(wrappedOutput);
+  const normalizedCandidate = responseOutput !== null && typeof responseOutput === "object" &&
+      !Array.isArray(responseOutput) && !Object.hasOwn(responseOutput, "brandStyleGuide") &&
+      typeof (responseOutput as Record<string, unknown>).brandVoice === "string" &&
+      typeof (responseOutput as Record<string, unknown>).colorPalette === "string" &&
+      typeof (responseOutput as Record<string, unknown>).typography === "string"
+    ? {
+        ...(responseOutput as Record<string, unknown>),
+        brandStyleGuide: [
+          `Brand voice: ${(responseOutput as Record<string, unknown>).brandVoice}`,
+          `Color palette: ${(responseOutput as Record<string, unknown>).colorPalette}`,
+          `Typography: ${(responseOutput as Record<string, unknown>).typography}`,
+        ].join("\n"),
+      }
+    : responseOutput;
+  const output = validator?.(responseItem) ?? validator?.(normalizedCandidate);
   if (!output) throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
 
   const usageMetadata = parseAiUsageMetadata(response.headers);
