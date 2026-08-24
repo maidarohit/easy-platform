@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
@@ -18,6 +18,19 @@ type EasyModeProject = {
   goal?: string | null;
 };
 
+type EasyModeRunView = {
+  run: { id: string; status: string };
+  tasks: Array<{ id: string; moduleId: string; position: number; status: string }>;
+  progress: { total: number; queued: number; completed: number; failed: number };
+};
+
+const taskLabel = (moduleId: string) => moduleId
+  .replace("ai-manager", "Business plan")
+  .replace("branding-context", "Brand foundation")
+  .replace("uiux", "Customer experience")
+  .replace(/-/g, " ")
+  .replace(/^./, (letter) => letter.toUpperCase());
+
 function EasyModeContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId")?.trim() || "";
@@ -27,7 +40,9 @@ function EasyModeContent() {
   const [loading, setLoading] = useState(Boolean(projectId));
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
+  const [runView, setRunView] = useState<EasyModeRunView | null>(null);
   const [error, setError] = useState(projectId ? "" : "Open a business project to continue.");
+  const idempotencyKey = useRef("");
 
   useEffect(() => {
     if (!projectId) {
@@ -72,7 +87,16 @@ function EasyModeContent() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to prepare your business.");
+      if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
+      const runResponse = await authenticatedFetch("/api/easy-mode/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, goalId, idempotencyKey: idempotencyKey.current }),
+      });
+      const runData = await runResponse.json();
+      if (!runResponse.ok) throw new Error(runData.error || "Unable to prepare your business build.");
       setProject((current) => current ? { ...current, industry: industry.trim(), goal: goalId } : current);
+      setRunView(runData as EasyModeRunView);
       setReady(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to prepare your business.");
@@ -108,18 +132,18 @@ function EasyModeContent() {
               </div>
 
               <div className="mt-8 border-t border-[#D8DCCF] pt-7">
-                <label className="block max-w-xl text-sm font-semibold text-[#173D32]">Industry <span className="text-red-600">*</span><input value={industry} onChange={(event) => { setIndustry(event.target.value); setReady(false); }} maxLength={200} required placeholder="Example: Real Estate" className="mt-2.5 h-14 w-full rounded-[14px] border border-[#D8DCCF] bg-white px-4 text-base font-normal outline-none focus:border-[#A8B8A7] focus:ring-4 focus:ring-[#A8B8A7]/20" /></label>
+                <label className="block max-w-xl text-sm font-semibold text-[#173D32]">Industry <span className="text-red-600">*</span><input value={industry} onChange={(event) => { setIndustry(event.target.value); setReady(false); setRunView(null); idempotencyKey.current = ""; }} maxLength={200} required placeholder="Example: Real Estate" className="mt-2.5 h-14 w-full rounded-[14px] border border-[#D8DCCF] bg-white px-4 text-base font-normal outline-none focus:border-[#A8B8A7] focus:ring-4 focus:ring-[#A8B8A7]/20" /></label>
 
                 <fieldset className="mt-8">
                   <legend className="text-sm font-semibold text-[#173D32]">What would you like to do first?</legend>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {EASY_MODE_GOALS.map((goal) => <button key={goal.id} type="button" aria-pressed={goalId === goal.id} onClick={() => { setGoalId(goal.id); setReady(false); }} className={`min-h-20 rounded-[16px] border p-4 text-left text-sm font-semibold transition ${goalId === goal.id ? "border-[#173D32] bg-[#EEE9DC] text-[#173D32]" : "border-[#D8DCCF] bg-white text-[#606A64] hover:border-[#A8B8A7]"}`}>{goal.label}</button>)}
+                    {EASY_MODE_GOALS.map((goal) => <button key={goal.id} type="button" aria-pressed={goalId === goal.id} onClick={() => { setGoalId(goal.id); setReady(false); setRunView(null); idempotencyKey.current = ""; }} className={`min-h-20 rounded-[16px] border p-4 text-left text-sm font-semibold transition ${goalId === goal.id ? "border-[#173D32] bg-[#EEE9DC] text-[#173D32]" : "border-[#D8DCCF] bg-white text-[#606A64] hover:border-[#A8B8A7]"}`}>{goal.label}</button>)}
                   </div>
                 </fieldset>
 
                 <button type="button" onClick={handlePreflight} disabled={submitting || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Getting things ready…" : "Build My Business"}</button>
 
-                {ready && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Ready to build</p><p className="mt-2 text-sm leading-6 text-[#606A64]">Your business details and goal are ready. The next phase will connect the guided building process. No AI work has been started yet.</p></div>}
+                {ready && runView && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Your business build is ready to start.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. No AI work has started yet.</p><div className="mt-4 space-y-2">{runView.tasks.map((task) => <div key={task.id} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{task.status}</span></div>)}</div></div>}
               </div>
             </div>
           )}

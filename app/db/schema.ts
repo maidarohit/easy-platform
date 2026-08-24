@@ -10,7 +10,9 @@ import {
   uniqueIndex,
   varchar,
   jsonb,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -118,6 +120,57 @@ export const projectOutputs = pgTable("project_outputs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export type EasyModeRunStatus = "queued" | "running" | "partially_completed" | "completed" | "failed" | "cancelled";
+export type EasyModeTaskStatus = "queued" | "running" | "completed" | "failed" | "skipped";
+
+export const easyModeRuns = pgTable(
+  "easy_mode_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    goalId: varchar("goal_id", { length: 64 }).notNull(),
+    status: varchar("status", { length: 32 }).$type<EasyModeRunStatus>().notNull().default("queued"),
+    idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("easy_mode_runs_owner_project_idempotency_unique").on(table.userId, table.projectId, table.idempotencyKey),
+    index("easy_mode_runs_owner_project_idx").on(table.userId, table.projectId),
+    check("easy_mode_runs_goal_id_check", sql`${table.goalId} in ('build_everything','build_website','get_customers','build_brand','create_content','improve_business')`),
+    check("easy_mode_runs_status_check", sql`${table.status} in ('queued','running','partially_completed','completed','failed','cancelled')`),
+  ],
+);
+
+export const easyModeTasks = pgTable(
+  "easy_mode_tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id").notNull().references(() => easyModeRuns.id, { onDelete: "cascade" }),
+    moduleId: varchar("module_id", { length: 64 }).notNull(),
+    position: integer("position").notNull(),
+    status: varchar("status", { length: 16 }).$type<EasyModeTaskStatus>().notNull().default("queued"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    safeErrorCode: varchar("safe_error_code", { length: 64 }),
+    projectOutputId: uuid("project_output_id").references(() => projectOutputs.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    uniqueIndex("easy_mode_tasks_run_position_unique").on(table.runId, table.position),
+    index("easy_mode_tasks_run_idx").on(table.runId),
+    check("easy_mode_tasks_module_id_check", sql`${table.moduleId} in ('ai-manager','analytics','branding','branding-context','content','image','logo','marketing','sales','seo','uiux','website')`),
+    check("easy_mode_tasks_status_check", sql`${table.status} in ('queued','running','completed','failed','skipped')`),
+    check("easy_mode_tasks_position_check", sql`${table.position} >= 0`),
+    check("easy_mode_tasks_attempt_count_check", sql`${table.attemptCount} >= 0`),
+  ],
+);
 export const publicAiUsage = pgTable("public_ai_usage", {
   id: uuid("id").defaultRandom().primaryKey(),
 
