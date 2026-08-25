@@ -40,6 +40,7 @@ test("Boss overrides require verified UID and server allowlist", async () => {
   assert.match(route, /isBossAdmin\(token\.uid\)/);
   assert.match(route, /status: 404/);
   assert.match(guard, /BOSS_ADMIN_UIDS/);
+  assert.match(guard, /BOSS_ADMIN_UIDS_TEST/);
 });
 
 test("emergency switches cover expensive and orchestrated categories", async () => {
@@ -72,7 +73,9 @@ test("private beta bypass preserves category quotas and does not grant admin acc
   assert.match(contents, /used >= limit/);
   assert.match(contents, /const plan = subscription\?\.status === "active" \? subscription\.plan : "pro"/);
   assert.doesNotMatch(contents, /isBossAdmin\([^)]*PRIVATE_BETA|PRIVATE_BETA[^\n]*BOSS_ADMIN_UIDS/);
-  assert.match(contents, /export function isBossAdmin\(uid: string\): boolean \{\s+return new Set\(\(process\.env\.BOSS_ADMIN_UIDS/);
+  assert.match(contents, /\[process\.env\.BOSS_ADMIN_UIDS, process\.env\.BOSS_ADMIN_UIDS_TEST\]/);
+  assert.doesNotMatch(contents, /NEXT_PUBLIC_BOSS_ADMIN_UIDS/);
+  assert.doesNotMatch(contents, /NEXT_PUBLIC_BOSS_ADMIN_UIDS_TEST/);
 });
 
 test("automation authorization applies its limit before route provider calls", async () => {

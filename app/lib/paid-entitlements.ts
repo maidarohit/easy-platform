@@ -98,7 +98,12 @@ export async function requirePaidModule(userId: string, module: string) {
 }
 
 export function isBossAdmin(uid: string): boolean {
-  return new Set((process.env.BOSS_ADMIN_UIDS ?? "").split(",").map((item) => item.trim()).filter(Boolean)).has(uid);
+  return new Set(
+    [process.env.BOSS_ADMIN_UIDS, process.env.BOSS_ADMIN_UIDS_TEST]
+      .flatMap((value) => (value ?? "").split(","))
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ).has(uid);
 }
 
 export async function getCurrentUsageCounters(userId: string) {
