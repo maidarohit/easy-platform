@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
+import { MalformedJsonBodyError, readOptionalLimitedJson } from "../../app/lib/request-body.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const runId = "11111111-1111-4111-8111-111111111111";
@@ -94,6 +95,26 @@ test("server-built Branding and downstream specialist context is bounded to stri
   assert.match(branding, /targetAudience: [\s\S]*?\.slice\(0, 500\)/);
   assert.match(specialists, /const brandStyle = .*\.slice\(0, 500\)/);
   assert.match(specialists, /const targetAudience = [\s\S]*?\.slice\(0, 500\)/);
+});
+
+test("safe Branding Retry accepts an empty POST then rebuilds bounded server-owned input", async () => {
+  const emptyRetry = new Request("https://example.invalid/retry", { method: "POST" });
+  assert.equal(await readOptionalLimitedJson(emptyRetry, 1024), undefined);
+  const explicitRetry = new Request("https://example.invalid/retry", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+  });
+  assert.deepEqual(await readOptionalLimitedJson(explicitRetry, 1024), {});
+  await assert.rejects(
+    readOptionalLimitedJson(new Request("https://example.invalid/retry", { method: "POST", body: "{" }), 1024),
+    MalformedJsonBodyError,
+  );
+
+  const retryRoute = await source("app/api/easy-mode/runs/[runId]/tasks/[taskId]/retry/route.ts");
+  const executor = await source("app/lib/easy-mode-executor.ts");
+  assert.match(retryRoute, /readOptionalLimitedJson/);
+  assert.match(retryRoute, /prepareEasyModeTaskRetry/);
+  assert.match(executor, /const brandingInput = await dependencies\.loadBrandingInput\(claim\.context\)/);
+  assert.doesNotMatch(retryRoute, /brandStyle|targetAudience|taskInput|payload/);
 });
 
 test("AI Manager completion resumes the automatic runner and the UI does not offer another start", async () => {

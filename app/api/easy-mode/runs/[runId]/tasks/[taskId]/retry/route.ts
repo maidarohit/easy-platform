@@ -8,7 +8,7 @@ import {
   prepareEasyModeTaskRetry,
 } from "@/app/lib/easy-mode-task-attempts";
 import { validateEasyModeRunId } from "@/app/lib/easy-mode-run-validation";
-import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import { MalformedJsonBodyError, readOptionalLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
 const MAX_BODY_BYTES = 1024;
 type RouteContext = { params: Promise<{ runId: string; taskId: string }> };
@@ -20,17 +20,16 @@ export async function POST(request: Request, { params }: RouteContext) {
   } catch {
     return Response.json({ error: "Authentication is required." }, { status: 401 });
   }
-  if (request.body) {
-    try {
-      const body = await readLimitedJson(request, MAX_BODY_BYTES);
-      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length > 0) {
-        return Response.json({ error: "Invalid retry request." }, { status: 400 });
-      }
-    } catch (error) {
-      if (error instanceof RequestBodyTooLargeError) return Response.json({ error: "Request is too large." }, { status: 413 });
-      if (error instanceof MalformedJsonBodyError) return Response.json({ error: "Invalid retry request." }, { status: 400 });
-      throw error;
+  try {
+    const body = await readOptionalLimitedJson(request, MAX_BODY_BYTES);
+    if (body !== undefined &&
+        (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length > 0)) {
+      return Response.json({ error: "Invalid retry request." }, { status: 400 });
     }
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return Response.json({ error: "Request is too large." }, { status: 413 });
+    if (error instanceof MalformedJsonBodyError) return Response.json({ error: "Invalid retry request." }, { status: 400 });
+    throw error;
   }
 
   const routeParams = await params;

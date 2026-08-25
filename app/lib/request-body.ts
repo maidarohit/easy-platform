@@ -71,3 +71,17 @@ export async function readLimitedJson(
     throw new MalformedJsonBodyError();
   }
 }
+
+export async function readOptionalLimitedJson(
+  request: Request,
+  maxBytes: number
+): Promise<unknown | undefined> {
+  const rawBody = await readLimitedRawBody(request, maxBytes);
+  if (rawBody.length === 0) return undefined;
+
+  try {
+    return JSON.parse(rawBody.toString("utf8")) as unknown;
+  } catch {
+    throw new MalformedJsonBodyError();
+  }
+}
