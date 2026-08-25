@@ -61,7 +61,10 @@ test("7. read and migration paths contain no provider calls", async () => {
 });
 
 test("8. no Easy Mode run can start and migration requires boss auth", async () => {
-  const route = await readFile(new URL("../../app/api/internal/boss/business-dna-migration/route.ts", import.meta.url), "utf8");
+  const [route, page] = await Promise.all([
+    readFile(new URL("../../app/api/internal/boss/business-dna-migration/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../app/boss/business-dna-migration/page.tsx", import.meta.url), "utf8"),
+  ]);
   assert.doesNotMatch(route, /easyModeRuns|executeEasyMode|\/api\/easy-mode/i);
   let calls = 0;
   const migrate = async () => { calls += 1; return { state: "applied" }; };
@@ -71,4 +74,5 @@ test("8. no Easy Mode run can start and migration requires boss auth", async () 
   const allowed = await handleBusinessDnaMigration(new Request("https://example.invalid", { method: "POST" }), migrate, { verify: async () => ({ uid: "boss" }), isBoss: async () => true });
   assert.equal(allowed.status, 200);
   assert.equal(calls, 1);
+  assert.match(page, /authenticatedFetch\("\/api\/internal\/boss\/business-dna-migration"/);
 });
