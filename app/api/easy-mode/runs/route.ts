@@ -6,11 +6,10 @@ import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements
 import { categoryForModule, type UsageCategory } from "@/app/lib/plan-config";
 import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 import { validateEasyModeProjectId, validateEasyModeRunCreateBody } from "@/app/lib/easy-mode-run-validation";
+import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
 const MAX_BODY_BYTES = 4 * 1024;
-const SAFE_ERROR_CODES = new Set(["TASK_FAILED", "OUTPUT_INVALID", "LIMIT_REACHED", "CANCELLED"]);
-
 function taskResponse(task: typeof easyModeTasks.$inferSelect) {
   return {
     id: task.id,
@@ -18,16 +17,19 @@ function taskResponse(task: typeof easyModeTasks.$inferSelect) {
     position: task.position,
     status: task.status,
     attemptCount: task.attemptCount,
-    safeErrorCode: task.safeErrorCode && SAFE_ERROR_CODES.has(task.safeErrorCode) ? task.safeErrorCode : null,
+    customerState: task.status === "skipped" ? "Not needed" : "Waiting",
+    canRetry: false,
+    customerMessage: null,
   };
 }
 
 async function responseForRun(run: typeof easyModeRuns.$inferSelect) {
   const tasks = await db.select().from(easyModeTasks)
     .where(eq(easyModeTasks.runId, run.id)).orderBy(asc(easyModeTasks.position));
+  const customerTasks = await customerTaskViews(run.id, tasks);
   return {
     run: { id: run.id, projectId: run.projectId, goalId: run.goalId, status: run.status, createdAt: run.createdAt },
-    tasks: tasks.map(taskResponse),
+    tasks: customerTasks,
     progress: { total: tasks.length, queued: tasks.filter((task) => task.status === "queued").length, completed: tasks.filter((task) => task.status === "completed").length, failed: tasks.filter((task) => task.status === "failed").length },
   };
 }
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   const [run] = await db.select().from(easyModeRuns).where(and(
     eq(easyModeRuns.userId, userId),
     eq(easyModeRuns.projectId, projectId),
-    inArray(easyModeRuns.status, ["queued", "running"]),
+    inArray(easyModeRuns.status, ["queued", "running", "partially_completed", "failed"]),
   )).orderBy(desc(easyModeRuns.createdAt)).limit(1);
   if (!run) return Response.json({ run: null, tasks: [], progress: null });
   return Response.json(await responseForRun(run), { headers: { "Cache-Control": "no-store" } });

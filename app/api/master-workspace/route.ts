@@ -4,6 +4,7 @@ import { easyModeRuns, easyModeTasks, projectOutputs, projects } from "@/app/db/
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { customerTaskViews, type EasyModeCustomerTask } from "@/app/lib/easy-mode-customer-status";
 
 export const WORKSPACE_MODULES = [
   "branding", "logo", "content", "website", "marketing",
@@ -75,11 +76,11 @@ export async function GET(request: Request) {
   const [latestRun] = await db.select({ id: easyModeRuns.id }).from(easyModeRuns).where(and(
     eq(easyModeRuns.projectId, projectId), eq(easyModeRuns.userId, userId),
   )).orderBy(desc(easyModeRuns.createdAt)).limit(1);
-  const taskStatuses = new Map<string, string>();
+  const taskStatuses = new Map<string, EasyModeCustomerTask>();
   if (latestRun) {
-    const tasks = await db.select({ moduleId: easyModeTasks.moduleId, status: easyModeTasks.status })
-      .from(easyModeTasks).where(eq(easyModeTasks.runId, latestRun.id));
-    for (const task of tasks) taskStatuses.set(task.moduleId, task.status);
+    const tasks = await db.select().from(easyModeTasks).where(eq(easyModeTasks.runId, latestRun.id));
+    const customerTasks = await customerTaskViews(latestRun.id, tasks);
+    for (const task of customerTasks) taskStatuses.set(task.moduleId, task);
   }
 
   return Response.json({
@@ -88,16 +89,25 @@ export async function GET(request: Request) {
       industry: project.industry, goal: project.goal,
       businessDescription: project.originalBrief || project.brandDescription,
     },
-    sections: WORKSPACE_MODULES.map((module) => ({
-      module,
-      state: latest.has(module) ? "Ready" :
-        ["queued", "running"].includes(taskStatuses.get(module) ?? "") ? "In progress" : "Not generated",
-      outputId: latest.get(module)?.id ?? null,
-      output: latest.get(module)?.output ?? null,
-      approvedAt: latest.get(module)?.approvedAt?.toISOString() ?? null,
-      reviewState: latest.has(module)
-        ? latest.get(module)?.approvedAt ? "Approved" : "Needs review"
-        : null,
-    })),
+    sections: WORKSPACE_MODULES.map((module) => {
+      const task = taskStatuses.get(module);
+      const failedState = task?.customerState === "Failed" || task?.customerState === "Needs attention";
+      return {
+        module,
+        state: failedState ? task.customerState :
+          task?.customerState === "Waiting" || task?.customerState === "In progress" ? "In progress" :
+            latest.has(module) ? "Ready" : "Not generated",
+        outputId: latest.get(module)?.id ?? null,
+        output: latest.get(module)?.output ?? null,
+        approvedAt: latest.get(module)?.approvedAt?.toISOString() ?? null,
+        reviewState: latest.has(module)
+          ? latest.get(module)?.approvedAt ? "Approved" : "Needs review"
+          : null,
+        executionMessage: failedState ? task.customerMessage : null,
+        canRetry: failedState ? task.canRetry : false,
+        retryRunId: failedState ? latestRun?.id ?? null : null,
+        retryTaskId: failedState ? task.id : null,
+      };
+    }),
   }, { headers: { "Cache-Control": "no-store" } });
 }

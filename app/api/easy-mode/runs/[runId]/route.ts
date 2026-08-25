@@ -3,9 +3,9 @@ import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { validateEasyModeRunId } from "@/app/lib/easy-mode-run-validation";
+import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
 
 type RunContext = { params: Promise<{ runId: string }> };
-const SAFE_ERROR_CODES = new Set(["TASK_FAILED", "OUTPUT_INVALID", "LIMIT_REACHED", "CANCELLED"]);
 
 export async function GET(request: Request, { params }: RunContext) {
   let userId: string;
@@ -25,21 +25,13 @@ export async function GET(request: Request, { params }: RunContext) {
     .where(and(eq(projects.id, run.projectId), eq(projects.userId, userId))).limit(1);
   if (!ownedProject) return Response.json({ error: "Business build not found." }, { status: 404 });
 
-  const tasks = await db.select({
-    id: easyModeTasks.id,
-    moduleId: easyModeTasks.moduleId,
-    position: easyModeTasks.position,
-    status: easyModeTasks.status,
-    attemptCount: easyModeTasks.attemptCount,
-    safeErrorCode: easyModeTasks.safeErrorCode,
-  }).from(easyModeTasks).where(eq(easyModeTasks.runId, run.id)).orderBy(asc(easyModeTasks.position));
+  const tasks = await db.select().from(easyModeTasks)
+    .where(eq(easyModeTasks.runId, run.id)).orderBy(asc(easyModeTasks.position));
+  const customerTasks = await customerTaskViews(run.id, tasks);
 
   return Response.json({
     run: { id: run.id, projectId: run.projectId, goalId: run.goalId, status: run.status, createdAt: run.createdAt, startedAt: run.startedAt, completedAt: run.completedAt, failedAt: run.failedAt },
-    tasks: tasks.map((task) => ({
-      ...task,
-      safeErrorCode: task.safeErrorCode && SAFE_ERROR_CODES.has(task.safeErrorCode) ? task.safeErrorCode : null,
-    })),
+    tasks: customerTasks,
     progress: { total: tasks.length, queued: tasks.filter((task) => task.status === "queued").length, running: tasks.filter((task) => task.status === "running").length, completed: tasks.filter((task) => task.status === "completed").length, failed: tasks.filter((task) => task.status === "failed").length, skipped: tasks.filter((task) => task.status === "skipped").length },
   });
 }
