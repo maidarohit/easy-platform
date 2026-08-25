@@ -1,5 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { reconcileEasyModeMarketingResult } from "@/app/lib/easy-mode-marketing-reconciliation";
+import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { isBossAdmin } from "@/app/lib/paid-entitlements";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
 export const runtime = "nodejs";
@@ -10,26 +11,30 @@ const PROJECT_ID = "5e56706a-41e9-498b-bf8a-134fffc8c06f";
 const EXECUTION_KEY = "74bb8691-4566-4c00-9c48-c6853a4d81f8";
 
 type Reconcile = typeof reconcileEasyModeMarketingResult;
+type AuthDependencies = Readonly<{
+  verify: typeof verifyFirebaseIdToken;
+  isBoss: typeof isBossAdmin;
+}>;
+const defaultAuth: AuthDependencies = { verify: verifyFirebaseIdToken, isBoss: isBossAdmin };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isAuthorized(request: Request) {
-  const expected = process.env.AI_USAGE_RECONCILIATION_SECRET;
-  const authorization = request.headers.get("authorization");
-  if (!expected || !authorization?.startsWith("Bearer ")) return false;
-  const supplied = authorization.slice(7);
-  const expectedBytes = Buffer.from(expected);
-  const suppliedBytes = Buffer.from(supplied);
-  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+async function isAuthorized(request: Request, auth: AuthDependencies) {
+  try {
+    return auth.isBoss((await auth.verify(request)).uid);
+  } catch {
+    return false;
+  }
 }
 
 export async function handleMarketing320Reconciliation(
   request: Request,
   reconcile: Reconcile = reconcileEasyModeMarketingResult,
+  auth: AuthDependencies = defaultAuth,
 ) {
-  if (!isAuthorized(request)) return Response.json({ error: "Not found." }, { status: 404 });
+  if (!(await isAuthorized(request, auth))) return Response.json({ error: "Not found." }, { status: 404 });
   let body: unknown;
   try {
     body = await readLimitedJson(request, MAX_BODY_BYTES);
