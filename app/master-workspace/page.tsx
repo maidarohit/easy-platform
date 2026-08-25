@@ -51,7 +51,6 @@ function MasterWorkspaceContent() {
   const [workspaceError, setWorkspaceError] = useState("");
   const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
   const [regeneratingOutputId, setRegeneratingOutputId] = useState<string | null>(null);
-  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -125,37 +124,6 @@ function MasterWorkspaceContent() {
       setWorkspaceError(regenerationError instanceof Error ? regenerationError.message : "Unable to regenerate this output.");
     } finally {
       setRegeneratingOutputId(null);
-    }
-  };
-
-  const retryTask = async (runId: string, taskId: string) => {
-    if (!projectId || retryingTaskId) return;
-    setRetryingTaskId(taskId);
-    setWorkspaceError("");
-    try {
-      const retryResponse = await authenticatedFetch(
-        `/api/easy-mode/runs/${encodeURIComponent(runId)}/tasks/${encodeURIComponent(taskId)}/retry`,
-        { method: "POST" },
-      );
-      const retryData = await retryResponse.json();
-      if (!retryResponse.ok) throw new Error(retryData.error || "This step cannot be retried safely.");
-      const executeResponse = await authenticatedFetch(
-        `/api/easy-mode/runs/${encodeURIComponent(runId)}/execute-next`,
-        { method: "POST" },
-      );
-      const execution = await executeResponse.json();
-      if (!executeResponse.ok) throw new Error(execution.message || execution.error || "Unable to retry this step.");
-      const workspaceResponse = await authenticatedFetch(
-        `/api/master-workspace?projectId=${encodeURIComponent(projectId)}`,
-        { cache: "no-store" },
-      );
-      const refreshed = await workspaceResponse.json();
-      if (!workspaceResponse.ok) throw new Error(refreshed.error || "Unable to refresh this workspace.");
-      setWorkspace(refreshed as WorkspaceData);
-    } catch (retryError) {
-      setWorkspaceError(retryError instanceof Error ? retryError.message : "This step cannot be retried safely.");
-    } finally {
-      setRetryingTaskId(null);
     }
   };
 
@@ -349,16 +317,6 @@ function MasterWorkspaceContent() {
                     {module.executionMessage && (
                       <div className="mt-4 rounded-2xl border border-[#E8C7BE] bg-[#FFF5F1] p-3">
                         <p className="text-sm leading-6 text-[#7C493D]">{module.executionMessage}</p>
-                        {module.canRetry && module.retryRunId && module.retryTaskId && (
-                          <button
-                            type="button"
-                            onClick={() => void retryTask(module.retryRunId as string, module.retryTaskId as string)}
-                            disabled={Boolean(retryingTaskId || approvingOutputId || regeneratingOutputId)}
-                            className="mt-3 rounded-full bg-[#103c32] px-4 py-2 text-[10px] font-semibold tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {retryingTaskId === module.retryTaskId ? "TRYING AGAIN..." : "RETRY"}
-                          </button>
-                        )}
                       </div>
                     )}
 

@@ -77,7 +77,7 @@ type ClaimInput = Readonly<{
   allowedModuleIds?: readonly EasyModePlannedModuleId[];
 }>;
 type LeasedAttemptInput = Readonly<{ attemptId: string; userId: string; leaseToken: string }>;
-type FailureInput = LeasedAttemptInput & Readonly<{ safeErrorCode: string }>;
+type FailureInput = LeasedAttemptInput & Readonly<{ safeErrorCode: string; projectOutputId?: string }>;
 
 export function validateLeaseToken(value: unknown): string | null {
   return typeof value === "string" && UUID_PATTERN.test(value) ? value.toLowerCase() : null;
@@ -333,6 +333,18 @@ async function failEasyModeAttempt(input: FailureInput, status: EasyModeAttemptF
     : ["dispatching", "running"];
   return db.transaction(async (transaction) => {
     const attempt = await loadLeasedAttempt(transaction, input, allowed);
+    let projectOutputId: string | null = null;
+    if (status === "failed_uncertain" && input.projectOutputId !== undefined) {
+      const outputId = validateUuid(input.projectOutputId);
+      if (!outputId) throw new EasyModeAttemptError("INVALID_REQUEST");
+      const [ownedOutput] = await transaction.select({ id: projectOutputs.id }).from(projectOutputs).where(and(
+        eq(projectOutputs.id, outputId),
+        eq(projectOutputs.userId, attempt.userId),
+        eq(projectOutputs.projectId, attempt.projectId),
+      )).limit(1);
+      if (!ownedOutput) throw new EasyModeAttemptError("INVALID_TRANSITION");
+      projectOutputId = ownedOutput.id;
+    }
     const now = new Date();
     const [updated] = await transaction.update(easyModeTaskAttempts).set({
       status, finishedAt: now, safeErrorCode: code,
@@ -341,6 +353,7 @@ async function failEasyModeAttempt(input: FailureInput, status: EasyModeAttemptF
     if (!updated) throw new EasyModeAttemptError("INVALID_TRANSITION");
     await transaction.update(easyModeTasks).set({
       status: "failed", failedAt: now, completedAt: null, safeErrorCode: code,
+      ...(projectOutputId ? { projectOutputId } : {}),
     }).where(and(eq(easyModeTasks.id, attempt.taskId), eq(easyModeTasks.status, "running")));
     const runStatus = await refreshRunStatus(transaction, attempt.runId);
     return Object.freeze({ attemptId: attempt.id, taskId: attempt.taskId, runStatus });
@@ -352,6 +365,67 @@ export const failEasyModeAttemptBeforeDispatch = (input: FailureInput) =>
 
 export const failEasyModeAttemptUncertain = (input: FailureInput) =>
   failEasyModeAttempt(input, "failed_uncertain");
+
+export async function reconcileUncertainEasyModeAttempt(input: Readonly<{ attemptId: string; userId: string }>) {
+  const attemptId = validateUuid(input.attemptId);
+  if (!attemptId || !input.userId || input.userId.length > 128) throw new EasyModeAttemptError("INVALID_REQUEST");
+  return db.transaction(async (transaction) => {
+    const [evidence] = await transaction.select({
+      attemptId: easyModeTaskAttempts.id,
+      runId: easyModeTaskAttempts.runId,
+      taskId: easyModeTaskAttempts.taskId,
+      projectId: easyModeTaskAttempts.projectId,
+      usageId: easyModeTaskAttempts.usageId,
+      moduleId: easyModeTasks.moduleId,
+      projectOutputId: easyModeTasks.projectOutputId,
+      outputUserId: projectOutputs.userId,
+      outputProjectId: projectOutputs.projectId,
+      outputModule: projectOutputs.module,
+      outputResult: projectOutputs.result,
+    }).from(easyModeTaskAttempts)
+      .innerJoin(easyModeTasks, eq(easyModeTasks.id, easyModeTaskAttempts.taskId))
+      .leftJoin(projectOutputs, eq(projectOutputs.id, easyModeTasks.projectOutputId))
+      .where(and(
+        eq(easyModeTaskAttempts.id, attemptId),
+        eq(easyModeTaskAttempts.userId, input.userId),
+        eq(easyModeTaskAttempts.status, "failed_uncertain"),
+        eq(easyModeTasks.status, "failed"),
+      )).limit(1);
+    if (!evidence) return Object.freeze({ state: "unresolved" as const });
+    if (!evidence.projectOutputId || evidence.outputUserId !== input.userId ||
+        evidence.outputProjectId !== evidence.projectId || evidence.outputModule !== evidence.moduleId) {
+      return Object.freeze({ state: "unresolved" as const });
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(evidence.outputResult ?? ""); } catch { return Object.freeze({ state: "unresolved" as const }); }
+    if (!getModuleAdapter(evidence.moduleId)?.validateOutput?.(parsed)) {
+      return Object.freeze({ state: "unresolved" as const });
+    }
+    const now = new Date();
+    const [completed] = await transaction.update(easyModeTaskAttempts).set({
+      status: "completed", finishedAt: now, safeErrorCode: null,
+    }).where(and(
+      eq(easyModeTaskAttempts.id, evidence.attemptId),
+      eq(easyModeTaskAttempts.status, "failed_uncertain"),
+    )).returning({ id: easyModeTaskAttempts.id });
+    if (!completed) return Object.freeze({ state: "unresolved" as const });
+    const [taskCompleted] = await transaction.update(easyModeTasks).set({
+      status: "completed", completedAt: now, failedAt: null, safeErrorCode: null,
+    }).where(and(eq(easyModeTasks.id, evidence.taskId), eq(easyModeTasks.status, "failed")))
+      .returning({ id: easyModeTasks.id });
+    if (!taskCompleted) throw new EasyModeAttemptError("INVALID_TRANSITION");
+    if (evidence.usageId) {
+      await transaction.update(aiUsage).set({ status: "success" }).where(and(
+        eq(aiUsage.id, evidence.usageId),
+        eq(aiUsage.userId, input.userId),
+        eq(aiUsage.projectId, evidence.projectId),
+        eq(aiUsage.status, "failed"),
+      ));
+    }
+    await refreshRunStatus(transaction, evidence.runId);
+    return Object.freeze({ state: "completed" as const, projectOutputId: evidence.projectOutputId });
+  });
+}
 
 export async function prepareEasyModeTaskRetry(input: Readonly<{ attemptId: string; userId: string }>) {
   const attemptId = validateUuid(input.attemptId);

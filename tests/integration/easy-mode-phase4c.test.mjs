@@ -32,7 +32,7 @@ test("retry preparation is atomic, duplicate safe, and does not charge or dispat
   assert.doesNotMatch(route, /startAiUsage|completeAiUsage|fetch\(|N8N_|publish/);
 });
 
-test("Easy Mode and Master Workspace hide internal failures and gate Retry", async () => {
+test("Easy Mode and Master Workspace hide internal failures and customer retry controls", async () => {
   const customerStatus = await source("app/lib/easy-mode-customer-status.ts");
   const runsRoute = await source("app/api/easy-mode/runs/route.ts");
   const runRoute = await source("app/api/easy-mode/runs/[runId]/route.ts");
@@ -43,8 +43,9 @@ test("Easy Mode and Master Workspace hide internal failures and gate Retry", asy
   assert.match(customerStatus, /canRetry/);
   assert.doesNotMatch(runsRoute, /safeErrorCode/);
   assert.doesNotMatch(runRoute, /safeErrorCode/);
-  assert.match(easyPage, /task\.canRetry/);
-  assert.match(workspacePage, /module\.canRetry/);
+  assert.doesNotMatch(easyPage, />Retry</);
+  assert.doesNotMatch(workspacePage, />RETRY</);
+  assert.match(easyPage, /Please contact support\. Your completed work is saved safely\./);
   assert.doesNotMatch(easyPage, /failed_uncertain|DELIVERY_UNCERTAIN|PROVIDER_/);
   assert.doesNotMatch(workspacePage, /failed_uncertain|DELIVERY_UNCERTAIN|PROVIDER_/);
 });

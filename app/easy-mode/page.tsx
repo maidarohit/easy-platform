@@ -27,18 +27,10 @@ type EasyModeRunView = {
     position: number;
     status: string;
     customerState: "Waiting" | "In progress" | "Completed" | "Failed" | "Needs attention" | "Not needed";
-    canRetry: boolean;
     customerMessage: string | null;
   }>;
   progress: { total: number; queued: number; completed: number; failed: number };
 };
-
-const taskLabel = (moduleId: string) => moduleId
-  .replace("ai-manager", "Business plan")
-  .replace("branding-context", "Brand foundation")
-  .replace("uiux", "Customer experience")
-  .replace(/-/g, " ")
-  .replace(/^./, (letter) => letter.toUpperCase());
 
 function EasyModeContent() {
   const searchParams = useSearchParams();
@@ -51,7 +43,6 @@ function EasyModeContent() {
   const [ready, setReady] = useState(false);
   const [runView, setRunView] = useState<EasyModeRunView | null>(null);
   const [executing, setExecuting] = useState(false);
-  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [executionMessage, setExecutionMessage] = useState("");
   const [error, setError] = useState(projectId ? "" : "Open a business project to continue.");
   const idempotencyKey = useRef("");
@@ -83,7 +74,7 @@ function EasyModeContent() {
           setRunView(runData as EasyModeRunView);
           setGoalId(mapExistingGoal(runData.run.goalId));
           setReady(true);
-          setExecutionMessage("Your existing business build is ready to continue.");
+          setExecutionMessage("Building your business...");
         }
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open this business.");
@@ -126,6 +117,25 @@ function EasyModeContent() {
     };
   }, [runView?.run.id, runView?.run.status]);
 
+  async function executeRun(runId: string) {
+    setExecuting(true);
+    try {
+      const response = await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runId)}/execute-next`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json() as { message?: string; error?: string };
+      setExecutionMessage(data.message || "Building your business...");
+      const statusResponse = await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runId)}`, { cache: "no-store" });
+      const statusData = await statusResponse.json();
+      if (statusResponse.ok) setRunView(statusData as EasyModeRunView);
+      if (!response.ok && response.status !== 422) throw new Error(data.error || "Unable to build your business.");
+    } finally {
+      setExecuting(false);
+    }
+  }
+
   async function handlePreflight() {
     if (!project || submitting) return;
     if (!industry.trim()) {
@@ -155,52 +165,11 @@ function EasyModeContent() {
       setRunView(runData as EasyModeRunView);
       setExecutionMessage("");
       setReady(true);
+      await executeRun((runData as EasyModeRunView).run.id);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to prepare your business.");
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleExecuteNext() {
-    if (!runView || executing) return;
-    setExecuting(true);
-    setError("");
-    try {
-      const response = await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runView.run.id)}/execute-next`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await response.json() as { message?: string; error?: string };
-      setExecutionMessage(data.message || "This step could not be started.");
-      if (!response.ok && !data.message) throw new Error(data.error || "Unable to start the next step.");
-      const statusResponse = await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runView.run.id)}`, { cache: "no-store" });
-      const statusData = await statusResponse.json();
-      if (statusResponse.ok) setRunView(statusData as EasyModeRunView);
-    } catch (executeError) {
-      setError(executeError instanceof Error ? executeError.message : "Unable to start the next step.");
-    } finally {
-      setExecuting(false);
-    }
-  }
-
-  async function handleRetry(taskId: string) {
-    if (!runView || retryingTaskId || executing) return;
-    setRetryingTaskId(taskId);
-    setError("");
-    try {
-      const retryResponse = await authenticatedFetch(
-        `/api/easy-mode/runs/${encodeURIComponent(runView.run.id)}/tasks/${encodeURIComponent(taskId)}/retry`,
-        { method: "POST" },
-      );
-      const retryData = await retryResponse.json();
-      if (!retryResponse.ok) throw new Error(retryData.error || "This step cannot be retried safely.");
-      await handleExecuteNext();
-    } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "This step cannot be retried safely.");
-    } finally {
-      setRetryingTaskId(null);
     }
   }
 
@@ -243,34 +212,28 @@ function EasyModeContent() {
                   </div>
                 </fieldset>
 
-                <button type="button" onClick={handlePreflight} disabled={submitting || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Getting things ready…" : "Build My Business"}</button>
+                <button type="button" onClick={handlePreflight} disabled={submitting || executing || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Building your business…" : "Build My Business"}</button>
 
                 {ready && runView && (
                   <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5">
-                    <p className="font-semibold text-[#173D32]">Your business build is ready to continue.</p>
-                    <p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. Complete them one at a time and review progress here.</p>
-                    <div className="mt-4 space-y-2">
-                      {runView.tasks.map((task) => (
-                        <div key={task.id} className="rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span>
-                            <span className={`text-xs font-semibold uppercase tracking-[0.12em] ${
-                              task.customerState === "Needs attention" || task.customerState === "Failed" ? "text-[#B4533C]" : "text-[#8A713F]"
-                            }`}>{task.customerState}</span>
-                          </div>
-                          {task.customerMessage && <p className="mt-2 text-sm leading-6 text-[#606A64]">{task.customerMessage}</p>}
-                          {task.canRetry && (
-                            <button type="button" onClick={() => void handleRetry(task.id)} disabled={Boolean(retryingTaskId || executing)} className="mt-3 rounded-full border border-[#A8B8A7] bg-white px-4 py-2 text-xs font-semibold text-[#173D32] disabled:cursor-not-allowed disabled:opacity-50">
-                              {retryingTaskId === task.id ? "Trying again…" : "Retry"}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    {executionMessage && <p className="mt-4 text-sm font-medium text-[#344039]">{executionMessage}</p>}
-                    <button type="button" onClick={handleExecuteNext} disabled={executing || Boolean(retryingTaskId) || runView.run.status === "running" || runView.run.status === "completed" || runView.tasks.some((task) => task.status === "failed")} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                      {executing ? "Starting your build…" : runView.run.status === "running" ? "Building automatically…" : "Start Building"}
-                    </button>
+                    {runView.run.status === "completed" ? (
+                      <>
+                        <p className="font-semibold text-[#173D32]">Your business workspace is ready.</p>
+                        <p className="mt-2 text-sm leading-6 text-[#606A64]">Everything required for this build has been completed.</p>
+                        <Link href={`/master-workspace?projectId=${encodeURIComponent(projectId)}`} className="mt-5 inline-flex min-h-12 items-center rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white">Open Business Workspace</Link>
+                      </>
+                    ) : runView.tasks.some((task) => task.status === "failed") ? (
+                      <>
+                        <p className="font-semibold text-[#173D32]">We could not complete your business build.</p>
+                        <p className="mt-2 text-sm leading-6 text-[#606A64]">Please contact support. Your completed work is saved safely.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-semibold text-[#173D32]">Building your business...</p>
+                        <p className="mt-2 text-sm leading-6 text-[#606A64]">{runView.progress.completed} of {runView.progress.total} parts complete. You do not need to do anything.</p>
+                        {executionMessage && <p className="mt-3 text-sm font-medium text-[#344039]">{executionMessage}</p>}
+                      </>
+                    )}
                   </div>
                 )}
               </div>

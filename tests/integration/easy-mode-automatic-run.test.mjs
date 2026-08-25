@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
+import { BrandingExecutionError } from "../../app/lib/branding-execution.ts";
 import { MalformedJsonBodyError, readOptionalLimitedJson } from "../../app/lib/request-body.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -43,17 +44,55 @@ test("one start advances sequentially through every successful eligible task", a
   assert.equal(claims.length, 0);
 });
 
-test("automatic advancement stops immediately on a failed task", async () => {
-  let claims = 0;
+test("known-safe pre-dispatch failure is retried internally once without customer action", async () => {
+  const claims = [localClaim(0), { ...localClaim(0), attemptId: localClaim(1).attemptId }, localClaim(2)];
+  let loads = 0;
+  let retries = 0;
+  let completed = 0;
   const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
     enabled: () => true,
-    claim: async () => { claims += 1; return localClaim(0); },
-    loadBrandingContext: async () => { throw new Error("local failure"); },
+    claim: async () => claims.shift() ?? null,
+    loadBrandingContext: async () => {
+      loads += 1;
+      if (loads === 1) throw new Error("temporary local failure");
+      return { project: { name: "Example", industry: "Services" } };
+    },
+    prepareRetry: async () => { retries += 1; return { taskId: localClaim(0).taskId, retryReady: true }; },
+    persistContext: async () => ({ id: "context-output" }),
+    markRunning: async () => {},
+    completeAttempt: async () => { completed += 1; },
     failBeforeDispatch: async () => {},
-    progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+    progress: async () => ({ runStatus: completed === 2 ? "Completed" : "In progress", tasks: [] }),
   });
-  assert.equal(result.state, "needs_attention");
-  assert.equal(claims, 1);
+  assert.equal(result.state, "completed");
+  assert.equal(retries, 1);
+  assert.equal(loads, 3);
+});
+
+test("uncertain execution reconciles existing output before continuation and is never replayed", async () => {
+  const claims = [brandingClaim(), localClaim(1)];
+  const events = [];
+  let usageStarts = 0;
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => { events.push("claim"); return claims.shift() ?? null; },
+    loadBrandingInput: async () => ({ companyName: "Example" }),
+    startUsage: async () => { usageStarts += 1; return "usage-1"; },
+    bindUsage: async () => {}, markDispatching: async () => {},
+    executeBranding: async () => { events.push("provider"); throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain"); },
+    failUsage: async () => {}, failUncertain: async () => { events.push("uncertain"); },
+    reconcileUncertain: async () => { events.push("reconcile"); return { state: "completed", projectOutputId: "existing-output" }; },
+    prepareRetry: async () => assert.fail("uncertain work must never be retried"),
+    loadBrandingContext: async () => ({ project: { name: "Example", industry: "Services" } }),
+    persistContext: async () => ({ id: "context-output" }),
+    markRunning: async () => {}, completeAttempt: async () => {},
+    failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+    progress: async () => ({ runStatus: claims.length === 0 ? "Completed" : "In progress", tasks: [] }),
+  });
+  assert.equal(result.state, "completed");
+  assert.equal(usageStarts, 1);
+  assert.equal(events.filter((event) => event === "provider").length, 1);
+  assert.ok(events.indexOf("reconcile") < events.lastIndexOf("claim"));
 });
 
 test("completed Business plan can hand off to Branding and continue automatically", async () => {
@@ -124,8 +163,11 @@ test("AI Manager completion resumes the automatic runner and the UI does not off
   assert.match(callback, /syncEasyModeAiManagerTask\(jobId\)/);
   assert.match(callback, /executeEasyModeRun\(continuation\)/);
   assert.match(route, /executeEasyModeRun/);
-  assert.match(page, /runView\.run\.status === "running"/);
-  assert.match(page, /Building automatically/);
+  assert.match(page, /runView\.run\.status !== "running"/);
+  assert.match(page, /Building your business\.\.\./);
+  assert.match(page, /Open Business Workspace/);
+  assert.doesNotMatch(page, />Start Building</);
+  assert.doesNotMatch(page, />Retry</);
   assert.match(page, /window\.setInterval\(\(\) => void refreshRun\(\), 3_000\)/);
   assert.match(page, /runView\?\.run\.status/);
 });

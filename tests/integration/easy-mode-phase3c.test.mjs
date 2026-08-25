@@ -75,7 +75,7 @@ function dependencies(moduleId = "branding") {
       markRunning: async (input) => { count("markRunning"); received.markRunning = input; },
       completeAttempt: async () => { count("completeAttempt"); },
       failBeforeDispatch: async () => { count("failBeforeDispatch"); },
-      failUncertain: async () => { count("failUncertain"); },
+      failUncertain: async (input) => { count("failUncertain"); received.failUncertain = input; },
       completeUsage: async () => { count("completeUsage"); },
       failUsage: async () => { count("failUsage"); },
       loadBrandingContext: async () => {
@@ -189,6 +189,20 @@ test("failed persistence never completes the task and is classified uncertain", 
   assert.equal(fixture.calls.completeAttempt, undefined);
 });
 
+test("persisted output is linked for reconciliation when final task completion becomes uncertain", async () => {
+  const fixture = dependencies();
+  const result = await executeNextEasyModeTask(
+    { runId: ids.run, userId: "firebase-user" },
+    { ...fixture.values, completeAttempt: async () => { throw new Error("temporary completion failure"); } },
+  );
+  assert.equal(result.state, "needs_attention");
+  assert.equal(fixture.calls.provider, 1);
+  assert.equal(fixture.calls.persistBranding, 1);
+  assert.equal(fixture.calls.completeUsage, 1);
+  assert.equal(fixture.calls.failUsage, undefined);
+  assert.equal(fixture.received.failUncertain.projectOutputId, ids.output);
+});
+
 test("cross-tenant claims are returned only as a safe not-found state", async () => {
   const fixture = dependencies();
   const result = await executeNextEasyModeTask(
@@ -298,9 +312,10 @@ test("route, persistence, UI, and AI Manager race contracts remain controlled", 
   assert.match(brandingRoute, /executeBrandingService/);
   assert.match(brandingRoute, /verifyFirebaseIdToken/);
   assert.match(brandingRoute, /startAiUsage/);
-  assert.match(page, /Start Building/);
+  assert.doesNotMatch(page, />Start Building</);
   assert.match(page, /execute-next/);
-  assert.doesNotMatch(page, /setInterval|while\s*\(/);
+  assert.match(page, /window\.setInterval/);
+  assert.doesNotMatch(page, /while\s*\(/);
   assert.match(manager, /const failedJobs = await db/);
   assert.match(manager, /if \(failedJobs\.length > 0\)/);
 });

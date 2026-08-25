@@ -62,6 +62,8 @@ import {
   failEasyModeAttemptUncertain,
   markEasyModeAttemptDispatching,
   markEasyModeAttemptRunning,
+  prepareEasyModeTaskRetry,
+  reconcileUncertainEasyModeAttempt,
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
@@ -78,6 +80,12 @@ export type ExecuteNextResult = Readonly<{
   state: "completed" | "in_progress" | "needs_attention" | "not_available" | "disabled" | "not_found";
   message: string;
   progress?: EasyModeCustomerProgress;
+}>;
+
+type InternalExecuteResult = ExecuteNextResult & Readonly<{
+  retryableAttemptId?: string;
+  retryableTaskId?: string;
+  uncertainAttemptId?: string;
 }>;
 
 type PersistedOutput = Readonly<{ id: string }>;
@@ -104,6 +112,8 @@ type ExecutorDependencies = Readonly<{
   completeAttempt: typeof completeEasyModeAttempt;
   failBeforeDispatch: typeof failEasyModeAttemptBeforeDispatch;
   failUncertain: typeof failEasyModeAttemptUncertain;
+  prepareRetry: typeof prepareEasyModeTaskRetry;
+  reconcileUncertain: typeof reconcileUncertainEasyModeAttempt;
   completeUsage: typeof completeAiUsage;
   failUsage: typeof failAiUsage;
   loadBrandingContext: typeof loadBrandingContextInput;
@@ -139,6 +149,8 @@ const defaultDependencies: ExecutorDependencies = {
   completeAttempt: completeEasyModeAttempt,
   failBeforeDispatch: failEasyModeAttemptBeforeDispatch,
   failUncertain: failEasyModeAttemptUncertain,
+  prepareRetry: prepareEasyModeTaskRetry,
+  reconcileUncertain: reconcileUncertainEasyModeAttempt,
   completeUsage: completeAiUsage,
   failUsage: failAiUsage,
   loadBrandingContext: loadBrandingContextInput,
@@ -167,7 +179,7 @@ async function safeProgress(dependencies: ExecutorDependencies, runId: string, u
 export async function executeNextEasyModeTask(
   input: ExecuteInput,
   overrides: Partial<ExecutorDependencies> = {},
-): Promise<ExecuteNextResult> {
+): Promise<InternalExecuteResult> {
   const dependencies = { ...defaultDependencies, ...overrides };
   if (!dependencies.enabled()) {
     return { state: "disabled", message: "Business building is not available right now." };
@@ -241,9 +253,33 @@ export async function executeEasyModeRun(
   input: ExecuteInput,
   overrides: Partial<ExecutorDependencies> = {},
 ): Promise<ExecuteNextResult> {
+  const internallyRetriedTasks = new Set<string>();
   for (let step = 0; step < MAX_AUTOMATIC_STEPS; step += 1) {
     const result = await executeNextEasyModeTask(input, overrides);
-    if (result.state !== "completed" || result.progress?.runStatus === "Completed") return result;
+    const dependencies = { ...defaultDependencies, ...overrides };
+    if (result.state === "needs_attention" && result.retryableAttemptId && result.retryableTaskId &&
+        !internallyRetriedTasks.has(result.retryableTaskId)) {
+      try {
+        await dependencies.prepareRetry({ attemptId: result.retryableAttemptId, userId: input.userId });
+        internallyRetriedTasks.add(result.retryableTaskId);
+        continue;
+      } catch {
+        return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+      }
+    }
+    if (result.state === "needs_attention" && result.uncertainAttemptId) {
+      try {
+        const reconciliation = await dependencies.reconcileUncertain({
+          attemptId: result.uncertainAttemptId,
+          userId: input.userId,
+        });
+        if (reconciliation.state === "completed") continue;
+      } catch {}
+      return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+    }
+    if (result.state !== "completed" || result.progress?.runStatus === "Completed") {
+      return { state: result.state, message: result.message, progress: result.progress };
+    }
   }
   return {
     state: "needs_attention",
@@ -254,7 +290,7 @@ export async function executeEasyModeRun(
 async function executeAiManagerTask(
   claim: ClaimedEasyModeTask,
   dependencies: ExecutorDependencies,
-): Promise<ExecuteNextResult> {
+): Promise<InternalExecuteResult> {
   const lease = leaseInput(claim);
   const startedAt = Date.now();
   let usageId: string | null = null;
@@ -293,6 +329,8 @@ async function executeAiManagerTask(
       state: "needs_attention",
       message: "Business plan needs attention.",
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      ...(!usageId && !uncertain ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId } : {}),
+      ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
     };
   }
 }
@@ -300,7 +338,7 @@ async function executeAiManagerTask(
 async function executeLocalBrandingContext(
   claim: ClaimedEasyModeTask,
   dependencies: ExecutorDependencies,
-): Promise<ExecuteNextResult> {
+): Promise<InternalExecuteResult> {
   const lease = leaseInput(claim);
   try {
     const input = await dependencies.loadBrandingContext(claim.context);
@@ -324,6 +362,8 @@ async function executeLocalBrandingContext(
       state: "needs_attention",
       message: "Brand foundation needs attention.",
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      retryableAttemptId: claim.attemptId,
+      retryableTaskId: claim.taskId,
     };
   }
 }
@@ -331,12 +371,13 @@ async function executeLocalBrandingContext(
 async function executeBrandingTask(
   claim: ClaimedEasyModeTask,
   dependencies: ExecutorDependencies,
-): Promise<ExecuteNextResult> {
+): Promise<InternalExecuteResult> {
   const lease = leaseInput(claim);
   const startedAt = Date.now();
   let usageId: string | null = null;
   let usageFinalized = false;
   let providerStarted = false;
+  let persistedOutputId: string | null = null;
 
   const finalizeFailedUsageOnce = async () => {
     if (!usageId || usageFinalized) return;
@@ -362,6 +403,7 @@ async function executeBrandingTask(
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
     });
     const persisted = await dependencies.persistBranding(claim.context, result.output);
+    persistedOutputId = persisted.id;
     usageFinalized = true;
     await dependencies.completeUsage({
       usageId,
@@ -383,7 +425,11 @@ async function executeBrandingTask(
     const uncertain = providerStarted && !(error instanceof BrandingExecutionError && error.failurePoint === "before_dispatch");
     try {
       if (uncertain) {
-        await dependencies.failUncertain({ ...lease, safeErrorCode: "DELIVERY_UNCERTAIN" });
+        await dependencies.failUncertain({
+          ...lease,
+          safeErrorCode: "DELIVERY_UNCERTAIN",
+          ...(persistedOutputId ? { projectOutputId: persistedOutputId } : {}),
+        });
       } else {
         await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
       }
@@ -394,6 +440,8 @@ async function executeBrandingTask(
       state: "needs_attention",
       message: "Brand identity needs attention.",
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      ...(!usageId && !uncertain ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId } : {}),
+      ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
     };
   }
 }
@@ -414,12 +462,13 @@ async function executeAdditionalSpecialistTask(
   claim: ClaimedEasyModeTask,
   dependencies: ExecutorDependencies,
   config: AdditionalSpecialistConfig,
-): Promise<ExecuteNextResult> {
+): Promise<InternalExecuteResult> {
   const lease = leaseInput(claim);
   const startedAt = Date.now();
   let usageId: string | null = null;
   let usageFinalized = false;
   let providerStarted = false;
+  let persistedOutputId: string | null = null;
   const failUsageOnce = async () => {
     if (!usageId || usageFinalized) return;
     usageFinalized = true;
@@ -443,6 +492,7 @@ async function executeAdditionalSpecialistTask(
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
     });
     const persisted = await config.persist(claim.context, result.output);
+    persistedOutputId = persisted.id;
     usageFinalized = true;
     await dependencies.completeUsage({
       usageId,
@@ -465,7 +515,11 @@ async function executeAdditionalSpecialistTask(
       !(error instanceof SpecialistExecutionError && error.failurePoint === "before_dispatch");
     try {
       if (uncertain) {
-        await dependencies.failUncertain({ ...lease, safeErrorCode: "DELIVERY_UNCERTAIN" });
+        await dependencies.failUncertain({
+          ...lease,
+          safeErrorCode: "DELIVERY_UNCERTAIN",
+          ...(persistedOutputId ? { projectOutputId: persistedOutputId } : {}),
+        });
       } else {
         await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
       }
@@ -476,6 +530,8 @@ async function executeAdditionalSpecialistTask(
       state: "needs_attention",
       message: `${config.label} needs attention.`,
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      ...(!usageId && !uncertain ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId } : {}),
+      ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
     };
   }
 }
