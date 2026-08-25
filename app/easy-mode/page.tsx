@@ -95,6 +95,37 @@ function EasyModeContent() {
     return () => { active = false; };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!runView?.run.id || runView.run.status !== "running") return;
+    const runId = runView.run.id;
+
+    let active = true;
+    let requestInFlight = false;
+    async function refreshRun() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const response = await authenticatedFetch(
+          `/api/easy-mode/runs/${encodeURIComponent(runId)}`,
+          { cache: "no-store" },
+        );
+        const data = await response.json();
+        if (active && response.ok) setRunView(data as EasyModeRunView);
+      } catch {
+        // Keep the last known state and try again while the run remains active.
+      } finally {
+        requestInFlight = false;
+      }
+    }
+
+    void refreshRun();
+    const intervalId = window.setInterval(() => void refreshRun(), 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [runView?.run.id, runView?.run.status]);
+
   async function handlePreflight() {
     if (!project || submitting) return;
     if (!industry.trim()) {

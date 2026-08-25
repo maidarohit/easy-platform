@@ -60,4 +60,6 @@ test("AI Manager completion resumes the automatic runner and the UI does not off
   assert.match(route, /executeEasyModeRun/);
   assert.match(page, /runView\.run\.status === "running"/);
   assert.match(page, /Building automatically/);
+  assert.match(page, /window\.setInterval\(\(\) => void refreshRun\(\), 3_000\)/);
+  assert.match(page, /runView\?\.run\.status/);
 });
