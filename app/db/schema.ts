@@ -13,6 +13,7 @@ import {
   check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { BusinessDnaContent } from "@/app/lib/business-dna";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -121,6 +122,26 @@ export const projectOutputs = pgTable("project_outputs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const projectBusinessDna = pgTable(
+  "project_business_dna",
+  {
+    projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    dna: jsonb("dna").$type<BusinessDnaContent>().notNull().default({}),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    confirmed: boolean("confirmed").notNull().default(false),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    revisionCount: integer("revision_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("project_business_dna_owner_idx").on(table.userId),
+    check("project_business_dna_schema_version_check", sql`${table.schemaVersion} = 1`),
+    check("project_business_dna_revision_count_check", sql`${table.revisionCount} >= 0`),
+  ],
+);
 
 export type EasyModeRunStatus = "queued" | "running" | "partially_completed" | "completed" | "failed" | "cancelled";
 export type EasyModeTaskStatus = "queued" | "running" | "completed" | "failed" | "skipped";
