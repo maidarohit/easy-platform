@@ -24,7 +24,7 @@ function categorySwitch(category: UsageCategory): string | null {
 function isPrivateBetaUser(userId: string, category: UsageCategory): boolean {
   if (!PRIVATE_BETA_CATEGORIES.has(category)) return false;
   return new Set(
-    [process.env.PRIVATE_BETA_UIDS, process.env.PRIVATE_BETA_UIDS_EXTRA]
+    [process.env.PRIVATE_BETA_UIDS, process.env.PRIVATE_BETA_UIDS_EXTRA, process.env.PRIVATE_BETA_UIDS_TEST]
       .flatMap((value) => (value ?? "").split(","))
       .map((item) => item.trim())
       .filter(Boolean)

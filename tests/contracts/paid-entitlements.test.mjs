@@ -54,12 +54,14 @@ test("private beta access is server-only and limited to core testing categories"
   assert.match(contents, /^import "server-only";/);
   assert.match(contents, /process\.env\.PRIVATE_BETA_UIDS/);
   assert.match(contents, /process\.env\.PRIVATE_BETA_UIDS_EXTRA/);
-  assert.match(contents, /\[process\.env\.PRIVATE_BETA_UIDS, process\.env\.PRIVATE_BETA_UIDS_EXTRA\]/);
+  assert.match(contents, /process\.env\.PRIVATE_BETA_UIDS_TEST/);
+  assert.match(contents, /\[process\.env\.PRIVATE_BETA_UIDS, process\.env\.PRIVATE_BETA_UIDS_EXTRA, process\.env\.PRIVATE_BETA_UIDS_TEST\]/);
   assert.match(contents, /\.flatMap\(\(value\) => \(value \?\? ""\)\.split\(","\)\)/);
   assert.match(contents, /\.map\(\(item\) => item\.trim\(\)\)/);
   assert.match(contents, /\.filter\(Boolean\)/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS_EXTRA/);
+  assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS_TEST/);
   assert.match(contents, /PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>\(\["projects", "standardAiTasks", "aiManagerRuns", "imageGenerations", "videoGenerations", "presentationGenerations", "automationRuns", "assistantMessages"\]\)/);
   assert.match(contents, /if \(!PRIVATE_BETA_CATEGORIES\.has\(category\)\) return false/);
 });
