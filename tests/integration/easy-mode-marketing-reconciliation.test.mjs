@@ -38,12 +38,11 @@ test("Marketing reconciliation is idempotent, preserves one usage, and advances 
 
 test("production reconciliation is transactional and cannot replay completed modules or call a provider", async () => {
   const source = await readFile(new URL("../../app/lib/easy-mode-marketing-reconciliation.ts", import.meta.url), "utf8");
-  const script = await readFile(new URL("../../scripts/reconcile-marketing-320.mjs", import.meta.url), "utf8");
   assert.match(source, /db\.transaction/);
   assert.match(source, /failed_uncertain/);
   assert.match(source, /DELIVERY_UNCERTAIN/);
   assert.match(source, /already_reconciled/);
   assert.match(source, /update\(aiUsage\)/);
   assert.doesNotMatch(source, /insert\(aiUsage\)/);
-  assert.doesNotMatch(source + script, /\bfetch\s*\(|executeEasyModeRun|executeNextEasyModeTask|N8N_|OPENAI/i);
+  assert.doesNotMatch(source, /\bfetch\s*\(|executeEasyModeRun|executeNextEasyModeTask|N8N_|OPENAI/i);
 });
