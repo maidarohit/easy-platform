@@ -82,6 +82,7 @@ export type ExecuteNextResult = Readonly<{
 
 type PersistedOutput = Readonly<{ id: string }>;
 type ExecuteInput = Readonly<{ runId: string; userId: string }>;
+const MAX_AUTOMATIC_STEPS = 16;
 
 type ExecutorDependencies = Readonly<{
   enabled: () => boolean;
@@ -234,6 +235,20 @@ export async function executeNextEasyModeTask(
     execute: (options) => dependencies.executeText({ ...options, module: specialistModule }),
     persist: (context, value) => dependencies.persistText(context, specialistModule, value),
   });
+}
+
+export async function executeEasyModeRun(
+  input: ExecuteInput,
+  overrides: Partial<ExecutorDependencies> = {},
+): Promise<ExecuteNextResult> {
+  for (let step = 0; step < MAX_AUTOMATIC_STEPS; step += 1) {
+    const result = await executeNextEasyModeTask(input, overrides);
+    if (result.state !== "completed" || result.progress?.runStatus === "Completed") return result;
+  }
+  return {
+    state: "needs_attention",
+    message: "This business build needs attention before it can continue.",
+  };
 }
 
 async function executeAiManagerTask(

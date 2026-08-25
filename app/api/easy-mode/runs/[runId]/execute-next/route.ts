@@ -1,6 +1,6 @@
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import {
-  executeNextEasyModeTask,
+  executeEasyModeRun,
   isEasyModeExecutionEnabled,
 } from "@/app/lib/easy-mode-executor";
 import {
@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
   }
 
-  const result = await executeNextEasyModeTask({ runId: (await params).runId, userId });
+  const result = await executeEasyModeRun({ runId: (await params).runId, userId });
   const status = result.state === "not_found" ? 404 :
     result.state === "not_available" ? 409 :
       result.state === "needs_attention" ? 422 : 200;

@@ -5,6 +5,7 @@ import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai/types";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { syncEasyModeAiManagerTask } from "@/app/lib/easy-mode-ai-manager";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
+import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -181,7 +182,8 @@ export async function POST(request: Request, { params }: JobRouteContext) {
   }
 
   if (job.status === "completed" || job.status === "failed") {
-    await syncEasyModeAiManagerTask(jobId);
+    const continuation = await syncEasyModeAiManagerTask(jobId);
+    if (job.status === "completed" && continuation) await executeEasyModeRun(continuation);
     return Response.json({ jobId, status: job.status });
   }
 
@@ -235,7 +237,8 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     transitionedJob.status as TerminalStatus,
     transitionedJob.createdAt
   );
-  await syncEasyModeAiManagerTask(jobId);
+  const continuation = await syncEasyModeAiManagerTask(jobId);
+  if (nextStatus === "completed" && continuation) await executeEasyModeRun(continuation);
 
   return Response.json({ jobId, status: nextStatus });
 }

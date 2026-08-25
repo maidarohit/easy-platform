@@ -237,8 +237,8 @@ function EasyModeContent() {
                       ))}
                     </div>
                     {executionMessage && <p className="mt-4 text-sm font-medium text-[#344039]">{executionMessage}</p>}
-                    <button type="button" onClick={handleExecuteNext} disabled={executing || Boolean(retryingTaskId) || runView.run.status === "completed" || runView.tasks.some((task) => task.status === "failed")} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                      {executing ? "Starting the next step…" : "Start Building"}
+                    <button type="button" onClick={handleExecuteNext} disabled={executing || Boolean(retryingTaskId) || runView.run.status === "running" || runView.run.status === "completed" || runView.tasks.some((task) => task.status === "failed")} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                      {executing ? "Starting your build…" : runView.run.status === "running" ? "Building automatically…" : "Start Building"}
                     </button>
                   </div>
                 )}

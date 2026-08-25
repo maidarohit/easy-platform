@@ -92,7 +92,12 @@ export async function syncEasyModeAiManagerTask(jobId: string) {
       eq(easyModeTaskAttempts.usageId, job.usageId), eq(easyModeTaskAttempts.userId, job.userId),
       eq(easyModeTaskAttempts.projectId, job.projectId),
     )).limit(1).for("update");
-    if (!attempt || ["completed", "failed_before_dispatch", "failed_uncertain"].includes(attempt.status)) return;
+    if (!attempt) return null;
+    if (["completed", "failed_before_dispatch", "failed_uncertain"].includes(attempt.status)) {
+      return job.status === "completed" && attempt.status === "completed"
+        ? { runId: attempt.runId, userId: job.userId }
+        : null;
+    }
     const now = new Date();
     let outputId: string | null = null;
     if (job.status === "completed") {
@@ -130,5 +135,6 @@ export async function syncEasyModeAiManagerTask(jobId: string) {
       completedAt: runStatus === "completed" ? now : null,
       failedAt: runStatus === "failed" || runStatus === "partially_completed" ? now : null,
     }).where(and(eq(easyModeRuns.id, attempt.runId), eq(easyModeRuns.userId, job.userId)));
+    return job.status === "completed" ? { runId: attempt.runId, userId: job.userId } : null;
   });
 }
