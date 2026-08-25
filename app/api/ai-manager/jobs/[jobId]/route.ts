@@ -3,6 +3,8 @@ import { aiManagerJobs } from "@/app/db/schema";
 import { completeAiUsage, failAiUsage } from "@/app/lib/ai-usage";
 import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai/types";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { syncEasyModeAiManagerTask } from "@/app/lib/easy-mode-ai-manager";
+import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -79,7 +81,9 @@ export function validateAiManagerCallbackBody(
       return null;
     }
   }
-  return { jobId, status: "completed", output: output as unknown as AiManagerStrategy };
+  const validatedOutput = getModuleAdapter("ai-manager")?.validateOutput?.(output);
+  if (!validatedOutput) return null;
+  return { jobId, status: "completed", output: validatedOutput as unknown as AiManagerStrategy };
 }
 
 type JobRouteContext = { params: Promise<{ jobId: string }> };
@@ -177,6 +181,7 @@ export async function POST(request: Request, { params }: JobRouteContext) {
   }
 
   if (job.status === "completed" || job.status === "failed") {
+    await syncEasyModeAiManagerTask(jobId);
     return Response.json({ jobId, status: job.status });
   }
 
@@ -230,6 +235,7 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     transitionedJob.status as TerminalStatus,
     transitionedJob.createdAt
   );
+  await syncEasyModeAiManagerTask(jobId);
 
   return Response.json({ jobId, status: nextStatus });
 }

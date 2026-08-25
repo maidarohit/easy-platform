@@ -21,6 +21,11 @@ import {
   loadCanonicalContentInput,
 } from "@/app/lib/content-execution";
 import {
+  AI_MANAGER_WORKFLOW,
+  loadCanonicalAiManagerInput,
+  startEasyModeAiManagerJob,
+} from "@/app/lib/easy-mode-ai-manager";
+import {
   completeAiUsage,
   failAiUsage,
   startAiUsage,
@@ -60,7 +65,7 @@ import {
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
 
-const ENABLED_MODULES = ["branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
+const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
 export type EasyModeCustomerProgress = Readonly<{
@@ -86,6 +91,8 @@ type ExecutorDependencies = Readonly<{
   executeLogo: typeof executeLogoService;
   loadContentInput: typeof loadCanonicalContentInput;
   executeContent: typeof executeContentService;
+  loadAiManagerInput: typeof loadCanonicalAiManagerInput;
+  startAiManagerJob: typeof startEasyModeAiManagerJob;
   loadTextInput: typeof loadCanonicalTextSpecialistInput;
   executeText: typeof executeTextSpecialistService;
   startUsage: typeof startAiUsage;
@@ -119,6 +126,8 @@ const defaultDependencies: ExecutorDependencies = {
   executeLogo: executeLogoService,
   loadContentInput: loadCanonicalContentInput,
   executeContent: executeContentService,
+  loadAiManagerInput: loadCanonicalAiManagerInput,
+  startAiManagerJob: startEasyModeAiManagerJob,
   loadTextInput: loadCanonicalTextSpecialistInput,
   executeText: executeTextSpecialistService,
   startUsage: startAiUsage,
@@ -198,6 +207,7 @@ export async function executeNextEasyModeTask(
   if (claim.moduleId === "branding-context") {
     return executeLocalBrandingContext(claim, dependencies);
   }
+  if (claim.moduleId === "ai-manager") return executeAiManagerTask(claim, dependencies);
   if (claim.moduleId === "branding") return executeBrandingTask(claim, dependencies);
   if (claim.moduleId === "logo") {
     return executeAdditionalSpecialistTask(claim, dependencies, {
@@ -223,6 +233,52 @@ export async function executeNextEasyModeTask(
     execute: (options) => dependencies.executeText({ ...options, module: specialistModule }),
     persist: (context, value) => dependencies.persistText(context, specialistModule, value),
   });
+}
+
+async function executeAiManagerTask(
+  claim: ClaimedEasyModeTask,
+  dependencies: ExecutorDependencies,
+): Promise<ExecuteNextResult> {
+  const lease = leaseInput(claim);
+  const startedAt = Date.now();
+  let usageId: string | null = null;
+  let dispatched = false;
+  try {
+    const moduleInput = await dependencies.loadAiManagerInput(claim.context);
+    usageId = await dependencies.startUsage({
+      userId: claim.context.userId, projectId: claim.context.projectId,
+      module: "ai-manager", workflow: AI_MANAGER_WORKFLOW, model: null,
+    });
+    await dependencies.bindUsage({ ...lease, usageId });
+    await dependencies.markDispatching(lease);
+    const job = await dependencies.startAiManagerJob({ context: claim.context, input: moduleInput, usageId });
+    dispatched = true;
+    try {
+      await dependencies.markRunning({ ...lease, providerExecutionId: job.jobId });
+    } catch {
+      // The callback is durably linked by usageId and can safely finish a dispatching attempt.
+    }
+    return {
+      state: "in_progress",
+      message: "Business plan is being prepared.",
+      progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+    };
+  } catch (error) {
+    const uncertain = dispatched ||
+      (error instanceof SpecialistExecutionError && error.failurePoint === "uncertain");
+    if (usageId) {
+      try { await dependencies.failUsage({ usageId, durationMs: Math.max(0, Date.now() - startedAt) }); } catch {}
+    }
+    try {
+      if (uncertain) await dependencies.failUncertain({ ...lease, safeErrorCode: "DELIVERY_UNCERTAIN" });
+      else await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+    } catch {}
+    return {
+      state: "needs_attention",
+      message: "Business plan needs attention.",
+      progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+    };
+  }
 }
 
 async function executeLocalBrandingContext(
