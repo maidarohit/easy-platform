@@ -36,6 +36,19 @@ function projectIdFromUrl(request: Request) {
   return value && value.length <= MAX_PROJECT_ID_LENGTH ? value : null;
 }
 
+export function safeDatabaseErrorDetails(error: unknown) {
+  const candidate = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const message = error instanceof Error ? error.message : "Unknown database error";
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    code: typeof candidate.code === "string" ? candidate.code.slice(0, 32) : "UNKNOWN",
+    message: message
+      .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[redacted]")
+      .replace(/(?:password|token|secret)=\S+/gi, "$1=[redacted]")
+      .slice(0, 300),
+  };
+}
+
 export async function handleBusinessDnaGet(request: Request, deps: Dependencies = dependencies) {
   let userId: string;
   try {
@@ -49,8 +62,8 @@ export async function handleBusinessDnaGet(request: Request, deps: Dependencies 
     const dna = await deps.read(userId, projectId);
     if (dna === undefined) return Response.json({ error: "Project not found." }, { status: 404 });
     return Response.json({ success: true, dna }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    console.error("Business DNA read failed.");
+  } catch (error) {
+    console.error("Business DNA read failed.", safeDatabaseErrorDetails(error));
     return Response.json({ error: "Failed to load Business DNA." }, { status: 500 });
   }
 }
@@ -92,8 +105,8 @@ export async function handleBusinessDnaPatch(request: Request, deps: Dependencie
     });
     if (dna === undefined) return Response.json({ error: "Project not found." }, { status: 404 });
     return Response.json({ success: true, dna }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    console.error("Business DNA update failed.");
+  } catch (error) {
+    console.error("Business DNA update failed.", safeDatabaseErrorDetails(error));
     return Response.json({ error: "Failed to save Business DNA." }, { status: 500 });
   }
 }
