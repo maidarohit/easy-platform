@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import { EASY_MODE_GOALS, mapExistingGoal, type EasyModeGoalId } from "@/app/lib/easy-mode-goal-options";
+import ProductTutorial from "@/app/components/ProductTutorial";
 
 type EasyModeProject = {
   id: string;
@@ -179,7 +180,10 @@ function EasyModeContent() {
       <div className="mx-auto max-w-5xl">
         <header className="flex items-center justify-between gap-5 border-b border-[#D8DCCF] pb-5">
           <span className="text-lg font-semibold text-[#173D32]">Buzypeezy</span>
-          <Link href="/dashboard" className="text-sm font-semibold text-[#606A64] hover:text-[#173D32]">Back to Dashboard</Link>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <ProductTutorial area="easy-mode" />
+            <Link href="/dashboard" className="text-sm font-semibold text-[#606A64] hover:text-[#173D32]">Back to Dashboard</Link>
+          </div>
         </header>
 
         <section className="py-10 sm:py-14">

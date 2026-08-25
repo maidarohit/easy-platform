@@ -5,6 +5,7 @@ import Link from "next/link";
 import Sidebar from "../dashboard/components/Sidebar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
+import ProductTutorial from "@/app/components/ProductTutorial";
 
 type WorkspaceData = {
   project: { id: string; name: string; companyName?: string | null; industry?: string | null; goal?: string | null; businessDescription?: string | null };
@@ -193,6 +194,9 @@ function MasterWorkspaceContent() {
 
           {/* HEADER */}
           <section className="mb-8">
+            <div className="mb-4 flex justify-end">
+              <ProductTutorial area="master-workspace" />
+            </div>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-[#9edfe9] bg-white/70 px-4 py-2 text-[10px] font-semibold tracking-[0.25em] text-[#13cdea]">
                 MASTER INTELLIGENCE WORKSPACE
