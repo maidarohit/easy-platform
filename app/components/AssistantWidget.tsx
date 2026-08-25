@@ -4,36 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../lib/auth";
 import { useProjectMemory } from "../hooks/useProjectMemory";
+import { useBrowserSpeech } from "../hooks/useBrowserSpeech";
 
 type Message = {
   role: "user" | "assistant";
   content: string;
 };
-type SpeechRecognitionResultLike = {
-  [index: number]: {
-    transcript: string;
-  };
-  length: number;
-};
-
-type SpeechRecognitionEventLike = {
-  resultIndex: number;
-  results: ArrayLike<SpeechRecognitionResultLike>;
-};
-
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
 export default function AssistantWidget() {
   const { projectId } = useProjectMemory();
 
@@ -41,7 +17,6 @@ export default function AssistantWidget() {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [listening, setListening] = useState(false);
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const [handsFree, setHandsFree] = useState(false);
 
@@ -54,7 +29,18 @@ const sendMessageRef = useRef<
   (text?: string) => Promise<void>
 >(async () => {});
 
-const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+const speech = useBrowserSpeech({
+  locale: typeof navigator === "undefined" ? "en-US" : (navigator.language || "en-US"),
+  onTranscript: (cleanTranscript) => {
+    if (handsFreeRef.current) {
+      setInput("");
+      void sendMessageRef.current(cleanTranscript);
+      return;
+    }
+    setInput((previous) => previous.trim() ? `${previous.trim()} ${cleanTranscript}` : cleanTranscript);
+  },
+});
+const listening = speech.listening;
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -73,68 +59,6 @@ const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
     return unsubscribe;
   }, []);
-  useEffect(() => {
-  const speechWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-
-  const SpeechRecognitionApi =
-    speechWindow.SpeechRecognition ??
-    speechWindow.webkitSpeechRecognition;
-
-  if (!SpeechRecognitionApi) return;
-
-  const recognition = new SpeechRecognitionApi();
-
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = navigator.language || "en-US";
-
-  recognition.onresult = (event) => {
-    let transcript = "";
-
-    for (
-      let index = event.resultIndex;
-      index < event.results.length;
-      index += 1
-    ) {
-      transcript += event.results[index]?.[0]?.transcript ?? "";
-    }
-
-    const cleanTranscript = transcript.trim();
-
-    if (!cleanTranscript) return;
-if (handsFreeRef.current) {
-  setInput("");
-  void sendMessageRef.current(cleanTranscript);
-  return;
-}
-    setInput((previous) =>
-      previous.trim()
-        ? `${previous.trim()} ${cleanTranscript}`
-        : cleanTranscript
-    );
-  };
-
-  recognition.onend = () => {
-    setListening(false);
-  };
-
-  recognition.onerror = () => {
-    setListening(false);
-  };
-
-  recognitionRef.current = recognition;
-
-  return () => {
-    recognition.onresult = null;
-    recognition.onend = null;
-    recognition.onerror = null;
-    recognitionRef.current = null;
-  };
-}, []);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -159,42 +83,10 @@ if (handsFreeRef.current) {
   }, [projectId]);
 
   function speakHandsFreeReply(text: string) {
-    if (
-      typeof window === "undefined" ||
-      !("speechSynthesis" in window)
-    ) {
-      return;
-    }
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.lang = navigator.language || "en-US";
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    utterance.onend = () => {
+    speech.speak(text, () => {
       if (!handsFreeRef.current) return;
-
-      const recognition = recognitionRef.current;
-
-      if (!recognition) return;
-
-      try {
-        recognition.start();
-        setListening(true);
-      } catch {
-        setListening(false);
-      }
-    };
-
-    utterance.onerror = () => {
-      setListening(false);
-    };
-
-    window.speechSynthesis.speak(utterance);
+      speech.startListening();
+    });
   }
 
   const sendMessage = async (overrideMessage?: string) => {
@@ -306,9 +198,7 @@ if (handsFreeRef.current) {
     }
   };
   const toggleVoiceInput = () => {
-  const recognition = recognitionRef.current;
-
-  if (!recognition) {
+  if (!speech.recognitionSupported) {
     setMessages((previous) => [
       ...previous,
       {
@@ -322,58 +212,23 @@ if (handsFreeRef.current) {
   }
 
   if (listening) {
-    recognition.stop();
-    setListening(false);
+    speech.stopListening();
     return;
   }
 
-  try {
-    recognition.start();
-    setListening(true);
-  } catch (error) {
-    console.error("Voice input error:", error);
-    setListening(false);
-  }
+  speech.startListening();
 };
 const toggleSpeakMessage = (text: string, index: number) => {
-  if (
-    typeof window === "undefined" ||
-    !("speechSynthesis" in window)
-  ) {
-    return;
-  }
-
-  if (
-    speakingIndex === index &&
-    window.speechSynthesis.speaking
-  ) {
-    window.speechSynthesis.cancel();
+  if (!speech.synthesisSupported) return;
+  if (speakingIndex === index && speech.speaking) {
+    speech.stopSpeaking();
     setSpeakingIndex(null);
     return;
   }
-
-  window.speechSynthesis.cancel();
-
-  const utterance = new SpeechSynthesisUtterance(text);
-
-  utterance.lang = navigator.language || "en-US";
-  utterance.rate = 0.95;
-  utterance.pitch = 1;
-  utterance.volume = 1;
-
-  utterance.onstart = () => {
-    setSpeakingIndex(index);
-  };
-
-  utterance.onend = () => {
+  setSpeakingIndex(index);
+  speech.speak(text, () => {
     setSpeakingIndex(null);
-  };
-
-  utterance.onerror = () => {
-    setSpeakingIndex(null);
-  };
-
-  window.speechSynthesis.speak(utterance);
+  });
 };
   return (
     <>
@@ -397,13 +252,8 @@ const toggleSpeakMessage = (text: string, index: number) => {
   handsFreeRef.current = false;
   setHandsFree(false);
 
-  window.speechSynthesis?.cancel();
-
-  try {
-    recognitionRef.current?.stop();
-  } catch {}
-
-  setListening(false);
+  speech.stopSpeaking();
+  speech.stopListening();
   setSpeakingIndex(null);
   setOpen(false);
 }}
@@ -584,31 +434,19 @@ const toggleSpeakMessage = (text: string, index: number) => {
       setHandsFree(nextMode);
 
       if (!nextMode) {
-        window.speechSynthesis?.cancel();
-
-        try {
-          recognitionRef.current?.stop();
-        } catch {}
-
-        setListening(false);
+        speech.stopSpeaking();
+        speech.stopListening();
         setSpeakingIndex(null);
         return;
       }
 
-      const recognition = recognitionRef.current;
-
-      if (!recognition) {
+      if (!speech.recognitionSupported) {
         handsFreeRef.current = false;
         setHandsFree(false);
         return;
       }
 
-      try {
-        recognition.start();
-        setListening(true);
-      } catch {
-        setListening(false);
-      }
+      speech.startListening();
     }}
     className={`rounded-full border px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] transition ${
       handsFree

@@ -26,12 +26,40 @@ export type BusinessIntakeQuestion = Readonly<{
   id: string;
   path: BusinessIntakePath;
   question: string;
+  questionHindi?: string;
   help?: string;
   required: boolean;
   answerType: "text" | "textarea" | "choice" | "choice-or-text";
   options?: readonly Readonly<{ label: string; value: string }>[];
   applicability?: (dna: BusinessDnaContent) => boolean;
 }>;
+
+const HINDI_QUESTIONS: Readonly<Record<string, string>> = {
+  "business-name": "आपके व्यवसाय का नाम क्या है?",
+  "business-stage": "आज आपके व्यवसाय की स्थिति क्या है?",
+  "business-age": "आप यह व्यवसाय कितने समय से कर रहे हैं?",
+  "business-generation": "यह व्यवसाय कैसे शुरू हुआ?",
+  "why-started": "आपने यह व्यवसाय क्यों शुरू किया या संभाला?",
+  "founder-story": "क्या आपकी कहानी में कुछ ऐसा है जो ग्राहकों को जानना चाहिए?",
+  location: "आपका व्यवसाय कहाँ स्थित है?",
+  "service-areas": "आप स्थानीय ग्राहकों, पूरे भारत या किसी और क्षेत्र में सेवा देते हैं?",
+  "current-customers": "आज आपसे आम तौर पर कौन खरीदता है?",
+  "desired-customers": "आप किन लोगों को अपना ग्राहक बनाना चाहते हैं?",
+  "strongest-offers": "आप मुख्य रूप से क्या बेचते हैं या कौन-सी सेवाएँ देते हैं?",
+  differentiators: "ग्राहक दूसरों के बजाय आपको क्यों चुनते हैं?",
+  "existing-website": "क्या आपकी पहले से कोई वेबसाइट है?",
+  "website-problem": "आपकी मौजूदा वेबसाइट में क्या ठीक से काम नहीं कर रहा?",
+  "social-presence": "क्या आप व्यवसाय के लिए Instagram, Facebook, LinkedIn या कुछ और इस्तेमाल करते हैं?",
+  "digital-problems": "आपकी ऑनलाइन मौजूदगी में क्या ठीक से काम नहीं कर रहा?",
+  "primary-goal": "आप Buzypeezy से सबसे पहले क्या हासिल करना चाहते हैं?",
+  "future-goal": "अगले 6 से 12 महीनों में आप व्यवसाय को कहाँ देखना चाहते हैं?",
+  "lead-objective": "अभी आपके लिए सबसे उपयोगी क्या होगा?",
+  "brand-personality": "लोग आपके व्यवसाय को ऑनलाइन देखकर कैसा महसूस करें?",
+};
+
+export function businessIntakeQuestionText(question: BusinessIntakeQuestion, language: "english" | "hindi" | "hinglish") {
+  return language === "hindi" ? (question.questionHindi ?? HINDI_QUESTIONS[question.id] ?? question.question) : question.question;
+}
 
 const stage = (dna: BusinessDnaContent) => dna.identity?.businessStage?.toLowerCase() ?? "";
 export const isStartupBusiness = (dna: BusinessDnaContent) =>
