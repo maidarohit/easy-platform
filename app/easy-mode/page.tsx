@@ -36,6 +36,13 @@ const taskLabel = (moduleId: string) => moduleId
   .replace(/-/g, " ")
   .replace(/^./, (letter) => letter.toUpperCase());
 
+const taskStatusLabel = (status: string) => {
+  if (status === "completed") return "Completed";
+  if (status === "running") return "In progress";
+  if (status === "failed") return "Needs attention";
+  return "Waiting";
+};
+
 function EasyModeContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId")?.trim() || "";
@@ -68,6 +75,19 @@ function EasyModeContent() {
         setProject(loadedProject);
         setIndustry(loadedProject.industry?.trim() || "");
         setGoalId(mapExistingGoal(loadedProject.goal));
+        const runResponse = await authenticatedFetch(
+          `/api/easy-mode/runs?projectId=${encodeURIComponent(projectId)}`,
+          { cache: "no-store" },
+        );
+        const runData = await runResponse.json();
+        if (!runResponse.ok) throw new Error(runData.error || "Unable to restore your business build.");
+        if (!active) return;
+        if (runData.run) {
+          setRunView(runData as EasyModeRunView);
+          setGoalId(mapExistingGoal(runData.run.goalId));
+          setReady(true);
+          setExecutionMessage("Your existing business build is ready to continue.");
+        }
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open this business.");
       } finally {
@@ -174,7 +194,7 @@ function EasyModeContent() {
 
                 <button type="button" onClick={handlePreflight} disabled={submitting || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Getting things ready…" : "Build My Business"}</button>
 
-                {ready && runView && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Your business build is ready to start.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. Start one step at a time and review the progress here.</p><div className="mt-4 space-y-2">{customerProgress ? customerProgress.tasks.map((task) => <div key={task.label} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{task.label}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{task.status}</span></div>) : runView.tasks.map((task) => <div key={task.id} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">Waiting</span></div>)}</div>{executionMessage && <p className="mt-4 text-sm font-medium text-[#344039]">{executionMessage}</p>}<button type="button" onClick={handleExecuteNext} disabled={executing || customerProgress?.runStatus === "Completed"} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{executing ? "Starting the next step…" : "Start Building"}</button></div>}
+                {ready && runView && <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5"><p className="font-semibold text-[#173D32]">Your business build is ready to start.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">We prepared {runView.progress.total} steps. Start one step at a time and review the progress here.</p><div className="mt-4 space-y-2">{customerProgress ? customerProgress.tasks.map((task) => <div key={task.label} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{task.label}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{task.status}</span></div>) : runView.tasks.map((task) => <div key={task.id} className="flex items-center justify-between rounded-xl border border-[#D8DCCF] bg-white/70 px-4 py-3"><span className="text-sm font-medium text-[#344039]">{taskLabel(task.moduleId)}</span><span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8A713F]">{taskStatusLabel(task.status)}</span></div>)}</div>{executionMessage && <p className="mt-4 text-sm font-medium text-[#344039]">{executionMessage}</p>}<button type="button" onClick={handleExecuteNext} disabled={executing || customerProgress?.runStatus === "Completed"} className="mt-5 min-h-12 rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{executing ? "Starting the next step…" : "Start Building"}</button></div>}
               </div>
             </div>
           )}

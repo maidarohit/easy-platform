@@ -25,3 +25,7 @@ export function validateEasyModeRunCreateBody(value: unknown): EasyModeRunCreate
 export function validateEasyModeRunId(value: unknown): string | null {
   return typeof value === "string" && UUID_PATTERN.test(value) ? value : null;
 }
+
+export function validateEasyModeProjectId(value: unknown): string | null {
+  return typeof value === "string" && PROJECT_ID_PATTERN.test(value.trim()) ? value.trim() : null;
+}

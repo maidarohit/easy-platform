@@ -1,11 +1,11 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
 import { categoryForModule, type UsageCategory } from "@/app/lib/plan-config";
 import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
-import { validateEasyModeRunCreateBody } from "@/app/lib/easy-mode-run-validation";
+import { validateEasyModeProjectId, validateEasyModeRunCreateBody } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
 const MAX_BODY_BYTES = 4 * 1024;
@@ -30,6 +30,28 @@ async function responseForRun(run: typeof easyModeRuns.$inferSelect) {
     tasks: tasks.map(taskResponse),
     progress: { total: tasks.length, queued: tasks.filter((task) => task.status === "queued").length, completed: tasks.filter((task) => task.status === "completed").length, failed: tasks.filter((task) => task.status === "failed").length },
   };
+}
+
+export async function GET(request: Request) {
+  let userId: string;
+  try {
+    userId = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
+    return Response.json({ error: "Authentication is required." }, { status: 401 });
+  }
+  const projectId = validateEasyModeProjectId(new URL(request.url).searchParams.get("projectId"));
+  if (!projectId) return Response.json({ error: "Invalid project." }, { status: 400 });
+  const [project] = await db.select({ id: projects.id }).from(projects).where(and(
+    eq(projects.id, projectId), eq(projects.userId, userId),
+  )).limit(1);
+  if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
+  const [run] = await db.select().from(easyModeRuns).where(and(
+    eq(easyModeRuns.userId, userId),
+    eq(easyModeRuns.projectId, projectId),
+    inArray(easyModeRuns.status, ["queued", "running"]),
+  )).orderBy(desc(easyModeRuns.createdAt)).limit(1);
+  if (!run) return Response.json({ run: null, tasks: [], progress: null });
+  return Response.json(await responseForRun(run), { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
