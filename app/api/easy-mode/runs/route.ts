@@ -2,8 +2,7 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
-import { categoryForModule, type UsageCategory } from "@/app/lib/plan-config";
+import { easyModeQuotaError, preflightEasyModePlanQuota } from "@/app/lib/easy-mode-quota-preflight";
 import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 import { validateEasyModeProjectId, validateEasyModeRunCreateBody } from "@/app/lib/easy-mode-run-validation";
 import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
@@ -88,11 +87,8 @@ export async function POST(request: Request) {
   )).limit(1);
   if (existingRun) return Response.json(await responseForRun(existingRun));
 
-  const categories = [...new Set(plan.map((moduleId) => categoryForModule(moduleId)))] as UsageCategory[];
-  for (const category of categories) {
-    const allowance = await checkUsageAllowance(userId, category);
-    if (!allowance.ok) return allowanceError(allowance);
-  }
+  const quotaPreflight = await preflightEasyModePlanQuota(userId, plan);
+  if (!quotaPreflight.ok) return easyModeQuotaError(quotaPreflight);
 
   const result = await db.transaction(async (transaction) => {
     const [createdRun] = await transaction.insert(easyModeRuns).values({

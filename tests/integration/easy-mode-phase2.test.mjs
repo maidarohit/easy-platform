@@ -33,7 +33,7 @@ test("create route authenticates, verifies ownership, preflights entitlements, a
   assert.ok(authAt >= 0 && bodyAt > authAt);
   assert.match(route, /eq\(projects\.userId, userId\)/);
   assert.match(route, /resolveEasyModePlan\(body\.goalId\)/);
-  assert.match(route, /checkUsageAllowance\(userId, category\)/);
+  assert.match(route, /preflightEasyModePlanQuota\(userId, plan\)/);
   assert.match(route, /db\.transaction/);
   assert.match(route, /plan\.map\(\(moduleId, position\)/);
   assert.match(route, /status: "queued" as const/);
