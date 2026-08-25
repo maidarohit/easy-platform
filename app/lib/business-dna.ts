@@ -140,7 +140,9 @@ export function validateBusinessDnaPatch(value: unknown): BusinessDnaContent | n
         if (items.some((entry) => entry === null)) return null;
         cleaned[field] = (items as string[]).filter(Boolean);
       } else {
-        const text = cleanString(item, longFields.has(field) ? MAX_LONG_LENGTH : MAX_SHORT_LENGTH);
+        const text = field === "originalVisionText" && typeof item === "string" && item.length <= MAX_LONG_LENGTH
+          ? item
+          : cleanString(item, longFields.has(field) ? MAX_LONG_LENGTH : MAX_SHORT_LENGTH);
         if (text === null) return null;
         cleaned[field] = text;
       }
