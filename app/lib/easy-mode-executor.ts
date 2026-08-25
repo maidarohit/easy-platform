@@ -42,6 +42,13 @@ import {
   type SpecialistExecutionResult,
 } from "@/app/lib/specialist-execution";
 import {
+  executeTextSpecialistService,
+  getTextSpecialistConfig,
+  loadCanonicalTextSpecialistInput,
+  TEXT_SPECIALIST_MODULES,
+  type TextSpecialistModule,
+} from "@/app/lib/text-specialist-execution";
+import {
   bindEasyModeAttemptUsage,
   claimNextEasyModeTask,
   completeEasyModeAttempt,
@@ -53,7 +60,7 @@ import {
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
 
-const ENABLED_MODULES = ["branding-context", "branding", "logo", "content"] as const;
+const ENABLED_MODULES = ["branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
 export type EasyModeCustomerProgress = Readonly<{
@@ -79,6 +86,8 @@ type ExecutorDependencies = Readonly<{
   executeLogo: typeof executeLogoService;
   loadContentInput: typeof loadCanonicalContentInput;
   executeContent: typeof executeContentService;
+  loadTextInput: typeof loadCanonicalTextSpecialistInput;
+  executeText: typeof executeTextSpecialistService;
   startUsage: typeof startAiUsage;
   bindUsage: typeof bindEasyModeAttemptUsage;
   markDispatching: typeof markEasyModeAttemptDispatching;
@@ -92,6 +101,7 @@ type ExecutorDependencies = Readonly<{
   persistBranding: typeof persistBrandingOutputAndMemory;
   persistLogo: typeof persistLogoOutputAndMemory;
   persistContent: typeof persistContentOutputAndMemory;
+  persistText: typeof persistTextSpecialistOutputAndMemory;
   persistContext: typeof persistBrandingContextOutput;
   progress: typeof getEasyModeCustomerProgress;
 }>;
@@ -109,6 +119,8 @@ const defaultDependencies: ExecutorDependencies = {
   executeLogo: executeLogoService,
   loadContentInput: loadCanonicalContentInput,
   executeContent: executeContentService,
+  loadTextInput: loadCanonicalTextSpecialistInput,
+  executeText: executeTextSpecialistService,
   startUsage: startAiUsage,
   bindUsage: bindEasyModeAttemptUsage,
   markDispatching: markEasyModeAttemptDispatching,
@@ -122,6 +134,7 @@ const defaultDependencies: ExecutorDependencies = {
   persistBranding: persistBrandingOutputAndMemory,
   persistLogo: persistLogoOutputAndMemory,
   persistContent: persistContentOutputAndMemory,
+  persistText: persistTextSpecialistOutputAndMemory,
   persistContext: persistBrandingContextOutput,
   progress: getEasyModeCustomerProgress,
 };
@@ -194,11 +207,21 @@ export async function executeNextEasyModeTask(
       persist: dependencies.persistLogo,
     });
   }
+  if (claim.moduleId === "content") {
+    return executeAdditionalSpecialistTask(claim, dependencies, {
+      module: "content", workflow: CONTENT_AI_WORKFLOW, label: "Content",
+      loadInput: dependencies.loadContentInput,
+      execute: dependencies.executeContent,
+      persist: dependencies.persistContent,
+    });
+  }
+  const specialistModule = claim.moduleId as TextSpecialistModule;
+  const config = getTextSpecialistConfig(specialistModule);
   return executeAdditionalSpecialistTask(claim, dependencies, {
-    module: "content", workflow: CONTENT_AI_WORKFLOW, label: "Content",
-    loadInput: dependencies.loadContentInput,
-    execute: dependencies.executeContent,
-    persist: dependencies.persistContent,
+    module: specialistModule, workflow: config.workflow, label: config.label,
+    loadInput: (context) => dependencies.loadTextInput(context, specialistModule),
+    execute: (options) => dependencies.executeText({ ...options, module: specialistModule }),
+    persist: (context, value) => dependencies.persistText(context, specialistModule, value),
   });
 }
 
@@ -304,7 +327,7 @@ async function executeBrandingTask(
 }
 
 type AdditionalSpecialistConfig = Readonly<{
-  module: "logo" | "content";
+  module: "logo" | "content" | TextSpecialistModule;
   workflow: string;
   label: string;
   loadInput: (context: TrustedModuleExecutionContext) => Promise<ModuleExecutionInput>;
@@ -388,7 +411,7 @@ async function executeAdditionalSpecialistTask(
 async function insertProjectOutput(
   transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
   context: TrustedModuleExecutionContext,
-  module: "branding" | "branding-context" | "logo" | "content",
+  module: "branding" | "branding-context" | "logo" | "content" | TextSpecialistModule,
   output: NormalizedModuleOutput,
 ): Promise<PersistedOutput> {
   const result = JSON.stringify(output);
@@ -480,6 +503,43 @@ async function persistAdditionalSpecialistOutput(
         projectId: context.projectId,
         userId: context.userId,
         additionalContext,
+      });
+    }
+    return persisted;
+  });
+}
+
+export async function persistTextSpecialistOutputAndMemory(
+  context: TrustedModuleExecutionContext,
+  module: TextSpecialistModule,
+  value: unknown,
+): Promise<PersistedOutput> {
+  const output = getModuleAdapter(module)?.validateOutput?.(value);
+  if (!output) throw new Error("Invalid specialist output.");
+  return db.transaction(async (transaction) => {
+    const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
+      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
+    )).limit(1).for("update");
+    if (!project) throw new Error("Project not found.");
+    const persisted = await insertProjectOutput(transaction, context, module, output);
+    const summaryField: Readonly<Record<TextSpecialistModule, string>> = {
+      website: "websiteOverview", marketing: "marketingStrategy", seo: "seoAudit",
+      uiux: "uiuxStrategy", sales: "executiveSummary", analytics: "executiveSummary",
+    };
+    const summaryValue = output[summaryField[module]];
+    if (typeof summaryValue !== "string") throw new Error("Invalid specialist summary.");
+    const [memory] = await transaction.select({ id: projectMemory.id, additionalContext: projectMemory.additionalContext })
+      .from(projectMemory).where(and(
+        eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
+      )).limit(1);
+    const additionalContext = appendMemorySummary(memory?.additionalContext ?? null,
+      `${getTextSpecialistConfig(module).label}: ${summaryValue.slice(0, 750)}`);
+    if (memory) {
+      await transaction.update(projectMemory).set({ additionalContext, updatedAt: new Date() })
+        .where(eq(projectMemory.id, memory.id));
+    } else {
+      await transaction.insert(projectMemory).values({
+        projectId: context.projectId, userId: context.userId, additionalContext,
       });
     }
     return persisted;
