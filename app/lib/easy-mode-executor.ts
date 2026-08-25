@@ -476,6 +476,7 @@ async function insertProjectOutput(
     userId: context.userId,
     module,
     result,
+    approvedAt: null,
   }).returning({ id: projectOutputs.id });
   if (!created) throw new Error("Output persistence failed.");
   return created;

@@ -96,7 +96,7 @@ export async function syncEasyModeAiManagerTask(jobId: string) {
       const output = getModuleAdapter("ai-manager")?.validateOutput?.(raw);
       if (!output) throw new Error("Invalid AI Manager output.");
       const [created] = await transaction.insert(projectOutputs).values({
-        projectId: job.projectId, userId: job.userId, module: "ai-manager", result: JSON.stringify(output),
+        projectId: job.projectId, userId: job.userId, module: "ai-manager", result: JSON.stringify(output), approvedAt: null,
       }).returning({ id: projectOutputs.id });
       if (!created) throw new Error("AI Manager output persistence failed.");
       outputId = created.id;

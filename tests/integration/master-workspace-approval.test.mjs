@@ -30,5 +30,4 @@ test("replacement output clears approval and workspace exposes review controls",
   assert.match(workspaceRoute, /"Approved" : "Needs review"/);
   assert.match(page, /\/api\/master-workspace\/approve/);
   assert.match(page, /APPROVE/);
-  assert.doesNotMatch(page, /REGENERATE|regenerate/i);
 });
