@@ -74,6 +74,7 @@ export async function POST(req: Request) {
         .update(projectOutputs)
         .set({
           result,
+          approvedAt: null,
           updatedAt: new Date(),
         })
         .where(eq(projectOutputs.id, existingOutput.id))

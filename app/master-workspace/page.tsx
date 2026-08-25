@@ -8,7 +8,14 @@ import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 
 type WorkspaceData = {
   project: { id: string; name: string; companyName?: string | null; industry?: string | null; goal?: string | null; businessDescription?: string | null };
-  sections: Array<{ module: string; state: "Ready" | "Not generated" | "In progress"; output: Record<string, unknown> | null }>;
+  sections: Array<{
+    module: string;
+    state: "Ready" | "Not generated" | "In progress";
+    outputId: string | null;
+    output: Record<string, unknown> | null;
+    approvedAt: string | null;
+    reviewState: "Approved" | "Needs review" | null;
+  }>;
 };
 
 const MODULE_DETAILS: Readonly<Record<string, { number: string; title: string; description: string; href: string }>> = {
@@ -37,6 +44,7 @@ function MasterWorkspaceContent() {
   const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(Boolean(projectId));
   const [workspaceError, setWorkspaceError] = useState("");
+  const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -51,6 +59,33 @@ function MasterWorkspaceContent() {
       .finally(() => { if (active) setWorkspaceLoading(false); });
     return () => { active = false; };
   }, [projectId]);
+
+  const approveOutput = async (outputId: string) => {
+    if (!projectId || approvingOutputId) return;
+    setApprovingOutputId(outputId);
+    setWorkspaceError("");
+    try {
+      const response = await authenticatedFetch("/api/master-workspace/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, outputId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to approve this output.");
+      setWorkspace((current) => current ? {
+        ...current,
+        sections: current.sections.map((section) => section.outputId === outputId ? {
+          ...section,
+          approvedAt: data.approvedAt as string,
+          reviewState: "Approved",
+        } : section),
+      } : current);
+    } catch (approvalError) {
+      setWorkspaceError(approvalError instanceof Error ? approvalError.message : "Unable to approve this output.");
+    } finally {
+      setApprovingOutputId(null);
+    }
+  };
 
   const projectLink = (path: string) =>
     projectId
@@ -235,6 +270,26 @@ function MasterWorkspaceContent() {
                     <p className="mt-3 min-h-[60px] text-sm leading-6 text-[#737d78]">
                       {module.description}
                     </p>
+
+                    {module.state === "Ready" && (
+                      <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-[#ece7de] bg-[#faf8f1] px-3 py-2">
+                        <span className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+                          module.reviewState === "Approved" ? "text-[#3b9584]" : "text-[#b07d31]"
+                        }`}>
+                          {module.reviewState}
+                        </span>
+                        {module.reviewState === "Needs review" && module.outputId && (
+                          <button
+                            type="button"
+                            disabled={Boolean(approvingOutputId)}
+                            onClick={() => void approveOutput(module.outputId as string)}
+                            className="rounded-full bg-[#103c32] px-4 py-2 text-[10px] font-semibold tracking-[0.12em] text-white transition hover:bg-[#185a4b] disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {approvingOutputId === module.outputId ? "APPROVING..." : "APPROVE"}
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {module.output && (
                       <details className="mt-4 rounded-2xl border border-[#ece7de] bg-[#faf8f1] p-3">

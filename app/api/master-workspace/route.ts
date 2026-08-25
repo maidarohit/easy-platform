@@ -5,13 +5,13 @@ import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 
-const WORKSPACE_MODULES = [
+export const WORKSPACE_MODULES = [
   "branding", "logo", "content", "website", "marketing",
   "seo", "uiux", "sales", "analytics", "ai-manager",
 ] as const;
-type WorkspaceModule = (typeof WORKSPACE_MODULES)[number];
+export type WorkspaceModule = (typeof WORKSPACE_MODULES)[number];
 
-const MODULE_ALIASES: Readonly<Record<string, WorkspaceModule>> = {
+export const MODULE_ALIASES: Readonly<Record<string, WorkspaceModule>> = {
   branding: "branding", "branding-ai": "branding",
   logo: "logo", "logo-ai": "logo",
   content: "content", "content-ai": "content",
@@ -24,7 +24,7 @@ const MODULE_ALIASES: Readonly<Record<string, WorkspaceModule>> = {
   "ai-manager": "ai-manager",
 };
 
-function validatedOutput(module: WorkspaceModule, result: string) {
+export function validatedWorkspaceOutput(module: WorkspaceModule, result: string) {
   try {
     return getModuleAdapter(module)?.validateOutput?.(JSON.parse(result)) ?? null;
   } catch {
@@ -33,14 +33,22 @@ function validatedOutput(module: WorkspaceModule, result: string) {
 }
 
 export function selectLatestWorkspaceOutputs(
-  rows: readonly Readonly<{ module: string; result: string }>[]
+  rows: readonly Readonly<{ id?: string; module: string; result: string; approvedAt?: Date | null }>[]
 ) {
-  const latest = new Map<WorkspaceModule, Readonly<Record<string, unknown>>>();
+  const latest = new Map<WorkspaceModule, Readonly<{
+    id: string | null;
+    output: Readonly<Record<string, unknown>>;
+    approvedAt: Date | null;
+  }>>();
   for (const row of rows) {
     const moduleId = MODULE_ALIASES[row.module.toLowerCase()];
     if (!moduleId || latest.has(moduleId)) continue;
-    const output = validatedOutput(moduleId, row.result);
-    if (output) latest.set(moduleId, output);
+    const output = validatedWorkspaceOutput(moduleId, row.result);
+    if (output) latest.set(moduleId, {
+      id: row.id ?? null,
+      output,
+      approvedAt: row.approvedAt ?? null,
+    });
   }
   return latest;
 }
@@ -84,7 +92,12 @@ export async function GET(request: Request) {
       module,
       state: latest.has(module) ? "Ready" :
         ["queued", "running"].includes(taskStatuses.get(module) ?? "") ? "In progress" : "Not generated",
-      output: latest.get(module) ?? null,
+      outputId: latest.get(module)?.id ?? null,
+      output: latest.get(module)?.output ?? null,
+      approvedAt: latest.get(module)?.approvedAt?.toISOString() ?? null,
+      reviewState: latest.has(module)
+        ? latest.get(module)?.approvedAt ? "Approved" : "Needs review"
+        : null,
     })),
   }, { headers: { "Cache-Control": "no-store" } });
 }

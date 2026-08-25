@@ -25,7 +25,7 @@ test("latest valid output wins per module and invalid newer data is skipped safe
     { module: "branding-ai", result: JSON.stringify(branding) },
     { module: "branding", result: JSON.stringify({ ...branding, brandName: "Older Brand" }) },
   ]);
-  assert.equal(latest.get("branding")?.brandName, "Newest Brand");
+  assert.equal(latest.get("branding")?.output.brandName, "Newest Brand");
 });
 
 test("missing modules return explicit safe empty states without generation paths", async () => {
@@ -33,7 +33,7 @@ test("missing modules return explicit safe empty states without generation paths
   const page = await source("app/master-workspace/page.tsx");
   assert.match(route, /"Not generated"/);
   assert.match(route, /"In progress"/);
-  assert.match(route, /output: latest\.get\(module\) \?\? null/);
+  assert.match(route, /output: latest\.get\(module\)\?\.output \?\? null/);
   assert.match(page, /View latest output/);
   assert.doesNotMatch(route, /startAiUsage|completeAiUsage|fetch\(|N8N_|publish|insert\(|update\(|delete\(/);
 });

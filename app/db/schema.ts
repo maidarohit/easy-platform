@@ -116,6 +116,7 @@ export const projectOutputs = pgTable("project_outputs", {
 
   module: text("module").notNull(),
   result: text("result").notNull(),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
