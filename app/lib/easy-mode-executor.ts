@@ -64,6 +64,7 @@ import {
   markEasyModeAttemptRunning,
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
+import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 
@@ -612,17 +613,16 @@ export function persistContentOutputAndMemory(context: TrustedModuleExecutionCon
 }
 
 export async function loadBrandingContextInput(context: TrustedModuleExecutionContext) {
-  const [project] = await db.select().from(projects).where(and(
-    eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-  )).limit(1);
-  if (!project) throw new Error("Project not found.");
-  const [memory] = await db.select().from(projectMemory).where(and(
-    eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-  )).limit(1);
-  const [storedBranding] = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
-    eq(projectOutputs.projectId, context.projectId), eq(projectOutputs.userId, context.userId),
-    eq(projectOutputs.module, "branding"),
-  )).orderBy(desc(projectOutputs.createdAt)).limit(1);
+  const [ownedContext, brandingRows] = await Promise.all([
+    loadOwnedProjectContext(context),
+    db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
+      eq(projectOutputs.projectId, context.projectId), eq(projectOutputs.userId, context.userId),
+      eq(projectOutputs.module, "branding"),
+    )).orderBy(desc(projectOutputs.createdAt)).limit(1),
+  ]);
+  if (!ownedContext) throw new Error("Project not found.");
+  const { project, memory } = ownedContext;
+  const [storedBranding] = brandingRows;
   let brandingOutput: unknown = null;
   if (storedBranding) {
     try {

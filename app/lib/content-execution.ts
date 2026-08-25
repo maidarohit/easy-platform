@@ -1,8 +1,5 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
-import { db } from "@/app/db";
-import { projectMemory, projects } from "@/app/db/schema";
 import {
   getModuleAdapter,
   type ModuleExecutionInput,
@@ -10,17 +7,14 @@ import {
 } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const CONTENT_AI_WORKFLOW = "content-ai";
 
 export async function loadCanonicalContentInput(context: TrustedModuleExecutionContext): Promise<ModuleExecutionInput> {
-  const [project] = await db.select().from(projects).where(and(
-    eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-  )).limit(1);
-  if (!project) throw new SpecialistExecutionError("before_dispatch", 404);
-  const [memory] = await db.select().from(projectMemory).where(and(
-    eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-  )).limit(1);
+  const ownedContext = await loadOwnedProjectContext(context);
+  if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
+  const { project, memory } = ownedContext;
   const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
   const industry = memory?.industry?.trim() || project.industry?.trim() || "business services";
   const candidate = {

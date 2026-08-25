@@ -1,11 +1,9 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
-import { db } from "@/app/db";
-import { projectMemory, projects } from "@/app/db/schema";
 import { getModuleAdapter, type EasyModeModuleId, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
 export type TextSpecialistModule = (typeof TEXT_SPECIALIST_MODULES)[number];
@@ -27,13 +25,9 @@ export async function loadCanonicalTextSpecialistInput(
   context: TrustedModuleExecutionContext,
   module: TextSpecialistModule,
 ): Promise<ModuleExecutionInput> {
-  const [project] = await db.select().from(projects).where(and(
-    eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-  )).limit(1);
-  if (!project) throw new SpecialistExecutionError("before_dispatch", 404);
-  const [memory] = await db.select().from(projectMemory).where(and(
-    eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-  )).limit(1);
+  const ownedContext = await loadOwnedProjectContext(context);
+  if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
+  const { project, memory } = ownedContext;
   const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
   const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
   const targetAudience = memory?.targetAudience?.trim() || project.targetAudience?.trim() || `Customers interested in ${industry}`;

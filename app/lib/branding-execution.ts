@@ -1,8 +1,5 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
-import { db } from "@/app/db";
-import { projectMemory, projects } from "@/app/db/schema";
 import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { parseAiUsageMetadata } from "@/app/lib/ai-usage-metadata";
 import {
@@ -13,6 +10,7 @@ import {
 } from "@/app/lib/easy-mode-execution-contracts";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
+import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
 const PROVIDER_TIMEOUT_MS = 120_000;
@@ -56,16 +54,9 @@ export type BrandingExecutionOptions = Readonly<{
 export async function loadCanonicalBrandingInput(
   context: TrustedModuleExecutionContext,
 ): Promise<ModuleExecutionInput> {
-  const [project] = await db.select().from(projects).where(and(
-    eq(projects.id, context.projectId),
-    eq(projects.userId, context.userId),
-  )).limit(1);
-  if (!project) throw new BrandingExecutionError("PROVIDER_UNAVAILABLE", "before_dispatch", 404);
-
-  const [memory] = await db.select().from(projectMemory).where(and(
-    eq(projectMemory.projectId, context.projectId),
-    eq(projectMemory.userId, context.userId),
-  )).limit(1);
+  const ownedContext = await loadOwnedProjectContext(context);
+  if (!ownedContext) throw new BrandingExecutionError("PROVIDER_UNAVAILABLE", "before_dispatch", 404);
+  const { project, memory } = ownedContext;
   const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
   const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
   const candidate = {

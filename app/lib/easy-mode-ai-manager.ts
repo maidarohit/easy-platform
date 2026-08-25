@@ -2,11 +2,12 @@ import "server-only";
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
-import { aiManagerJobs, easyModeRuns, easyModeTaskAttempts, easyModeTasks, projectMemory, projectOutputs, projects } from "@/app/db/schema";
+import { aiManagerJobs, easyModeRuns, easyModeTaskAttempts, easyModeTasks, projectMemory, projectOutputs } from "@/app/db/schema";
 import { getModuleAdapter, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { deriveEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const AI_MANAGER_WORKFLOW = "ai-manager";
 
@@ -19,13 +20,9 @@ function callbackBaseUrl() {
 }
 
 export async function loadCanonicalAiManagerInput(context: TrustedModuleExecutionContext): Promise<ModuleExecutionInput> {
-  const [project] = await db.select().from(projects).where(and(
-    eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-  )).limit(1);
-  if (!project) throw new SpecialistExecutionError("before_dispatch", 404);
-  const [memory] = await db.select().from(projectMemory).where(and(
-    eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-  )).limit(1);
+  const ownedContext = await loadOwnedProjectContext(context);
+  if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
+  const { project, memory } = ownedContext;
   const candidate = {
     companyName: memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim(),
     businessDescription: memory?.businessDescription?.trim() || project.brandDescription?.trim() || project.originalBrief?.trim() || "Business growth plan",
@@ -46,7 +43,15 @@ export async function startEasyModeAiManagerJob(options: Readonly<{
 }>) {
   const webhook = options.webhookConfig ?? getN8nWebhookConfig("N8N_AI_MANAGER_WEBHOOK_URL");
   if (!webhook) throw new SpecialistExecutionError("before_dispatch", 503);
-  const [memory] = await db.select().from(projectMemory).where(and(
+  const [memory] = await db.select({
+    targetAudience: projectMemory.targetAudience,
+    brandStyle: projectMemory.brandStyle,
+    brandVoice: projectMemory.brandVoice,
+    brandColors: projectMemory.brandColors,
+    typography: projectMemory.typography,
+    marketingGoal: projectMemory.marketingGoal,
+    additionalContext: projectMemory.additionalContext,
+  }).from(projectMemory).where(and(
     eq(projectMemory.projectId, options.context.projectId), eq(projectMemory.userId, options.context.userId),
   )).limit(1);
   const [job] = await db.insert(aiManagerJobs).values({
