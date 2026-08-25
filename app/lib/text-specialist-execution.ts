@@ -30,8 +30,9 @@ export async function loadCanonicalTextSpecialistInput(
   const { project, memory } = ownedContext;
   const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
   const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
-  const targetAudience = memory?.targetAudience?.trim() || project.targetAudience?.trim() || `Customers interested in ${industry}`;
-  const brandStyle = memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional";
+  const targetAudience = (memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
+    `Customers interested in ${industry}`).slice(0, 500);
+  const brandStyle = (memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500);
   const brandDescription = memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
     project.originalBrief?.trim() || `${companyName} provides ${industry.toLowerCase()} products or services.`;
   let candidate: Record<string, string>;

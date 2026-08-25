@@ -20,6 +20,10 @@ function localClaim(index) {
   };
 }
 
+function brandingClaim() {
+  return { ...localClaim(0), moduleId: "branding" };
+}
+
 test("one start advances sequentially through every successful eligible task", async () => {
   const claims = [localClaim(0), localClaim(1), localClaim(2)];
   let completed = 0;
@@ -49,6 +53,47 @@ test("automatic advancement stops immediately on a failed task", async () => {
   });
   assert.equal(result.state, "needs_attention");
   assert.equal(claims, 1);
+});
+
+test("completed Business plan can hand off to Branding and continue automatically", async () => {
+  const claims = [brandingClaim(), localClaim(1)];
+  const events = [];
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadBrandingInput: async () => ({
+      companyName: "Example", industry: "Services", targetAudience: "Owners",
+      brandStyle: "A".repeat(500), brandDescription: "Helpful services.",
+    }),
+    startUsage: async () => { events.push("usage"); return "usage-1"; },
+    bindUsage: async () => { events.push("bound"); },
+    markDispatching: async () => { events.push("dispatching"); },
+    executeBranding: async () => { events.push("branding"); return { output: { brandName: "Example" } }; },
+    markRunning: async () => { events.push("running"); },
+    persistBranding: async () => ({ id: "branding-output" }),
+    completeUsage: async () => { events.push("usage-complete"); },
+    completeAttempt: async () => { events.push("task-complete"); },
+    loadBrandingContext: async () => ({ project: { name: "Example", industry: "Services" } }),
+    persistContext: async () => ({ id: "context-output" }),
+    failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("unexpected usage failure"),
+    progress: async () => ({ runStatus: claims.length === 0 ? "Completed" : "In progress", tasks: [] }),
+  });
+  assert.equal(result.state, "completed");
+  assert.deepEqual(events.slice(0, 7), [
+    "usage", "bound", "dispatching", "branding", "running", "usage-complete", "task-complete",
+  ]);
+  assert.equal(claims.length, 0);
+});
+
+test("server-built Branding and downstream specialist context is bounded to strict short-field contracts", async () => {
+  const branding = await source("app/lib/branding-execution.ts");
+  const specialists = await source("app/lib/text-specialist-execution.ts");
+  assert.match(branding, /brandStyle: .*\.slice\(0, 500\)/);
+  assert.match(branding, /targetAudience: [\s\S]*?\.slice\(0, 500\)/);
+  assert.match(specialists, /const brandStyle = .*\.slice\(0, 500\)/);
+  assert.match(specialists, /const targetAudience = [\s\S]*?\.slice\(0, 500\)/);
 });
 
 test("AI Manager completion resumes the automatic runner and the UI does not offer another start", async () => {

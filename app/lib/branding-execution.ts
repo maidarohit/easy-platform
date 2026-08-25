@@ -62,8 +62,9 @@ export async function loadCanonicalBrandingInput(
   const candidate = {
     companyName,
     industry,
-    targetAudience: memory?.targetAudience?.trim() || project.targetAudience?.trim() || `Customers interested in ${industry}`,
-    brandStyle: memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional",
+    targetAudience: (memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
+      `Customers interested in ${industry}`).slice(0, 500),
+    brandStyle: (memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500),
     brandDescription: memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
       project.originalBrief?.trim() || `${companyName} provides ${industry.toLowerCase()} products or services.`,
   };
