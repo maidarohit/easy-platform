@@ -228,7 +228,48 @@ function isSafeCtaLink(value: string) {
   }
 }
 
-export const validateMarketingOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.marketing);
+const LEGACY_MARKETING_FIELDS = Object.fromEntries(
+  Object.entries(OUTPUT_RULES.marketing).filter(([key]) => key !== "kpis" && key !== "marketingScore"),
+) as StringRules;
+
+function normalizeLegacyMarketingDashboard(value: unknown): Readonly<{ kpis: string; marketingScore: string }> | null {
+  if (!isRecord(value) || !exactKeys(value,
+    ["projectedLeads", "marketingScore", "conversionRate", "monthlyTraffic", "channels"])) return null;
+  const projectedLeads = value.projectedLeads;
+  const marketingScore = value.marketingScore;
+  const monthlyTraffic = value.monthlyTraffic;
+  const conversionRate = safeString(value.conversionRate, 1_000);
+  if (typeof projectedLeads !== "number" || !Number.isFinite(projectedLeads) || projectedLeads < 0 ||
+      typeof marketingScore !== "number" || !Number.isFinite(marketingScore) || marketingScore < 0 || marketingScore > 100 ||
+      typeof monthlyTraffic !== "number" || !Number.isFinite(monthlyTraffic) || monthlyTraffic < 0 ||
+      !conversionRate || !Array.isArray(value.channels) || value.channels.length === 0 || value.channels.length > 50) return null;
+  const channels: string[] = [];
+  for (const item of value.channels) {
+    if (!isRecord(item) || !exactKeys(item, ["label", "value"])) return null;
+    const label = safeString(item.label, 500);
+    if (!label || typeof item.value !== "number" || !Number.isFinite(item.value) || item.value < 0) return null;
+    channels.push(`${label}: ${item.value}`);
+  }
+  return Object.freeze({
+    kpis: `Projected leads: ${projectedLeads}\nConversion rate: ${conversionRate}\nMonthly traffic: ${monthlyTraffic}\nChannel mix: ${channels.join("; ")}`,
+    marketingScore: String(marketingScore),
+  });
+}
+
+export function validateMarketingOutput(value: unknown) {
+  const canonical = validateStringObject(value, OUTPUT_RULES.marketing);
+  if (canonical) return canonical;
+  const candidate = unwrapProviderOutput(value);
+  const legacyKeys = Object.keys(LEGACY_MARKETING_FIELDS);
+  if (!isRecord(candidate) || !exactKeys(candidate, [...legacyKeys, "marketingDashboard"])) return null;
+  const legacyStrings = validateStringObject(
+    Object.fromEntries(legacyKeys.map((key) => [key, candidate[key]])),
+    LEGACY_MARKETING_FIELDS,
+  );
+  const dashboard = normalizeLegacyMarketingDashboard(candidate.marketingDashboard);
+  if (!legacyStrings || !dashboard) return null;
+  return validateStringObject({ ...legacyStrings, ...dashboard }, OUTPUT_RULES.marketing);
+}
 export const validateSeoOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.seo, {
   colourScheme: MAX_FIELD_LENGTH, designRecommendations: MAX_FIELD_LENGTH,
   keywordResearch: MAX_FIELD_LENGTH, recommendedPages: MAX_FIELD_LENGTH,

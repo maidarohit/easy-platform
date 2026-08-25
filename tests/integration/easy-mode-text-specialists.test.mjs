@@ -17,6 +17,23 @@ const brandInput = { companyName: "Example", industry: "Services", targetAudienc
 const salesInput = { companyName: "Example", industry: "Services", salesGoal: "Grow sales", targetAudience: "Owners", businessDescription: "Helpful services." };
 const analyticsInput = { companyName: "Example", industry: "Services", monthlyVisitors: "Unknown", monthlyLeads: "Unknown", monthlySales: "Unknown", monthlyRevenue: "Unknown", marketingBudget: "Unknown", businessGoal: "Grow", businessDescription: "Helpful services." };
 
+const canonicalMarketing = Object.fromEntries(fields.marketing.map((field) => [field, `marketing ${field} result`]));
+const legacyMarketing320 = {
+  ...Object.fromEntries(Object.entries(canonicalMarketing).filter(([key]) => !["kpis", "marketingScore"].includes(key))),
+  marketingDashboard: {
+    projectedLeads: 150,
+    marketingScore: 82,
+    conversionRate: "3.5%",
+    monthlyTraffic: 9000,
+    channels: [
+      { label: "Organic Search", value: 40 },
+      { label: "Paid Search", value: 30 },
+      { label: "Social", value: 20 },
+      { label: "Email", value: 10 },
+    ],
+  },
+};
+
 test("all six text specialists normalize a single-item n8n envelope through strict validators", async () => {
   const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
   for (const specialistModule of TEXT_SPECIALIST_MODULES) {
@@ -29,6 +46,24 @@ test("all six text specialists normalize a single-item n8n envelope through stri
     });
     assert.deepEqual(result.output, getModuleAdapter(specialistModule).validateOutput(output), specialistModule);
   }
+});
+
+test("canonical Marketing output remains valid and legacy n8n #320 output normalizes to canonical fields", () => {
+  const validator = getModuleAdapter("marketing").validateOutput;
+  assert.deepEqual(validator(canonicalMarketing), canonicalMarketing);
+  const normalized = validator({ output: legacyMarketing320 });
+  assert.equal(normalized.marketingScore, "82");
+  assert.equal(normalized.kpis, "Projected leads: 150\nConversion rate: 3.5%\nMonthly traffic: 9000\nChannel mix: Organic Search: 40; Paid Search: 30; Social: 20; Email: 10");
+  assert.equal(Object.hasOwn(normalized, "marketingDashboard"), false);
+  assert.deepEqual(Object.keys(normalized).sort(), [...fields.marketing].sort());
+});
+
+test("legacy Marketing normalization rejects missing real metrics and unknown fields", () => {
+  const validator = getModuleAdapter("marketing").validateOutput;
+  const missingScore = structuredClone(legacyMarketing320);
+  delete missingScore.marketingDashboard.marketingScore;
+  assert.equal(validator(missingScore), null);
+  assert.equal(validator({ ...legacyMarketing320, unexpected: "not allowed" }), null);
 });
 
 test("executor enables only approved text specialists and preserves persistence/usage/publication boundaries", async () => {
