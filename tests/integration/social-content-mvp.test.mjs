@@ -1,17 +1,40 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { recommendationFromSavedData, socialLocalDate, validateEditedContent } from "../../app/lib/social-content.ts";
+import { recommendationFromSavedData, selectLatestSavedMarketing, socialLocalDate, validateEditedContent } from "../../app/lib/social-content.ts";
 import { createSocialOAuthState, verifySocialOAuthState } from "../../app/lib/social-oauth-state.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
 test("recommendation selects existing saved marketing text without generation", () => {
   const saved = "1. Share the existing customer story\n2. Explain the saved service process";
-  const result = recommendationFromSavedData({ campaignIdeas: saved }, null);
+  const result = recommendationFromSavedData({ contentIdeas: saved }, null);
   assert.equal(result.content, "Share the existing customer story");
-  assert.equal(result.source, "marketing:campaignIdeas");
+  assert.equal(result.source, "marketing:contentIdeas");
   assert.equal(recommendationFromSavedData(null, { conversation: { originalVisionText: "Our saved business vision" } }).content, "Our saved business vision");
+});
+
+test("latest valid canonical or legacy marketing output supplies customer-usable content", () => {
+  const canonical = Object.fromEntries([
+    "marketingStrategy", "contentIdeas", "socialMediaStrategy", "adCopy", "contentCalendar",
+    "targetAudienceAnalysis", "emailMarketing", "paidAdsStrategy", "typography", "recommendedTechStack",
+    "seoRecommendations", "funnelSuggestions", "kpis", "growthRecommendations", "marketingScore",
+    "bestChannels", "campaignTimeline", "customerJourney", "contentMix",
+  ].map((key) => [key, key === "contentIdeas" ? "1. Show a saved client transformation\n2. Share a service tip" : `Saved ${key}`]));
+  const marketing = selectLatestSavedMarketing([
+    { module: "marketing", result: "not-json" },
+    { module: "marketing-ai", result: JSON.stringify(canonical) },
+  ]);
+  assert.equal(recommendationFromSavedData(marketing, null).content, "Show a saved client transformation");
+});
+
+test("confirmed DNA fields are deterministic fallback and internal strategy is not leaked", () => {
+  const internalOnly = { marketingStrategy: "Internal implementation plan", socialMediaStrategy: "Internal channel strategy", kpis: "Private KPI plan" };
+  const fallback = recommendationFromSavedData(internalOnly, { goals: { primaryGoal: "Attract more qualified enquiries" } });
+  assert.equal(fallback.content, "Attract more qualified enquiries");
+  assert.equal(fallback.source, "dna:primaryGoal");
+  assert.equal(recommendationFromSavedData(internalOnly, null), null);
+  assert.equal(recommendationFromSavedData(null, null), null);
 });
 
 test("daily date and edit validation are deterministic and bounded", () => {
@@ -55,6 +78,8 @@ test("OAuth state is signed, owner-bound, expiring, and fail-closed", () => {
 test("refresh is idempotent and edits never mutate project outputs", async () => {
   const [route, schema, migration] = await Promise.all([source("app/api/social/route.ts"), source("app/db/schema.ts"), source("drizzle/0019_add-social-content-loop.sql")]);
   assert.match(route, /onConflictDoNothing/);
+  assert.match(route, /projectBusinessDna\.confirmed, true/);
+  assert.match(route, /dailyPost\.status === "proposed"[\s\S]*!dailyPost\.originalContent\.trim\(\)[\s\S]*!dailyPost\.editedContent\?\.trim\(\)/);
   assert.match(schema, /social_daily_posts_project_date_unique/);
   assert.match(migration, /social_daily_posts_project_date_unique/);
   const patch = route.slice(route.indexOf("export async function PATCH"));

@@ -1,19 +1,23 @@
 import { createHash } from "node:crypto";
+import { validateMarketingOutput } from "@/app/lib/easy-mode-execution-contracts";
 
 export const SOCIAL_CONTENT_MAX_LENGTH = 2_200;
 export const SOCIAL_DATE_TIMEZONE = "UTC";
 
-const preferredFields = ["socialMediaStrategy", "contentStrategy", "campaignIdeas", "campaignStrategy", "positioningStatement", "marketingStrategy"];
-
-function unwrap(value: unknown): Record<string, unknown> | null {
-  if (Array.isArray(value) && value.length === 1) return unwrap(value[0]);
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  return unwrap(record.output) ?? record;
-}
+export const SOCIAL_MARKETING_MODULES = ["marketing", "marketing-ai"] as const;
+const CUSTOMER_USABLE_MARKETING_FIELDS = ["contentIdeas", "adCopy"] as const;
 
 export function parseSavedOutput(result: string): Record<string, unknown> | null {
-  try { return unwrap(JSON.parse(result)); } catch { return null; }
+  try { return validateMarketingOutput(JSON.parse(result)) ?? null; } catch { return null; }
+}
+
+export function selectLatestSavedMarketing(rows: readonly Readonly<{ module: string; result: string }>[]) {
+  for (const row of rows) {
+    if (!SOCIAL_MARKETING_MODULES.includes(row.module.toLowerCase() as (typeof SOCIAL_MARKETING_MODULES)[number])) continue;
+    const output = parseSavedOutput(row.result);
+    if (output) return output;
+  }
+  return null;
 }
 
 function firstSavedIdea(text: string) {
@@ -24,18 +28,24 @@ function firstSavedIdea(text: string) {
 }
 
 export function recommendationFromSavedData(marketing: Record<string, unknown> | null, dna: Record<string, unknown> | null) {
-  for (const field of preferredFields) {
+  for (const field of CUSTOMER_USABLE_MARKETING_FIELDS) {
     const value = marketing?.[field];
     if (typeof value === "string" && value.trim()) {
       const content = firstSavedIdea(value);
       return { content, source: `marketing:${field}`, sourceHash: createHash("sha256").update(`${field}:${content}`).digest("hex"), theme: field.replace(/([a-z])([A-Z])/g, "$1 $2") };
     }
   }
+  const goals = dna?.goals && typeof dna.goals === "object" ? dna.goals as Record<string, unknown> : null;
   const conversation = dna?.conversation && typeof dna.conversation === "object" ? dna.conversation as Record<string, unknown> : null;
-  const originalVision = conversation?.originalVisionText;
-  if (typeof originalVision === "string" && originalVision.trim()) {
-    const content = firstSavedIdea(originalVision);
-    return { content, source: "dna:originalVisionText", sourceHash: createHash("sha256").update(`vision:${content}`).digest("hex"), theme: "Business direction" };
+  const dnaCandidates = [
+    ["primaryGoal", goals?.primaryGoal],
+    ["vision", goals?.vision],
+    ["originalVisionText", conversation?.originalVisionText],
+  ] as const;
+  for (const [field, value] of dnaCandidates) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    const content = firstSavedIdea(value);
+    return { content, source: `dna:${field}`, sourceHash: createHash("sha256").update(`${field}:${content}`).digest("hex"), theme: "Business direction" };
   }
   return null;
 }

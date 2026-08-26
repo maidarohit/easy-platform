@@ -1,9 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projects, socialConnections, socialDailyPosts } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
-import { parseSavedOutput, recommendationFromSavedData, socialLocalDate, validateEditedContent } from "@/app/lib/social-content";
+import { recommendationFromSavedData, selectLatestSavedMarketing, SOCIAL_MARKETING_MODULES, socialLocalDate, validateEditedContent } from "@/app/lib/social-content";
 import { SOCIAL_PROVIDERS, socialProviderSetup } from "@/app/lib/social-provider";
 
 const MAX_BODY_BYTES = 8 * 1024;
@@ -22,17 +22,20 @@ export async function GET(request: Request) {
   try {
     const access = await owner(request, projectId);
     if ("response" in access) return access.response;
-    const [[dna], [marketing], connections] = await Promise.all([
-      db.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, access.userId))).limit(1),
-      db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, access.userId), eq(projectOutputs.module, "marketing"))).orderBy(desc(projectOutputs.updatedAt)).limit(1),
+    const [[dna], marketingRows, connections] = await Promise.all([
+      db.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, access.userId), eq(projectBusinessDna.confirmed, true))).limit(1),
+      db.select({ module: projectOutputs.module, result: projectOutputs.result }).from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, access.userId), inArray(projectOutputs.module, [...SOCIAL_MARKETING_MODULES]))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),
       db.select().from(socialConnections).where(and(eq(socialConnections.projectId, projectId), eq(socialConnections.userId, access.userId))),
     ]);
-    const recommendation = recommendationFromSavedData(marketing ? parseSavedOutput(marketing.result) : null, dna?.dna as Record<string, unknown> | null);
+    const recommendation = recommendationFromSavedData(selectLatestSavedMarketing(marketingRows), dna?.dna as Record<string, unknown> | null);
     const localDate = socialLocalDate();
     if (recommendation) {
       await db.insert(socialDailyPosts).values({ projectId, userId: access.userId, localDate, sourceHash: recommendation.sourceHash, originalContent: recommendation.content, theme: recommendation.theme, recommendedAction: "Review and approve before publishing." }).onConflictDoNothing({ target: [socialDailyPosts.projectId, socialDailyPosts.localDate] });
     }
-    const [dailyPost] = await db.select().from(socialDailyPosts).where(and(eq(socialDailyPosts.projectId, projectId), eq(socialDailyPosts.userId, access.userId), eq(socialDailyPosts.localDate, localDate))).limit(1);
+    let [dailyPost] = await db.select().from(socialDailyPosts).where(and(eq(socialDailyPosts.projectId, projectId), eq(socialDailyPosts.userId, access.userId), eq(socialDailyPosts.localDate, localDate))).limit(1);
+    if (dailyPost && recommendation && dailyPost.status === "proposed" && !dailyPost.originalContent.trim() && !dailyPost.editedContent?.trim()) {
+      [dailyPost] = await db.update(socialDailyPosts).set({ sourceHash: recommendation.sourceHash, originalContent: recommendation.content, theme: recommendation.theme, recommendedAction: "Review and approve before publishing.", updatedAt: new Date() }).where(and(eq(socialDailyPosts.id, dailyPost.id), eq(socialDailyPosts.userId, access.userId), eq(socialDailyPosts.status, "proposed"))).returning();
+    }
     return Response.json({
       timezone: "UTC", localDate,
       channels: SOCIAL_PROVIDERS.map((provider) => connections.find((item) => item.provider === provider) ?? socialProviderSetup(provider)),
