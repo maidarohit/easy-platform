@@ -144,7 +144,7 @@ function BusinessPreviewContent() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button type="button" onClick={startEditing} disabled={editing} className="inline-flex min-h-12 items-center rounded-[14px] border border-[#A8B8A7] bg-white px-6 font-semibold text-[#173D32] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Edit</button>
+              <button type="button" aria-expanded={editing} onClick={(event) => { event.preventDefault(); startEditing(); }} disabled={editing} className="inline-flex min-h-12 items-center rounded-[14px] border border-[#A8B8A7] bg-white px-6 font-semibold text-[#173D32] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Edit</button>
               <button type="button" disabled={editing || approving || preview.approval.approved} onClick={() => void approvePreview()} className="min-h-12 rounded-[14px] bg-[#173D32] px-6 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-4">{editing ? "Save before approval" : preview.approval.approved ? "Preview Approved" : approving ? "Approving..." : "Approve Preview"}</button>
             </div>
           </div>

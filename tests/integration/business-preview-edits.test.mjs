@@ -62,6 +62,8 @@ test("edit persistence is owner scoped, exact-keyed, revisioned, and never updat
 test("Edit mode is live and Save, Cancel, Reset remain manual and provider free", async () => {
   const page = await source("app/business-preview/page.tsx");
   assert.match(page, />Edit<\/button>/);
+  assert.match(page, /type="button" aria-expanded=\{editing\}/);
+  assert.match(page, /event\.preventDefault\(\); startEditing\(\)/);
   assert.match(page, /Edit Preview/);
   assert.match(page, /Save Changes/);
   assert.match(page, /Cancel/);
@@ -69,6 +71,8 @@ test("Edit mode is live and Save, Cancel, Reset remain manual and provider free"
   assert.match(page, /applyPreviewOverrides\(originalPreview, next\)/);
   assert.match(page, /method: "PUT"/);
   assert.match(page, /\/api\/business-preview\/edits/);
+  assert.match(page, /useSearchParams\(\)\.get\("projectId"\)/);
+  assert.doesNotMatch(page, /\/onboarding|router\.push|router\.replace|window\.location|Build My Business/i);
   assert.match(page, /Images can be added later/);
   assert.match(page, /\["desktop", "tablet", "mobile"\]/);
   for (const label of ["Brand", "Website", "Marketing", "Search", "Customer Journey"]) assert.match(page, new RegExp(`\\b${label}\\b`));
