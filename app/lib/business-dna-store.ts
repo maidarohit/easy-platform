@@ -57,10 +57,11 @@ export async function updateBusinessDnaForOwner(input: {
     )).limit(1);
     const now = new Date();
     const dna = mergeBusinessDnaContent(existing?.dna ?? null, input.patch);
-    const confirmed = input.confirmed ?? existing?.confirmed ?? false;
+    const materiallyChanged = Object.keys(input.patch).some((section) => section !== "conversation");
+    const confirmed = input.confirmed ?? (materiallyChanged ? false : existing?.confirmed ?? false);
     const confirmedAt = input.confirmed === true
       ? (existing?.confirmedAt ?? now)
-      : input.confirmed === false ? null : (existing?.confirmedAt ?? null);
+      : input.confirmed === false || materiallyChanged ? null : (existing?.confirmedAt ?? null);
     const revisionCount = existing ? existing.revisionCount + 1 : 0;
 
     const [saved] = existing

@@ -118,12 +118,16 @@ test("18. refresh still restores completed answers", async () => {
   assert.match(page, /getNextBusinessIntakeQuestion\(content\)/);
 });
 
-test("19. Business DNA is never confirmed", async () => {
-  assert.doesNotMatch(await source("app/onboarding/page.tsx"), /confirmed:\s*true/);
+test("19. voice still cannot confirm Business DNA", async () => {
+  const page = await source("app/onboarding/page.tsx");
+  assert.doesNotMatch(page, /onTranscript:[\s\S]{0,300}confirmUnderstanding/);
+  assert.match(page, /onClick=\{\(\) => void confirmUnderstanding\(\)\}/);
 });
 
-test("20. Easy Mode never starts", async () => {
-  assert.doesNotMatch(await source("app/onboarding/page.tsx"), /api\/easy-mode|executeEasyMode|Build My Business/);
+test("20. Easy Mode preview never starts a run", async () => {
+  const page = await source("app/onboarding/page.tsx");
+  assert.match(page, /disabled className=.*Next: Build My Business/);
+  assert.doesNotMatch(page, /api\/easy-mode|executeEasyMode|\/easy-mode\?/);
 });
 
 test("21. voice intake contains no provider calls", async () => {

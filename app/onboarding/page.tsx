@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
@@ -17,6 +17,12 @@ import {
   businessIntakeQuestionText,
   type BusinessIntakeQuestion,
 } from "../lib/business-intake-questions";
+import {
+  mergeExplicitDnaWithInferences,
+  unansweredSuggestedQuestions,
+  type BusinessIntakeAnalysis,
+} from "../lib/business-intake-analysis";
+import { buildBusinessReviewSections } from "../lib/business-intake-review";
 
 const languageOptions: readonly { value: BusinessDnaLanguage; label: string }[] = [
   { value: "english", label: "English" },
@@ -120,12 +126,23 @@ export default function OnboardingPage() {
   const [error, setError] = useState("");
   const [language, setLanguage] = useState<BusinessDnaLanguage>("english");
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [analysis, setAnalysis] = useState<BusinessIntakeAnalysis | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analyzingRef = useRef(false);
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const content = useMemo(() => contentFromBusinessDna(dna), [dna]);
-  const nextQuestion = useMemo(() => getNextBusinessIntakeQuestion(content), [content]);
-  const activeQuestion = useMemo(() => BUSINESS_INTAKE_QUESTIONS.find((question) => question.id === activeQuestionId) ?? nextQuestion, [activeQuestionId, nextQuestion]);
+  const understoodContent = useMemo(() => mergeExplicitDnaWithInferences(content, analysis?.extractedDna ?? {}), [content, analysis]);
+  const adaptiveQuestions = useMemo<BusinessIntakeQuestion[]>(() => analysis ? unansweredSuggestedQuestions(analysis, understoodContent).map((item): BusinessIntakeQuestion => ({
+    id: item.id, path: item.dnaPath, question: item.question, required: item.required, answerType: item.answerType, options: item.options,
+  })) : [], [analysis, understoodContent]);
+  const nextQuestion = useMemo(() => analysis ? adaptiveQuestions[0] ?? null : getNextBusinessIntakeQuestion(content), [analysis, adaptiveQuestions, content]);
+  const activeQuestion = useMemo(() => [...adaptiveQuestions, ...BUSINESS_INTAKE_QUESTIONS].find((question) => question.id === activeQuestionId) ?? nextQuestion, [activeQuestionId, adaptiveQuestions, nextQuestion]);
   const hasVision = Boolean(content.conversation?.originalVisionText?.trim());
-  const complete = hasVision && !activeQuestion;
+  const deterministicComplete = hasVision && !getNextBusinessIntakeQuestion(content);
+  const complete = hasVision && !activeQuestion && (Boolean(analysis) || deterministicComplete);
+  const reviewSections = useMemo(() => buildBusinessReviewSections(understoodContent), [understoodContent]);
   const copy = intakeCopy[language];
   const activeQuestionText = activeQuestion ? businessIntakeQuestionText(activeQuestion, language) : "";
   const speech = useBrowserSpeech({
@@ -136,6 +153,25 @@ export default function OnboardingPage() {
     },
   });
   const { speak, stopSpeaking } = speech;
+
+  const requestAnalysis = useCallback(async (id: string) => {
+    if (analyzingRef.current) return;
+    analyzingRef.current = true;
+    setIsAnalyzing(true);
+    setError("");
+    try {
+      const response = await authenticatedFetch("/api/business-dna/analyze", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: id, requestId: crypto.randomUUID() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "We could not analyze your business right now.");
+      setAnalysis(data.analysis);
+    } catch (analysisError) {
+      setAnalysis(null);
+      setError(`${analysisError instanceof Error ? analysisError.message : "Analysis failed."} You can keep answering and nothing has been lost.`);
+    } finally { analyzingRef.current = false; setIsAnalyzing(false); }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +195,7 @@ export default function OnboardingPage() {
             setDna(data.dna ?? null);
             setVision(data.dna?.conversation?.originalVisionText ?? "");
             setLanguage(data.dna?.conversation?.preferredLanguage ?? "english");
+            if (data.dna?.conversation?.originalVisionText) void requestAnalysis(id);
           }
         } else {
           const storedIdea = sessionStorage.getItem("easy-selected-business-idea");
@@ -180,7 +217,7 @@ export default function OnboardingPage() {
     }
     void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [requestAnalysis]);
 
   useEffect(() => {
     if (!autoSpeak || !activeQuestionText) return;
@@ -188,11 +225,11 @@ export default function OnboardingPage() {
     return stopSpeaking;
   }, [activeQuestionText, autoSpeak, speak, stopSpeaking]);
 
-  async function saveDnaPatch(id: string, patch: BusinessDnaContent) {
+  async function saveDnaPatch(id: string, patch: BusinessDnaContent, confirmed?: boolean) {
     const response = await authenticatedFetch("/api/business-dna", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: id, dna: patch }),
+      body: JSON.stringify({ projectId: id, dna: patch, ...(confirmed !== undefined ? { confirmed } : {}) }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "We could not save your answer.");
@@ -224,6 +261,7 @@ export default function OnboardingPage() {
         sessionStorage.removeItem("easy-selected-business-idea");
       }
       await saveDnaPatch(id, { conversation: { originalVisionText: vision, preferredLanguage: language } });
+      await requestAnalysis(id);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "We could not save your vision.");
     } finally {
@@ -259,6 +297,27 @@ export default function OnboardingPage() {
     }
   }
 
+  async function saveCorrection(path: string) {
+    if (!projectId || isSaving) return;
+    const [section, field] = path.split(".");
+    const listPath = ["serviceAreas", "products", "services", "strongestOffers", "differentiators", "socialPresence", "digitalProblems", "brandPersonality", "trustSignals"].includes(field);
+    const value = listPath ? editValue.split(/[,\n]/).map((item) => item.trim()).filter(Boolean) : editValue.trim();
+    setIsSaving(true); setError("");
+    try {
+      await saveDnaPatch(projectId, { [section]: { [field]: value } } as BusinessDnaContent, false);
+      setEditingPath(null); setEditValue("");
+    } catch (saveError) { setError(saveError instanceof Error ? saveError.message : "We could not save that correction."); }
+    finally { setIsSaving(false); }
+  }
+
+  async function confirmUnderstanding() {
+    if (!projectId || isSaving) return;
+    setIsSaving(true); setError("");
+    try { await saveDnaPatch(projectId, understoodContent, true); }
+    catch (saveError) { setError(saveError instanceof Error ? saveError.message : "We could not confirm your business yet."); }
+    finally { setIsSaving(false); }
+  }
+
   function goBack() {
     const applicable = getApplicableQuestions(content);
     const historyCandidate = [...questionHistory].reverse().find((id) => applicable.some((question) => question.id === id));
@@ -271,7 +330,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const applicableQuestions = getApplicableQuestions(content);
+  const applicableQuestions = analysis ? adaptiveQuestions : getApplicableQuestions(content);
   const completedCount = applicableQuestions.filter((question) => isQuestionComplete(question, content)).length;
 
   return (
@@ -305,15 +364,26 @@ export default function OnboardingPage() {
                 </div>
                 <button type="button" disabled={!vision.trim() || isSaving} onClick={saveInitialVision} className={`${primaryButtonClass} mt-7`}>{isSaving ? "Saving…" : "Continue"} {!isSaving && <ArrowIcon />}</button>
               </div>
-            ) : complete ? (
+            ) : complete && dna?.conversation?.confirmed ? (
               <div className="mx-auto max-w-2xl text-center">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#A8B8A7] bg-[#EEE9DC] text-2xl text-[#173D32]">✓</div>
-                <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Conversation saved</p>
-                <h1 className="mt-4 text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Great — I have enough information to understand your business.</h1>
-                <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[#606A64]">Your answers are saved. The next step will let you review and correct what I understood.</p>
-                <button type="button" disabled className={`${primaryButtonClass} mt-8`}>Review what I understood — coming next</button>
-                <button type="button" onClick={goBack} className="mt-6 block w-full text-sm font-semibold text-[#606A64] underline decoration-[#A8B8A7] underline-offset-4">Back to my answers</button>
+                <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Business DNA confirmed</p>
+                <h1 className="mt-4 text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Your business is understood.</h1>
+                <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[#606A64]">Your approved business context is saved and ready for the next step.</p>
+                <button type="button" disabled className={`${primaryButtonClass} mt-8`}>Next: Build My Business — coming in Task 5</button>
+                <button type="button" onClick={() => projectId && void saveDnaPatch(projectId, {}, false)} className="mt-6 block w-full text-sm font-semibold text-[#606A64] underline decoration-[#A8B8A7] underline-offset-4">Review or correct my details</button>
               </div>
+            ) : complete ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Please review</p>
+                <h1 className="mt-4 text-[clamp(2.4rem,6vw,4.2rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Here&apos;s what I understood about your business</h1>
+                {analysis?.understandingSummary && <p className="mt-5 text-lg leading-8 text-[#606A64]">{analysis.understandingSummary}</p>}
+                <div className="mt-8 grid gap-4 sm:grid-cols-2">{reviewSections.map((section) => <section key={section.id} className="rounded-[22px] border border-[#D8DCCF] bg-[#FCFBF7] p-5"><h2 className="text-lg font-semibold text-[#173D32]">{section.label}</h2><div className="mt-4 space-y-4">{section.items.map((item) => <div key={item.path}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7B847E]">{item.label}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#303934]">{item.value}</p></div><button type="button" onClick={() => { setEditingPath(item.path); setEditValue(item.value); }} className="text-xs font-semibold text-[#173D32] underline underline-offset-4">Edit</button></div>{editingPath === item.path && <div className="mt-3"><textarea value={editValue} onChange={(event) => setEditValue(event.target.value)} rows={3} className="w-full rounded-xl border border-[#D8DCCF] bg-white p-3 text-sm" /><div className="mt-2 flex gap-3"><button type="button" disabled={isSaving || !editValue.trim()} onClick={() => void saveCorrection(item.path)} className="text-sm font-semibold text-[#173D32]">Save correction</button><button type="button" onClick={() => setEditingPath(null)} className="text-sm text-[#606A64]">Cancel</button></div></div>}</div>)}</div></section>)}</div>
+                <section className="mt-8 rounded-[26px] border border-[#A8B8A7] bg-[#EEE9DC] p-6 sm:p-8"><h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#173D32]">Here&apos;s what I&apos;m going to build for you</h2><ul className="mt-5 space-y-3 text-base leading-7 text-[#303934]">{(analysis?.buildPlanSummary ?? ["A brand direction grounded in your business story", "A website plan shaped around your customers and offers", "SEO and marketing foundations aligned with your goals"]).map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true">✓</span><span>{item}</span></li>)}</ul><p className="mt-5 text-sm text-[#606A64]">This is a plan only. No build or specialist workflow starts here.</p></section>
+                <div className="mt-7 flex flex-wrap gap-3"><button type="button" disabled={isSaving} onClick={() => void confirmUnderstanding()} className={primaryButtonClass}>{isSaving ? "Saving…" : "Yes, this looks right"}</button><button type="button" onClick={() => { const first = reviewSections[0]?.items[0]; if (first) { setEditingPath(first.path); setEditValue(first.value); } }} className="min-h-13 rounded-[14px] border border-[#D8DCCF] bg-[#FCFBF7] px-5 text-sm font-semibold text-[#173D32]">Edit</button></div>
+              </div>
+            ) : isAnalyzing ? (
+              <div className="text-center"><p role="status" className="text-lg text-[#606A64]">Understanding your business and choosing the most useful follow-up questions…</p></div>
             ) : activeQuestion ? (
               <div>
                 <div className="flex items-center justify-between gap-5 text-sm text-[#606A64]"><span>Let’s take this one step at a time.</span><span>{completedCount} answers saved</span></div>
@@ -333,7 +403,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
             ) : null}
-            {error && <p role="alert" className="mt-6 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">{error}</p>}
+            {error && <div role="alert" className="mt-6 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700"><p>{error}</p>{hasVision && !analysis && projectId && <button type="button" disabled={isAnalyzing} onClick={() => void requestAnalysis(projectId)} className="mt-2 font-semibold underline underline-offset-4">Retry smart analysis</button>}</div>}
           </div>
         </section>
       </div>

@@ -157,15 +157,17 @@ test("17. intake persistence does not clear existing Project Memory", async () =
   assert.doesNotMatch(store, /delete\(projectMemory\)|businessName:\s*null|additionalContext:\s*null/);
 });
 
-test("18. Task 2 keeps Business DNA draft and unconfirmed", async () => {
+test("18. Task 4 confirms Business DNA only after explicit review action", async () => {
   const page = await readFile(new URL("../../app/onboarding/page.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(page, /confirmed:\s*true/);
-  assert.match(page, /Review what I understood — coming next/);
+  assert.match(page, /Yes, this looks right/);
+  assert.match(page, /confirmUnderstanding/);
+  assert.match(page, /Here&apos;s what I understood about your business/);
 });
 
-test("19. onboarding never starts Easy Mode", async () => {
+test("19. onboarding shows only a disabled Easy Mode preview", async () => {
   const page = await readFile(new URL("../../app/onboarding/page.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(page, /api\/easy-mode|\/easy-mode\?|Build My Business|executeRun/);
+  assert.match(page, /disabled className=.*Next: Build My Business/);
+  assert.doesNotMatch(page, /api\/easy-mode|\/easy-mode\?|executeRun/);
 });
 
 test("20. intake contains no provider or network AI call", async () => {
