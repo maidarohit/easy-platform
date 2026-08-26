@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { BILLING_PLANS } from "../../app/lib/billing-plans.ts";
 import { getBillingConfiguration } from "../../app/lib/billing-configuration.ts";
+import { safeLoginReturn } from "../../app/lib/safe-login-return.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -18,6 +19,20 @@ test("customer surfaces use the registry and stale GBP pricing is retired", asyn
   assert.match(home, /BILLING_PLANS/); assert.match(billing, /BILLING_PLANS/);
   assert.doesNotMatch(home + billing, /£29|£79|Enterprise/);
   await assert.rejects(readFile(new URL("../../app/components/Pricing/Pricing.tsx", import.meta.url)), /ENOENT/);
+  assert.match(home, /href={`\/billing\?plan=\$\{plan\.key\}`}/);
+});
+
+test("logged-out plan selection has a safe authenticated return path", async () => {
+  assert.equal(safeLoginReturn("/billing?plan=pro"), "/billing?plan=pro");
+  assert.equal(safeLoginReturn("/billing?plan=business"), "/billing?plan=business");
+  assert.equal(safeLoginReturn("https://evil.example/billing?plan=pro"), null);
+  assert.equal(safeLoginReturn("/dashboard"), null);
+  assert.equal(safeLoginReturn("/billing?plan=enterprise"), null);
+  const [billing, login] = await Promise.all([source("app/billing/page.tsx"), source("app/login/page.tsx")]);
+  assert.match(billing, /Log in to continue/);
+  assert.match(billing, /encodeURIComponent\(billingReturn\)/);
+  assert.match(login, /safeLoginReturn/);
+  assert.match(login, /requestedReturn \?\?/);
 });
 
 test("billing mode and key mismatch fail closed without exposing secrets", () => {
@@ -47,6 +62,7 @@ test("return UI is webhook-authoritative and customer friendly", async () => {
   const page = await source("app/billing/page.tsx");
   assert.match(page, /Waiting for payment confirmation/); assert.match(page, /Payment needs attention/);
   assert.match(page, /Subscription active/); assert.match(page, /subscription\?\.status === "pending"/);
+  assert.match(page, /Not subscribed/); assert.match(page, /Subscription cancelled/); assert.match(page, /Subscription expired/);
   assert.doesNotMatch(page, /setStatus\([^)]*active/);
 });
 
