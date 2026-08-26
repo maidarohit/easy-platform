@@ -7,7 +7,7 @@ import {
   sendEmailVerification,
   updateProfile,
 } from "firebase/auth";
-import auth from "../lib/auth";
+import auth, { authPersistenceReady } from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { firebaseAuthErrorMessage } from "../lib/firebase-auth-errors";
 
@@ -48,6 +48,7 @@ const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
   setIsSubmitting(true);
   setErrorMessage("");
   try {
+    await authPersistenceReady;
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       email.trim(),

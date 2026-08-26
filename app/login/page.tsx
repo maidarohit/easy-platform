@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import auth from "../lib/auth";
+import auth, { authPersistenceReady } from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { firebaseAuthErrorMessage } from "../lib/firebase-auth-errors";
 
@@ -33,6 +33,7 @@ export default function LoginPage() {
     setErrorMessage("");
 
     try {
+      await authPersistenceReady;
       const credential = await signInWithEmailAndPassword(
         auth,
         email.trim(),

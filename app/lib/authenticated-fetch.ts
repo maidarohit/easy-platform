@@ -1,4 +1,4 @@
-import auth from "@/app/lib/auth";
+import auth, { authPersistenceReady } from "@/app/lib/auth";
 
 type AuthenticatedUser = {
   getIdToken(forceRefresh?: boolean): Promise<string>;
@@ -76,5 +76,6 @@ export async function authenticatedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ) {
+  await authPersistenceReady;
   return authenticatedFetchWithAuth(auth, fetch, input, init);
 }
