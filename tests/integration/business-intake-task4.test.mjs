@@ -303,3 +303,51 @@ test("48 review formats stage enums and preserves correct online categories", ()
   assert.equal(items.find((item) => item.label === "Stage")?.value, "Existing / operating business");
   assert.ok(items.every((item) => !/established\/existing|have_portfolio|no_profiles/.test(item.value)));
 });
+test("49 meaningful canonical goal data suppresses the static primary-goal question", () => {
+  const primaryGoalQuestion = BUSINESS_INTAKE_QUESTIONS.find((question) => question.id === "primary-goal");
+  assert.ok(primaryGoalQuestion);
+  assert.equal(primaryGoalQuestion.question, "What would you most like Buzypeezy to help you achieve?");
+  assert.equal(businessIntakeQuestionIntent(primaryGoalQuestion), "main_goal");
+  for (const goals of [
+    { primaryGoal: "Attract serious business clients" },
+    { vision: "Build a professional online presence" },
+    { sixToTwelveMonthGoal: "Generate more qualified enquiries" },
+    { primaryLeadObjective: "Generate more qualified enquiries" },
+  ]) {
+    assert.ok(!eligibleBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, { goals }).some((question) => question.id === "primary-goal"));
+    assert.notEqual(selectCurrentBusinessIntakeQuestion({ questions: BUSINESS_INTAKE_QUESTIONS, dna: { goals }, currentQuestionId: "primary-goal" })?.id, "primary-goal");
+  }
+});
+test("50 every static intake question has an explicit supported semantic intent", () => {
+  const expectedIntents = {
+    "business-name": "business_name", "business-stage": "business_stage", "business-age": "business_age",
+    "business-generation": "business_origin", "why-started": "business_origin", "founder-story": "business_origin",
+    location: "location", "service-areas": "service_area", "current-customers": "current_customer",
+    "desired-customers": "target_customer", "strongest-offers": "products_services", differentiators: "differentiator",
+    "existing-website": "website_status", "website-problem": "website_problem", "social-presence": "social_presence",
+    "digital-problems": "online_challenges", "primary-goal": "main_goal", "future-goal": "six_to_twelve_month_goal",
+    "lead-objective": "lead_goal", "brand-personality": "brand_personality",
+  };
+  assert.equal(BUSINESS_INTAKE_QUESTIONS.length, Object.keys(expectedIntents).length);
+  for (const question of BUSINESS_INTAKE_QUESTIONS) {
+    assert.equal(
+      businessIntakeQuestionIntent({ id: question.id, question: question.question }),
+      expectedIntents[question.id],
+      `${question.id} must resolve without relying on its raw DNA path`,
+    );
+  }
+});
+test("51 filtering the duplicate main-goal question preserves seven saved answers and confirmation state", () => {
+  const saved = {
+    identity: { businessName: "Agency", businessStage: "established/existing" },
+    founderHistory: { businessAge: "two years" },
+    customers: { desiredCustomers: "Serious business clients" },
+    digitalPresence: { existingWebsite: "no" },
+    goals: { sixToTwelveMonthGoal: "Build a professional online presence", primaryLeadObjective: "Qualified enquiries" },
+  };
+  const before = structuredClone(saved);
+  assert.equal(countSavedBusinessIntakeAnswers(saved), 7);
+  assert.ok(!eligibleBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, saved).some((question) => question.id === "primary-goal"));
+  assert.deepEqual(saved, before);
+  assert.equal("confirmed" in (saved.conversation ?? {}), false);
+});

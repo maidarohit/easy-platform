@@ -49,7 +49,8 @@ export const BUSINESS_INTAKE_COMPLETION_MATRIX: Readonly<Record<BusinessIntakeIn
   location: ["location.city", "location.region", "location.country"], service_area: ["location.serviceAreas"], differentiator: ["offer.differentiators"],
   website_status: ["digitalPresence.existingWebsite"], website_problem: ["digitalPresence.websiteStatus"], website_priority: ["digitalPresence.websiteStatus"],
   social_presence: ["digitalPresence.socialPresence"], portfolio_proof: ["personality.trustSignals"], online_challenges: ["digitalPresence.digitalProblems"],
-  main_goal: ["goals.primaryGoal"], six_to_twelve_month_goal: ["goals.sixToTwelveMonthGoal"], lead_goal: ["goals.primaryLeadObjective"],
+  main_goal: ["goals.primaryGoal", "goals.vision", "goals.sixToTwelveMonthGoal", "goals.primaryLeadObjective"],
+  six_to_twelve_month_goal: ["goals.sixToTwelveMonthGoal"], lead_goal: ["goals.primaryLeadObjective"],
   growth_objective: ["goals.primaryGoal", "goals.sixToTwelveMonthGoal"],
   brand_personality: ["personality.brandPersonality"],
 };
