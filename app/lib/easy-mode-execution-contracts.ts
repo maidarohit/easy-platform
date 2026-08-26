@@ -276,7 +276,10 @@ export const validateSeoOutput = (value: unknown) => validateStringObject(value,
   seoContentPlan: MAX_FIELD_LENGTH, seoScore: 1_000, seoStrategy: MAX_FIELD_LENGTH,
   siteStructure: MAX_FIELD_LENGTH, typography: MAX_FIELD_LENGTH, websiteFeatures: MAX_FIELD_LENGTH,
 });
-export const validateUiuxOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.uiux, { colourScheme: MAX_FIELD_LENGTH });
+export const validateUiuxOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.uiux, {
+  colourScheme: MAX_FIELD_LENGTH,
+  designRecommendations: MAX_FIELD_LENGTH,
+});
 export const validateSalesOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.sales);
 export const validateAnalyticsOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.analytics);
 export const validateLogoOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.logo);
