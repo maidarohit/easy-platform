@@ -26,6 +26,7 @@ import {
   type BusinessIntakeAnalysis,
 } from "../lib/business-intake-analysis";
 import { buildBusinessReviewSections } from "../lib/business-intake-review";
+import { analyzeBusinessIntakeDeterministically } from "../lib/business-intake-planner";
 
 const languageOptions: readonly { value: BusinessDnaLanguage; label: string }[] = [
   { value: "english", label: "English" },
@@ -173,6 +174,7 @@ export default function OnboardingPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "We could not analyze your business right now.");
       setAnalysis(data.analysis);
+      if (data.dna) setDna(data.dna);
     } catch (analysisError) {
       setAnalysis(null);
       setError(`${analysisError instanceof Error ? analysisError.message : "Analysis failed."} You can keep answering and nothing has been lost.`);
@@ -201,7 +203,14 @@ export default function OnboardingPage() {
             setDna(data.dna ?? null);
             setVision(data.dna?.conversation?.originalVisionText ?? "");
             setLanguage(data.dna?.conversation?.preferredLanguage ?? "english");
-            if (data.dna?.conversation?.originalVisionText) void requestAnalysis(id);
+            if (data.dna?.conversation?.originalVisionText) {
+              const savedContent = contentFromBusinessDna(data.dna);
+              setAnalysis(analyzeBusinessIntakeDeterministically({
+                preferredLanguage: data.dna.conversation.preferredLanguage ?? "english",
+                originalVisionText: data.dna.conversation.originalVisionText,
+                savedDna: savedContent,
+              }));
+            }
           }
         } else {
           const storedIdea = sessionStorage.getItem("easy-selected-business-idea");

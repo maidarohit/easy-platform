@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToProjectMemory } from "../../app/lib/business-dna.ts";
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
-import { analyzeBusinessIntakeDeterministically, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
+import { analyzeBusinessIntakeDeterministically, extractExplicitVisionDna, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
 import { countSavedBusinessIntakeAnswers, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
@@ -156,7 +156,11 @@ test("24 provider failure preserves saved intake", async () => {
   assert.equal(response.status, 502); assert.equal(dna.conversation.originalVisionText, "Saved");
   process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = old; delete process.env.OPENAI_API_KEY;
 });
-test("25 retry does not duplicate persisted analysis", async () => assert.doesNotMatch(await readFile("app/api/business-dna/analyze/route.ts", "utf8"), /insert\(|updateBusinessDna/));
+test("25 idempotency claim occurs before provider execution or draft persistence", async () => {
+  const source = await readFile("app/api/business-dna/analyze/route.ts", "utf8");
+  assert.ok(source.indexOf("deps.claimUsage") < source.indexOf("deps.provider"));
+  assert.ok(source.indexOf("deps.claimUsage") < source.lastIndexOf("persistAnalysisDraft"));
+});
 test("26 unauthorized project rejected", async () => {
   const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "other", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => undefined, provider: async () => { throw new Error(); }, claimUsage: async () => ({ usageId: "", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 404);
@@ -178,10 +182,52 @@ test("30 deterministic fallback still works without AI", () => assert.ok(analyze
 test("31 mocked analysis does not create real usage or provider call", async () => {
   const old = process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; delete process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; let called = false;
   const dna = materializeBusinessDna({ content: { conversation: { originalVisionText: "A bakery in Pune", preferredLanguage: "english" } }, confirmed: false, confirmedAt: null, revisionCount: 0, createdAt: new Date(0), updatedAt: new Date(0) });
-  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, provider: async () => { called = true; return { analysis: validAnalysis }; }, claimUsage: async () => { called = true; return { usageId: "", created: true, status: "started" }; }, completeUsage: async () => {}, failUsage: async () => {} });
-  assert.equal(response.status, 200); assert.equal(called, false); process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = old;
+  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, update: async (input) => materializeBusinessDna({ content: input.patch, confirmed: input.confirmed, confirmedAt: null, revisionCount: 1, createdAt: new Date(0), updatedAt: new Date(1) }), provider: async () => { called = true; return { analysis: validAnalysis }; }, claimUsage: async () => { called = true; return { usageId: "", created: true, status: "started" }; }, completeUsage: async () => {}, failUsage: async () => {} });
+  assert.equal(response.status, 200); assert.equal(called, false);
+  if (old === undefined) delete process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; else process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = old;
 });
-test("32 existing Task 2 resume behavior remains intact", async () => assert.match(await readFile("app/onboarding/page.tsx", "utf8"), /business-dna\?projectId=.*requestAnalysis/si));
+test("32 refresh resumes from persisted DNA without another analysis request", async () => {
+  const source = await readFile("app/onboarding/page.tsx", "utf8");
+  const loadBlock = source.slice(source.indexOf("async function load()"), source.indexOf("async function saveDnaPatch"));
+  assert.match(loadBlock, /analyzeBusinessIntakeDeterministically/);
+  assert.doesNotMatch(loadBlock, /requestAnalysis\(id\)/);
+});
 test("33 existing Task 3 voice behavior remains intact", async () => {
   const source = await readFile("app/onboarding/page.tsx", "utf8"); assert.match(source, /useBrowserSpeech/); assert.match(source, /transcript stays editable/i); assert.doesNotMatch(source, /onTranscript:[\s\S]{0,200}saveAnswer/);
+});
+test("34 successful merged analysis draft is persisted unconfirmed with explicit answers winning", async () => {
+  const oldEnabled = process.env.BUSINESS_INTAKE_PROVIDER_ENABLED;
+  const oldKey = process.env.OPENAI_API_KEY;
+  process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = "true";
+  process.env.OPENAI_API_KEY = "test";
+  const existing = materializeBusinessDna({ content: { identity: { businessName: "Explicit name" }, conversation: { originalVisionText: "Grow over the next year", preferredLanguage: "english" } }, confirmed: false, confirmedAt: null, revisionCount: 0, createdAt: new Date(0), updatedAt: new Date(0) });
+  let savedInput;
+  try {
+    const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-draft-1" }) }), {
+      verify: async () => ({ uid: "owner" }), read: async () => existing,
+      provider: async () => ({ analysis: { ...validAnalysis, extractedDna: { identity: { businessName: "Inferred name", industry: "Agency" }, goals: { sixToTwelveMonthGoal: "Grow qualified enquiries" } } } }),
+      update: async (input) => { savedInput = input; return materializeBusinessDna({ content: input.patch, confirmed: input.confirmed, confirmedAt: null, revisionCount: 1, createdAt: new Date(0), updatedAt: new Date(1) }); },
+      claimUsage: async () => ({ usageId: "usage", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {},
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(savedInput.confirmed, false);
+    assert.equal(savedInput.patch.identity.businessName, "Explicit name");
+    assert.equal(savedInput.patch.identity.industry, "Agency");
+    assert.equal(body.dna.goals.sixToTwelveMonthGoal, "Grow qualified enquiries");
+    assert.equal(body.dna.conversation.confirmed, false);
+    const resumed = analyzeBusinessIntakeDeterministically({
+      preferredLanguage: "english", originalVisionText: body.dna.conversation.originalVisionText,
+      savedDna: { identity: body.dna.identity, goals: body.dna.goals, conversation: { originalVisionText: body.dna.conversation.originalVisionText, preferredLanguage: "english" } },
+    });
+    assert.ok(!resumed.suggestedQuestions.some((question) => question.dnaPath === "goals.sixToTwelveMonthGoal"));
+  } finally {
+    if (oldEnabled === undefined) delete process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; else process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = oldEnabled;
+    if (oldKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = oldKey;
+  }
+});
+test("35 legacy project recovery extracts only an explicitly stated 6–12 month goal", () => {
+  const vision = "I run an agency. I want to attract serious clients and generate qualified enquiries over the next 6 to 12 months.";
+  assert.equal(extractExplicitVisionDna(vision).goals?.sixToTwelveMonthGoal, "I want to attract serious clients and generate qualified enquiries over the next 6 to 12 months.");
+  assert.equal(extractExplicitVisionDna("I run an agency with a small team.").goals, undefined);
 });

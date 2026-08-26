@@ -60,21 +60,25 @@ export function planAdaptiveQuestions(dna: BusinessDnaContent, language: Busines
     }).slice(0, Math.min(maximum, BUSINESS_INTAKE_MAX_QUESTIONS));
 }
 
-function extractVision(vision: string): BusinessDnaContent {
+export function extractExplicitVisionDna(vision: string): BusinessDnaContent {
   const dna: BusinessDnaContent = {};
   const city = vision.match(/\b(?:in|based in|from)\s+([A-Z][A-Za-z.-]+(?:\s+[A-Z][A-Za-z.-]+)?)/)?.[1];
   const age = vision.match(/\b(?:for|since)\s+((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:years?|months?))/i)?.[1];
   const industry = vision.match(/\b(?:run|own|starting|building)\s+(?:an?\s+)?([a-z][a-z -]{2,40}?)(?:\s+(?:in|for|that|which)|[.,]|$)/i)?.[1];
   const website = /\b(?:no|don'?t have|without)\s+(?:a\s+)?website\b/i.test(vision) ? "no" : undefined;
+  const horizonGoal = vision.split(/(?<=[.!?])\s+|\n+/).map((sentence) => sentence.trim()).find((sentence) =>
+    /\b(?:6\s*(?:-|–|to)\s*12|next\s+(?:six|6|twelve|12)\s+months?|next\s+year)\b/i.test(sentence) &&
+    /\b(?:want|goal|aim|plan|grow|build|generate|attract|increase|expand|launch)\b/i.test(sentence));
   if (city) dna.location = { city };
   if (age) dna.founderHistory = { businessAge: age };
   if (industry) dna.identity = { industry: industry.trim() };
   if (website) dna.digitalPresence = { existingWebsite: website };
+  if (horizonGoal) dna.goals = { sixToTwelveMonthGoal: horizonGoal };
   return dna;
 }
 
 export function analyzeBusinessIntakeDeterministically(input: BusinessIntakeAnalysisInput): BusinessIntakeAnalysis {
-  const extractedDna = extractVision(input.originalVisionText);
+  const extractedDna = extractExplicitVisionDna(input.originalVisionText);
   const combined = mergeExplicitDnaWithInferences(input.savedDna, extractedDna);
   const questions = planAdaptiveQuestions(combined, input.preferredLanguage);
   const name = combined.identity?.businessName || "your business";

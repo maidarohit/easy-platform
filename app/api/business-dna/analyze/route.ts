@@ -1,10 +1,11 @@
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { readBusinessDnaForOwner } from "@/app/lib/business-dna-store";
+import { readBusinessDnaForOwner, updateBusinessDnaForOwner } from "@/app/lib/business-dna-store";
 import { analyzeBusinessIntakeDeterministically } from "@/app/lib/business-intake-planner";
 import { requestBusinessIntakeAnalysis, BUSINESS_INTAKE_MODEL, BusinessIntakeProviderError } from "@/app/lib/business-intake-provider";
 import { claimIdempotentAiUsage, completeAiUsage, failAiUsage } from "@/app/lib/ai-usage";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 import type { BusinessDna, BusinessDnaContent } from "@/app/lib/business-dna";
+import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, type BusinessIntakeAnalysis } from "@/app/lib/business-intake-analysis";
 
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 8 * 1024;
@@ -24,8 +25,19 @@ function content(dna: BusinessDna): BusinessDnaContent {
 }
 
 type Dependencies = Readonly<{ verify: typeof verifyFirebaseIdToken; read: typeof readBusinessDnaForOwner; provider: typeof requestBusinessIntakeAnalysis;
-  claimUsage: typeof claimIdempotentAiUsage; completeUsage: typeof completeAiUsage; failUsage: typeof failAiUsage }>;
-const dependencies: Dependencies = { verify: verifyFirebaseIdToken, read: readBusinessDnaForOwner, provider: requestBusinessIntakeAnalysis, claimUsage: claimIdempotentAiUsage, completeUsage: completeAiUsage, failUsage: failAiUsage };
+  update: typeof updateBusinessDnaForOwner; claimUsage: typeof claimIdempotentAiUsage; completeUsage: typeof completeAiUsage; failUsage: typeof failAiUsage }>;
+const dependencies: Dependencies = { verify: verifyFirebaseIdToken, read: readBusinessDnaForOwner, update: updateBusinessDnaForOwner, provider: requestBusinessIntakeAnalysis, claimUsage: claimIdempotentAiUsage, completeUsage: completeAiUsage, failUsage: failAiUsage };
+
+async function persistAnalysisDraft(input: { deps: Dependencies; userId: string; projectId: string; savedDna: BusinessDnaContent; analysis: BusinessIntakeAnalysis }) {
+  const mergedDraft = mergeExplicitDnaWithInferences(input.savedDna, input.analysis.extractedDna);
+  const dna = await input.deps.update({ userId: input.userId, projectId: input.projectId, patch: mergedDraft, confirmed: false });
+  if (!dna) throw new Error("project_not_found");
+  return {
+    dna,
+    mergedDraft,
+    analysis: { ...input.analysis, suggestedQuestions: unansweredSuggestedQuestions(input.analysis, mergedDraft) },
+  };
+}
 
 function logFailure(input: { stage: string; requestId: string; providerHttpStatus?: number; code: string; issuePaths?: readonly string[]; responseDiagnostics?: BusinessIntakeProviderError["responseDiagnostics"] }) {
   console.error("Business intake analysis failed.", {
@@ -58,7 +70,12 @@ export async function handleBusinessDnaAnalyze(request: Request, deps: Dependenc
   const savedDna = content(dna);
   const input = { preferredLanguage: dna.conversation.preferredLanguage ?? "english", originalVisionText: dna.conversation.originalVisionText, savedDna } as const;
   if (process.env.BUSINESS_INTAKE_PROVIDER_ENABLED?.trim().toLowerCase() !== "true") {
-    return Response.json({ success: true, mode: "deterministic", requestId, analysis: analyzeBusinessIntakeDeterministically(input) }, { headers: { "Cache-Control": "no-store" } });
+    try {
+      const draft = await persistAnalysisDraft({ deps, userId, projectId: projectId.trim(), savedDna, analysis: analyzeBusinessIntakeDeterministically(input) });
+      return Response.json({ success: true, mode: "deterministic", requestId, analysis: draft.analysis, dna: draft.dna }, { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return Response.json({ error: "Business analysis completed but its draft could not be saved safely." }, { status: 500 });
+    }
   }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "Business analysis is temporarily unavailable." }, { status: 503 });
@@ -81,8 +98,9 @@ export async function handleBusinessDnaAnalyze(request: Request, deps: Dependenc
     return Response.json({ error: "Business analysis failed. Your saved answers are safe.", requestId }, { status: 502 });
   }
   try {
+    const draft = await persistAnalysisDraft({ deps, userId, projectId: projectId.trim(), savedDna, analysis: result.analysis });
     await deps.completeUsage({ usageId, durationMs: Date.now() - startedAt, model: BUSINESS_INTAKE_MODEL, inputTokens: result.inputTokens, outputTokens: result.outputTokens });
-    return Response.json({ success: true, mode: "provider", requestId, analysis: result.analysis }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ success: true, mode: "provider", requestId, analysis: draft.analysis, dna: draft.dna }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     logFailure({ stage: "usage_finalize", requestId, code: "complete_usage_failed" });
     await deps.failUsage({ usageId, durationMs: Date.now() - startedAt }).catch(() => undefined);

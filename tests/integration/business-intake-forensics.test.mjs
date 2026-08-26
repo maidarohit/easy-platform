@@ -69,7 +69,7 @@ test("11 provider failure preserves usage failure state", async () => {
   process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = "true"; process.env.OPENAI_API_KEY = "mock"; let failed = false;
   const originalError = console.error; console.error = () => {};
   try {
-    const result = await handleBusinessDnaAnalyze(request(), { verify: async () => ({ uid: "owner" }), read: async () => dna(), claimUsage: async () => ({ usageId: "u1", created: true, status: "started" }), provider: async () => { throw new BusinessIntakeProviderError("provider_http", "server_error", 500); }, completeUsage: async () => {}, failUsage: async () => { failed = true; } });
+    const result = await handleBusinessDnaAnalyze(request(), { verify: async () => ({ uid: "owner" }), read: async () => dna(), update: async () => dna(), claimUsage: async () => ({ usageId: "u1", created: true, status: "started" }), provider: async () => { throw new BusinessIntakeProviderError("provider_http", "server_error", 500); }, completeUsage: async () => {}, failUsage: async () => { failed = true; } });
     assert.equal(result.status, 502); assert.equal(failed, true);
   } finally { console.error = originalError; process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = oldFlag; process.env.OPENAI_API_KEY = oldKey; }
 });
@@ -82,7 +82,7 @@ test("13 duplicate idempotent request does not call provider or create usage", a
   const oldFlag = process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; const oldKey = process.env.OPENAI_API_KEY;
   process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = "true"; process.env.OPENAI_API_KEY = "mock"; let providerCalls = 0;
   try {
-    const result = await handleBusinessDnaAnalyze(request(), { verify: async () => ({ uid: "owner" }), read: async () => dna(), claimUsage: async () => ({ usageId: "existing", created: false, status: "failed" }), provider: async () => { providerCalls += 1; return { analysis: validAnalysis }; }, completeUsage: async () => {}, failUsage: async () => {} });
+    const result = await handleBusinessDnaAnalyze(request(), { verify: async () => ({ uid: "owner" }), read: async () => dna(), update: async () => dna(), claimUsage: async () => ({ usageId: "existing", created: false, status: "failed" }), provider: async () => { providerCalls += 1; return { analysis: validAnalysis }; }, completeUsage: async () => {}, failUsage: async () => {} });
     assert.equal(result.status, 409); assert.equal(providerCalls, 0);
   } finally { process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = oldFlag; process.env.OPENAI_API_KEY = oldKey; }
 });
