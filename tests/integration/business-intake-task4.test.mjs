@@ -6,6 +6,7 @@ import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToP
 import { mergeExplicitDnaWithInferences, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
+import { countSavedBusinessIntakeAnswers } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
 import { handleBusinessDnaPatch } from "../../app/api/business-dna/route.ts";
 
@@ -40,6 +41,19 @@ test("14 originalVisionText remains unchanged", () => {
 });
 test("15 review screen omits empty fields", () => assert.equal(buildBusinessReviewSections({ identity: { businessName: "Acme" } }).flatMap((s) => s.items).length, 1));
 test("16 review screen contains customer-friendly labels", () => assert.deepEqual(buildBusinessReviewSections({ identity: { businessName: "Acme" } })[0].label, "Your business"));
+test("16a review screen presents portfolio, website and social enums as customer copy", () => {
+  const sections = buildBusinessReviewSections({ digitalPresence: { existingWebsite: "have_portfolio", socialPresence: ["no_profiles"] } });
+  const items = sections.flatMap((section) => section.items);
+  assert.deepEqual(items.find((item) => item.label === "Portfolio / proof"), {
+    path: "personality.trustSignals", label: "Portfolio / proof", value: "Has case studies or testimonials to share",
+  });
+  assert.equal(items.find((item) => item.label === "Website")?.value, "Does not currently have a proper agency website");
+  assert.equal(items.find((item) => item.label === "Social channels")?.value, "No social profiles yet");
+  assert.ok(items.every((item) => !/have_portfolio|no_profiles/.test(item.value)));
+});
+test("16b answer counter derives from persisted DNA instead of remaining adaptive questions", () => {
+  assert.equal(countSavedBusinessIntakeAnswers({ identity: { businessName: "Acme", businessStage: "startup/new" }, digitalPresence: { existingWebsite: "no" } }), 3);
+});
 test("17 correction updates Business DNA", async () => {
   const response = await handleBusinessDnaPatch(new Request("http://local/api/business-dna", { method: "PATCH", body: JSON.stringify({ projectId: "p1", dna: { location: { city: "Pune" } }, confirmed: false }) }), {
     verify: async () => ({ uid: "owner" }), read: async () => null, update: async (input) => materializeBusinessDna({ content: input.patch, confirmed: false, confirmedAt: null, revisionCount: 2, createdAt: new Date(0), updatedAt: new Date(0) }),

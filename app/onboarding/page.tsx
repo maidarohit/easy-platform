@@ -15,6 +15,7 @@ import {
   getNextBusinessIntakeQuestion,
   isQuestionComplete,
   businessIntakeQuestionText,
+  countSavedBusinessIntakeAnswers,
   type BusinessIntakeQuestion,
 } from "../lib/business-intake-questions";
 import {
@@ -331,7 +332,8 @@ export default function OnboardingPage() {
   }
 
   const applicableQuestions = analysis ? adaptiveQuestions : getApplicableQuestions(content);
-  const completedCount = applicableQuestions.filter((question) => isQuestionComplete(question, content)).length;
+  const completedCount = countSavedBusinessIntakeAnswers(content);
+  const progressQuestionCount = Math.max(completedCount + applicableQuestions.length, 1);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#F7F4EC] text-[#1B211E]">
@@ -387,7 +389,7 @@ export default function OnboardingPage() {
             ) : activeQuestion ? (
               <div>
                 <div className="flex items-center justify-between gap-5 text-sm text-[#606A64]"><span>Let’s take this one step at a time.</span><span>{completedCount} answers saved</span></div>
-                <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#E3E6DB]"><div className="h-full rounded-full bg-[#A8B8A7] transition-all" style={{ width: `${Math.max(8, (completedCount / applicableQuestions.length) * 100)}%` }} /></div>
+                <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-[#E3E6DB]"><div className="h-full rounded-full bg-[#A8B8A7] transition-all" style={{ width: `${Math.max(8, (completedCount / progressQuestionCount) * 100)}%` }} /></div>
                 <div className="mt-7 rounded-[28px] border border-[#D8DCCF] bg-[#FCFBF7] p-6 shadow-[0_18px_50px_rgba(40,52,45,0.08)] sm:p-9">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7B847E]">About your business</p>
                   <div className="mt-4 flex items-start justify-between gap-4"><h1 className="text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.08] tracking-[-0.04em] text-[#173D32]">{activeQuestionText}</h1>{speech.synthesisSupported && <button type="button" onClick={() => speech.speaking ? speech.stopSpeaking() : speech.speak(activeQuestionText)} className="shrink-0 rounded-full border border-[#D8DCCF] px-3 py-2 text-xs font-semibold text-[#173D32]">{speech.speaking ? copy.stopReading : copy.read}</button>}</div>

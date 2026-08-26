@@ -13,13 +13,41 @@ const sections = [
   ["online", "Your online presence", [["digitalPresence.existingWebsite", "Website"], ["digitalPresence.websiteStatus", "Website priorities"], ["digitalPresence.socialPresence", "Social channels"], ["digitalPresence.digitalProblems", "Online challenges"]]],
 ] as const;
 
-function valueAt(dna: BusinessDnaContent, path: string) {
+function rawValueAt(dna: BusinessDnaContent, path: string) {
   const [section, field] = path.split(".");
-  const value = (dna[section as keyof BusinessDnaContent] as Record<string, unknown> | undefined)?.[field];
-  return Array.isArray(value) ? value.filter(Boolean).join(", ") : typeof value === "string" ? value.trim() : "";
+  return (dna[section as keyof BusinessDnaContent] as Record<string, unknown> | undefined)?.[field];
+}
+
+const customerCopy: Readonly<Record<string, string>> = {
+  have_portfolio: "Has case studies or testimonials to share",
+  no_profiles: "No social profiles yet",
+};
+
+function customerFacingPart(value: string) {
+  const trimmed = value.trim();
+  if (customerCopy[trimmed]) return customerCopy[trimmed];
+  return /^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(trimmed)
+    ? `${trimmed.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())}`
+    : trimmed;
+}
+
+function displayValue(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map(customerFacingPart).join(", ")
+    : typeof value === "string" ? customerFacingPart(value) : "";
 }
 
 export function buildBusinessReviewSections(dna: BusinessDnaContent): BusinessReviewSection[] {
-  return sections.map(([id, label, fields]) => ({ id, label, items: fields.map(([path, itemLabel]) => ({ path, label: itemLabel, value: valueAt(dna, path) })).filter((item) => item.value) }))
+  const portfolioWasStoredAsWebsite = rawValueAt(dna, "digitalPresence.existingWebsite") === "have_portfolio";
+  return sections.map(([id, label, fields]) => ({ id, label, items: fields.map(([path, itemLabel]) => {
+    const rawValue = rawValueAt(dna, path);
+    if (path === "digitalPresence.existingWebsite" && portfolioWasStoredAsWebsite) {
+      return { path, label: itemLabel, value: "Does not currently have a proper agency website" };
+    }
+    return { path, label: itemLabel, value: displayValue(rawValue) };
+  }).filter((item) => item.value) }))
+    .map((section) => portfolioWasStoredAsWebsite && section.id === "difference"
+      ? { ...section, items: [...section.items, { path: "personality.trustSignals", label: "Portfolio / proof", value: customerCopy.have_portfolio }] }
+      : section)
     .filter((section) => section.items.length > 0);
 }

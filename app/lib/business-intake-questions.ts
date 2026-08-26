@@ -212,6 +212,10 @@ export function isQuestionComplete(question: BusinessIntakeQuestion, dna: Busine
   return false;
 }
 
+export function countSavedBusinessIntakeAnswers(dna: BusinessDnaContent) {
+  return BUSINESS_INTAKE_QUESTIONS.filter((question) => isQuestionComplete(question, dna)).length;
+}
+
 export function getApplicableQuestions(dna: BusinessDnaContent) {
   const applicable = BUSINESS_INTAKE_QUESTIONS.filter((question) => question.applicability?.(dna) ?? true);
   if (!isStartupBusiness(dna)) return applicable;
