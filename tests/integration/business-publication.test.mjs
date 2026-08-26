@@ -5,6 +5,9 @@ import {
   buildPublishedBusinessSnapshot, businessPreviewRevision, normalizeBusinessSlug,
   validateBusinessSlug, validatePublishedBusinessSnapshot,
 } from "../../app/lib/business-publication.ts";
+import {
+  publicCallToAction, publicServices, publicServicesSummary,
+} from "../../app/lib/public-business-presentation.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const preview = {
@@ -51,7 +54,43 @@ test("public business page is auth-free, active-only, snapshot-based, and expose
   assert.match(page, /businessPublicationVersions\.snapshot/);
   assert.match(page, /generateMetadata/);
   assert.match(page, /snapshot\.search\?\.title/);
-  assert.doesNotMatch(page, /verifyFirebaseIdToken|projectId|Edit|Approve Preview|Master Workspace|Branding AI|Website AI|SEO AI|UIUX AI|Sales AI|JSON\.stringify/);
+  assert.doesNotMatch(page, /verifyFirebaseIdToken|projectId|Edit|Approve Preview|Master Workspace|Branding AI|Website AI|SEO AI|UIUX AI|Sales AI|JSON\.stringify|snapshot\.journey/);
+});
+
+test("public services reject sitemap labels and prefer explicit saved service names", () => {
+  const snapshot = buildPublishedBusinessSnapshot({
+    ...preview,
+    website: {
+      ...preview.website,
+      services: "Home — Introduction; Services — Brand Strategy and Website Design & Development; Service Detail Pages — Social Media Management and Local SEO; Portfolio / Case Studies — Proof; Process — Delivery",
+      serviceCards: [
+        { title: "Home", description: "Introduction" },
+        { title: "Service Detail Pages", description: "Social Media Management and Local SEO" },
+        { title: "Process", description: "Delivery" },
+      ],
+    },
+  });
+  assert.deepEqual(publicServices(snapshot).map((service) => service.title), [
+    "Brand Strategy", "Website Design & Development", "Social Media Management", "Local SEO",
+  ]);
+  assert.doesNotMatch(publicServices(snapshot).map((service) => service.title).join(" "), /Home|Service Detail Pages|Process/);
+});
+
+test("public services fall back to saved business summary rather than exposing page planning", () => {
+  const snapshot = buildPublishedBusinessSnapshot({
+    ...preview,
+    business: { ...preview.business, description: "A practical partner for established local businesses." },
+    website: { ...preview.website, services: "Home; Services; Process", serviceCards: [] },
+  });
+  assert.deepEqual(publicServices(snapshot), []);
+  assert.equal(publicServicesSummary(snapshot), "A practical partner for established local businesses.");
+});
+
+test("public CTA never exposes sales outreach strategy", () => {
+  const safe = buildPublishedBusinessSnapshot({ ...preview, journey: { primaryCta: "Day 0 LinkedIn connection request; Day 1 Email; Day 3 WhatsApp" } });
+  assert.equal(publicCallToAction(safe), "Book now");
+  const fallback = buildPublishedBusinessSnapshot({ ...preview, website: { ...preview.website, primaryCta: null }, journey: { primaryCta: "Outreach sequence and follow-up schedule" } });
+  assert.equal(publicCallToAction(fallback), "Get in Touch");
 });
 
 test("Preview and Master Workspace expose customer publication flow without generation paths", async () => {
