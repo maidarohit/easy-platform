@@ -129,6 +129,12 @@ function MasterWorkspaceContent() {
           {/* HEADER */}
           <section className="mb-8">
             <div className="mb-4 flex flex-wrap justify-end gap-3">
+              <Link
+                href={projectLink("/business-preview")}
+                className="inline-flex min-h-11 items-center rounded-full bg-[#103c32] px-5 text-sm font-semibold text-white transition hover:bg-[#185a4b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103c32] focus-visible:ring-offset-2"
+              >
+                Preview My Business
+              </Link>
               <ProductTutorial area="master-workspace" />
               <WorkspaceGuide />
             </div>
