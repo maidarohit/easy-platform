@@ -11,6 +11,13 @@ export function weeklyReportWindow(now = new Date(), week: ReportWeek = "current
   return { start, end, startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
 }
 
+export function nextWeeklyDeliveryAt(now = new Date()) {
+  const candidate = new Date(weeklyReportWindow(now, "current").start);
+  candidate.setUTCHours(3, 30, 0, 0);
+  if (candidate <= now) candidate.setUTCDate(candidate.getUTCDate() + 7);
+  return candidate;
+}
+
 export type WeeklyReportFacts = Readonly<{
   projectName: string;
   dnaConfirmed: boolean;

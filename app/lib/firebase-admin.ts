@@ -39,6 +39,14 @@ export async function verifyFirebaseIdToken(
   return token;
 }
 
+export async function getFirebaseDeliveryIdentity(userId: string) {
+  const user = await getAuth(getFirebaseAdminApp()).getUser(userId);
+  return {
+    email: user.emailVerified && user.email ? user.email : null,
+    phoneNumber: user.phoneNumber ?? null,
+  };
+}
+
 export class EmailVerificationRequiredError extends Error {
   readonly code = "EMAIL_VERIFICATION_REQUIRED";
 

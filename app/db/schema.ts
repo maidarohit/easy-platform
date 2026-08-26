@@ -175,6 +175,37 @@ export const socialDailyPosts = pgTable(
   ],
 );
 
+export type WeeklyReportDeliveryChannel = "email" | "whatsapp";
+export type WeeklyReportDeliveryStatus = "pending" | "delivered" | "failed";
+export const weeklyReportPreferences = pgTable("weekly_report_preferences", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(true),
+  whatsappOptInAt: timestamp("whatsapp_opt_in_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("weekly_report_preferences_owner_idx").on(table.userId)]);
+
+export const weeklyReportDeliveries = pgTable("weekly_report_deliveries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  weekStart: varchar("week_start", { length: 10 }).notNull(),
+  channel: varchar("channel", { length: 16 }).$type<WeeklyReportDeliveryChannel>().notNull(),
+  status: varchar("status", { length: 16 }).$type<WeeklyReportDeliveryStatus>().notNull().default("pending"),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  failureCode: varchar("failure_code", { length: 64 }),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("weekly_report_deliveries_project_week_channel_unique").on(table.projectId, table.weekStart, table.channel),
+  index("weekly_report_deliveries_owner_idx").on(table.userId),
+  check("weekly_report_deliveries_channel_check", sql`${table.channel} in ('email','whatsapp')`),
+  check("weekly_report_deliveries_status_check", sql`${table.status} in ('pending','delivered','failed')`),
+]);
+
 export const projectBusinessDna = pgTable(
   "project_business_dna",
   {
