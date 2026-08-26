@@ -3,7 +3,7 @@ import {
   type BusinessDnaContent,
   type BusinessDnaLanguage,
 } from "@/app/lib/business-dna";
-import type { BusinessIntakePath } from "@/app/lib/business-intake-questions";
+import { isBusinessIntakePathApplicable, type BusinessIntakePath } from "@/app/lib/business-intake-questions";
 
 export const BUSINESS_INTAKE_MAX_QUESTIONS = 8;
 
@@ -155,5 +155,6 @@ export function mergeExplicitDnaWithInferences(explicit: BusinessDnaContent, inf
 }
 
 export function unansweredSuggestedQuestions(analysis: BusinessIntakeAnalysis, dna: BusinessDnaContent) {
-  return analysis.suggestedQuestions.filter((question) => !hasValue(pathValue(dna, question.dnaPath)));
+  return analysis.suggestedQuestions.filter((question) =>
+    isBusinessIntakePathApplicable(question.dnaPath, dna) && !hasValue(pathValue(dna, question.dnaPath)));
 }

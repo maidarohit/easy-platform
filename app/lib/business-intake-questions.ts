@@ -66,10 +66,30 @@ export const isStartupBusiness = (dna: BusinessDnaContent) =>
   ["starting", "startup", "new", "idea"].some((word) => stage(dna).includes(word));
 export const isEstablishedBusiness = (dna: BusinessDnaContent) =>
   ["established", "existing", "family", "msme"].some((word) => stage(dna).includes(word));
-export const hasExistingWebsite = (dna: BusinessDnaContent) => {
-  const answer = dna.digitalPresence?.existingWebsite?.trim().toLowerCase();
-  return Boolean(answer && answer !== "no" && answer !== "none" && answer !== "not yet");
-};
+
+export type WebsitePresence = "exists" | "none" | "unknown";
+
+const NO_WEBSITE_VALUES = new Set(["no", "none", "not yet", "no website", "without website", "have portfolio"]);
+
+function normalizedWebsiteValue(value: string | undefined) {
+  return value?.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/[^a-z0-9.'\s]/g, " ").replace(/\s+/g, " ") ?? "";
+}
+
+function meansNoWebsite(value: string) {
+  return NO_WEBSITE_VALUES.has(value) ||
+    /^(?:currently )?(?:do not|don't|does not|doesn't) (?:currently )?have (?:a )?(?:proper )?website\b/.test(value) ||
+    /^(?:no|without) (?:a )?(?:proper )?website\b/.test(value);
+}
+
+export function websitePresence(dna: BusinessDnaContent): WebsitePresence {
+  const existingWebsite = normalizedWebsiteValue(dna.digitalPresence?.existingWebsite);
+  if (existingWebsite) return meansNoWebsite(existingWebsite) ? "none" : "exists";
+  const websiteStatus = normalizedWebsiteValue(dna.digitalPresence?.websiteStatus);
+  if (!websiteStatus) return "unknown";
+  return meansNoWebsite(websiteStatus) ? "none" : "exists";
+}
+
+export const hasExistingWebsite = (dna: BusinessDnaContent) => websitePresence(dna) === "exists";
 const hasSocialPresence = (dna: BusinessDnaContent) => Boolean(dna.digitalPresence?.socialPresence?.length);
 
 export const BUSINESS_INTAKE_QUESTIONS: readonly BusinessIntakeQuestion[] = [
@@ -214,6 +234,11 @@ export function isQuestionComplete(question: BusinessIntakeQuestion, dna: Busine
 
 export function countSavedBusinessIntakeAnswers(dna: BusinessDnaContent) {
   return BUSINESS_INTAKE_QUESTIONS.filter((question) => isQuestionComplete(question, dna)).length;
+}
+
+export function isBusinessIntakePathApplicable(path: BusinessIntakePath, dna: BusinessDnaContent) {
+  const question = BUSINESS_INTAKE_QUESTIONS.find((candidate) => candidate.path === path);
+  return question?.applicability?.(dna) ?? true;
 }
 
 export function getApplicableQuestions(dna: BusinessDnaContent) {

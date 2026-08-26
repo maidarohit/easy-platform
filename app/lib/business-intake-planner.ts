@@ -6,7 +6,7 @@ import {
   type BusinessIntakeAnalysisInput,
   type SuggestedBusinessIntakeQuestion,
 } from "@/app/lib/business-intake-analysis";
-import { BUSINESS_INTAKE_QUESTIONS, getApplicableQuestions, isQuestionComplete } from "@/app/lib/business-intake-questions";
+import { BUSINESS_INTAKE_QUESTIONS, getApplicableQuestions, hasExistingWebsite, isQuestionComplete } from "@/app/lib/business-intake-questions";
 
 const text = {
   english: {
@@ -36,11 +36,6 @@ function question(id: string, path: SuggestedBusinessIntakeQuestion["dnaPath"], 
 }
 
 function stage(dna: BusinessDnaContent) { return `${dna.identity?.businessStage ?? ""} ${dna.identity?.industry ?? ""}`.toLowerCase(); }
-function hasWebsite(dna: BusinessDnaContent) {
-  const value = dna.digitalPresence?.existingWebsite?.trim().toLowerCase();
-  return Boolean(value && !["no", "none", "not yet"].includes(value));
-}
-
 export function planAdaptiveQuestions(dna: BusinessDnaContent, language: BusinessDnaLanguage, maximum = BUSINESS_INTAKE_MAX_QUESTIONS) {
   const copy = text[language];
   const kind = stage(dna);
@@ -54,7 +49,7 @@ export function planAdaptiveQuestions(dna: BusinessDnaContent, language: Busines
     question("desired-customers", "customers.desiredCustomers", copy.customer),
     question("strongest-offers", "offer.strongestOffers", copy.offer),
     question("differentiators", "offer.differentiators", copy.difference, false),
-    ...(hasWebsite(dna) ? [question("website-problem", "digitalPresence.websiteStatus", copy.website, false)] : []),
+    ...(hasExistingWebsite(dna) ? [question("website-problem", "digitalPresence.websiteStatus", copy.website, false)] : []),
     question("future-goal", "goals.sixToTwelveMonthGoal", copy.goal),
   ];
   const fallback = getApplicableQuestions(dna).filter((item) => item.required && !isQuestionComplete(item, dna)).map((item) => question(item.id, item.path, language === "english" ? item.question : item.questionHindi ?? item.question));

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToProjectMemory } from "../../app/lib/business-dna.ts";
-import { mergeExplicitDnaWithInferences, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
+import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
 import { countSavedBusinessIntakeAnswers } from "../../app/lib/business-intake-questions.ts";
@@ -24,7 +24,28 @@ test("4 hallucinated unsupported data not merged", () => assert.equal(validateBu
 test("5 already-answered city is not asked again", () => assert.ok(!planAdaptiveQuestions({ location: { city: "Bangalore" } }, "english").some((q) => q.dnaPath === "location.city")));
 test("6 already-answered business age is not asked again", () => assert.ok(!planAdaptiveQuestions({ identity: { businessStage: "established" }, founderHistory: { businessAge: "two years" } }, "english").some((q) => q.dnaPath === "founderHistory.businessAge")));
 test("7 no-website user skips website-performance question", () => assert.ok(!planAdaptiveQuestions({ digitalPresence: { existingWebsite: "no" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
+test("7a no-proper-website state skips current website problem question", () => assert.ok(!planAdaptiveQuestions({ digitalPresence: { websiteStatus: "Does not currently have a proper website" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
 test("8 existing website user can receive relevant website-problem question", () => assert.ok(planAdaptiveQuestions({ digitalPresence: { existingWebsite: "https://example.com" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
+test("8a explicit no-website answer overrides a conflicting inference", () => {
+  const merged = mergeExplicitDnaWithInferences({ digitalPresence: { existingWebsite: "no" } }, { digitalPresence: { existingWebsite: "https://inferred.example" } });
+  assert.equal(merged.digitalPresence?.existingWebsite, "no");
+  assert.ok(!planAdaptiveQuestions(merged, "english").some((question) => question.dnaPath === "digitalPresence.websiteStatus"));
+});
+test("8b website filtering leaves unrelated adaptive questions unchanged", () => {
+  for (const existingWebsite of ["no", "yes"]) {
+    const paths = planAdaptiveQuestions({ digitalPresence: { existingWebsite } }, "english").map((question) => question.dnaPath);
+    assert.ok(paths.includes("customers.desiredCustomers"));
+    assert.ok(paths.includes("offer.strongestOffers"));
+    assert.ok(paths.includes("goals.sixToTwelveMonthGoal"));
+  }
+});
+test("8c saved provider question sequence resumes without an invalid website question or new analysis", () => {
+  const analysis = { ...validAnalysis, suggestedQuestions: [
+    { id: "website-problem", dnaPath: "digitalPresence.websiteStatus", question: "What is not working well with your current website?", reason: "Website context", required: false, answerType: "textarea" },
+    { id: "desired-customers", dnaPath: "customers.desiredCustomers", question: "Who do you want to reach?", reason: "Customer context", required: true, answerType: "textarea" },
+  ] };
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { digitalPresence: { existingWebsite: "have_portfolio" } }).map((question) => question.id), ["desired-customers"]);
+});
 test("9 startup and established MSME follow-ups differ", () => {
   const startup = planAdaptiveQuestions({ identity: { businessStage: "startup" } }, "english").map((q) => q.id);
   const msme = planAdaptiveQuestions({ identity: { businessStage: "established MSME" } }, "english").map((q) => q.id);
