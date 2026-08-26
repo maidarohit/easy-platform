@@ -1,6 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/app/db";
-import { easyModeRuns, easyModeTasks, projectOutputs, projects } from "@/app/db/schema";
+import { easyModeRuns, easyModeTasks, projectBusinessDna, projectOutputs, projects } from "@/app/db/schema";
+import type { BusinessDnaContent } from "@/app/lib/business-dna";
+import { projectBusinessDnaToProjectMemory } from "@/app/lib/business-dna";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
@@ -11,6 +13,45 @@ export const WORKSPACE_MODULES = [
   "seo", "uiux", "sales", "analytics", "ai-manager",
 ] as const;
 export type WorkspaceModule = (typeof WORKSPACE_MODULES)[number];
+
+type WorkspaceProjectSource = Readonly<{
+  id: string;
+  name: string;
+  companyName: string | null;
+  industry: string | null;
+  goal: string | null;
+  originalBrief: string | null;
+  brandDescription: string | null;
+}>;
+
+export function workspaceProjectPresentation(
+  project: WorkspaceProjectSource,
+  confirmedDna: BusinessDnaContent | null,
+) {
+  const projection = confirmedDna ? projectBusinessDnaToProjectMemory(confirmedDna) : null;
+  const canonicalGoal = confirmedDna?.goals?.primaryGoal?.trim() ||
+    confirmedDna?.goals?.sixToTwelveMonthGoal?.trim() ||
+    confirmedDna?.goals?.primaryLeadObjective?.trim() ||
+    confirmedDna?.goals?.vision?.trim();
+  return {
+    id: project.id,
+    name: projection?.businessName || project.companyName?.trim() || project.name,
+    companyName: projection?.businessName || project.companyName?.trim() || null,
+    industry: projection?.industry || project.industry?.trim() || null,
+    goal: canonicalGoal || project.goal?.trim() || null,
+    businessDescription: projection?.businessDescription || project.originalBrief?.trim() ||
+      project.brandDescription?.trim() || null,
+  };
+}
+
+export function workspaceSectionState(
+  hasOutput: boolean,
+  customerState?: EasyModeCustomerTask["customerState"],
+) {
+  if (customerState === "Failed" || customerState === "Needs attention") return customerState;
+  if (customerState === "Waiting" || customerState === "In progress") return "In progress";
+  return hasOutput ? "Ready" : "Not generated";
+}
 
 export const MODULE_ALIASES: Readonly<Record<string, WorkspaceModule>> = {
   branding: "branding", "branding-ai": "branding",
@@ -68,6 +109,12 @@ export async function GET(request: Request) {
   )).limit(1);
   if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
 
+  const [dnaRow] = await db.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(
+    eq(projectBusinessDna.projectId, projectId),
+    eq(projectBusinessDna.userId, userId),
+    eq(projectBusinessDna.confirmed, true),
+  )).limit(1);
+
   const outputs = await db.select().from(projectOutputs).where(and(
     eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, userId),
   )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt));
@@ -84,19 +131,13 @@ export async function GET(request: Request) {
   }
 
   return Response.json({
-    project: {
-      id: project.id, name: project.name, companyName: project.companyName,
-      industry: project.industry, goal: project.goal,
-      businessDescription: project.originalBrief || project.brandDescription,
-    },
+    project: workspaceProjectPresentation(project, dnaRow?.dna ?? null),
     sections: WORKSPACE_MODULES.map((module) => {
       const task = taskStatuses.get(module);
       const failedState = task?.customerState === "Failed" || task?.customerState === "Needs attention";
       return {
         module,
-        state: failedState ? task.customerState :
-          task?.customerState === "Waiting" || task?.customerState === "In progress" ? "In progress" :
-            latest.has(module) ? "Ready" : "Not generated",
+        state: workspaceSectionState(latest.has(module), task?.customerState),
         outputId: latest.get(module)?.id ?? null,
         output: latest.get(module)?.output ?? null,
         approvedAt: latest.get(module)?.approvedAt?.toISOString() ?? null,

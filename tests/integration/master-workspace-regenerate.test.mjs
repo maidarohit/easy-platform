@@ -28,11 +28,14 @@ test("one source output creates one server-owned canonical regeneration run", as
   assert.doesNotMatch(route, /startAiUsage|completeAiUsage|N8N_|fetch\(|publish/);
 });
 
-test("workspace starts only the durable Easy Mode execution route", async () => {
+test("workspace Ready cards expose no regeneration or execution trigger", async () => {
   const page = await source("app/master-workspace/page.tsx");
-  assert.match(page, /\/api\/master-workspace\/regenerate/);
-  assert.match(page, /\/api\/easy-mode\/runs\/\$\{encodeURIComponent\(prepared\.run\.id\)\}\/execute-next/);
-  assert.match(page, /REGENERATE/);
+  assert.doesNotMatch(page, /\/api\/master-workspace\/regenerate/);
+  assert.doesNotMatch(page, /\/api\/easy-mode\/runs\/.*\/execute-next/);
+  assert.doesNotMatch(page, /REGENERATE|regenerateOutput|regeneratingOutputId/);
+  assert.match(page, /View latest output/);
+  assert.match(page, /approveOutput/);
+  assert.match(page, /OPEN ADVANCED TOOL/);
   assert.doesNotMatch(page, /\/api\/(branding-ai|logo-ai|content-ai|website-ai|marketing-ai|seo-ai|uiux-ai|sales-ai|analytics-ai|ai-manager)["'`]/);
   assert.doesNotMatch(page, /N8N_|publish/);
 });

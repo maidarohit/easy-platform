@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { selectLatestWorkspaceOutputs } from "../../app/api/master-workspace/route.ts";
+import {
+  selectLatestWorkspaceOutputs,
+  workspaceProjectPresentation,
+  workspaceSectionState,
+} from "../../app/api/master-workspace/route.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const branding = {
@@ -36,4 +40,33 @@ test("missing modules return explicit safe empty states without generation paths
   assert.match(route, /output: latest\.get\(module\)\?\.output \?\? null/);
   assert.match(page, /View latest output/);
   assert.doesNotMatch(route, /startAiUsage|completeAiUsage|fetch\(|N8N_|publish|insert\(|update\(|delete\(/);
+});
+
+test("confirmed Business DNA is the workspace project source with safe legacy fallbacks", () => {
+  const project = {
+    id: "project-1", name: "Business Vision 39012ee0", companyName: "Legacy Company",
+    industry: "Legacy industry", goal: "Legacy goal", originalBrief: "Legacy brief", brandDescription: null,
+  };
+  const canonical = workspaceProjectPresentation(project, {
+    identity: { businessName: "BrightReach Digital", industry: "Digital marketing" },
+    goals: { primaryGoal: "Generate qualified enquiries" },
+  });
+  assert.equal(canonical.name, "BrightReach Digital");
+  assert.equal(canonical.companyName, "BrightReach Digital");
+  assert.equal(canonical.industry, "Digital marketing");
+  assert.equal(canonical.goal, "Generate qualified enquiries");
+
+  const fallback = workspaceProjectPresentation(project, { identity: {}, goals: {} });
+  assert.equal(fallback.companyName, "Legacy Company");
+  assert.equal(fallback.industry, "Legacy industry");
+  assert.equal(fallback.goal, "Legacy goal");
+});
+
+test("workspace preserves generated and not-generated module status mapping", () => {
+  const ready = ["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"];
+  const absent = ["logo", "content", "analytics"];
+  assert.deepEqual(ready.map(() => workspaceSectionState(true)), ready.map(() => "Ready"));
+  assert.deepEqual(absent.map(() => workspaceSectionState(false)), absent.map(() => "Not generated"));
+  assert.equal(workspaceSectionState(true, "In progress"), "In progress");
+  assert.equal(workspaceSectionState(true, "Needs attention"), "Needs attention");
 });

@@ -50,7 +50,6 @@ function MasterWorkspaceContent() {
   const [workspaceLoading, setWorkspaceLoading] = useState(Boolean(projectId));
   const [workspaceError, setWorkspaceError] = useState("");
   const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
-  const [regeneratingOutputId, setRegeneratingOutputId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -90,40 +89,6 @@ function MasterWorkspaceContent() {
       setWorkspaceError(approvalError instanceof Error ? approvalError.message : "Unable to approve this output.");
     } finally {
       setApprovingOutputId(null);
-    }
-  };
-
-  const regenerateOutput = async (outputId: string) => {
-    if (!projectId || regeneratingOutputId) return;
-    setRegeneratingOutputId(outputId);
-    setWorkspaceError("");
-    try {
-      const prepareResponse = await authenticatedFetch("/api/master-workspace/regenerate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, outputId }),
-      });
-      const prepared = await prepareResponse.json();
-      if (!prepareResponse.ok) throw new Error(prepared.error || "Unable to prepare regeneration.");
-
-      const executeResponse = await authenticatedFetch(
-        `/api/easy-mode/runs/${encodeURIComponent(prepared.run.id)}/execute-next`,
-        { method: "POST" },
-      );
-      const execution = await executeResponse.json();
-      if (!executeResponse.ok) throw new Error(execution.message || execution.error || "Unable to regenerate this output.");
-
-      const workspaceResponse = await authenticatedFetch(
-        `/api/master-workspace?projectId=${encodeURIComponent(projectId)}`,
-        { cache: "no-store" },
-      );
-      const refreshed = await workspaceResponse.json();
-      if (!workspaceResponse.ok) throw new Error(refreshed.error || "Unable to refresh this workspace.");
-      setWorkspace(refreshed as WorkspaceData);
-    } catch (regenerationError) {
-      setWorkspaceError(regenerationError instanceof Error ? regenerationError.message : "Unable to regenerate this output.");
-    } finally {
-      setRegeneratingOutputId(null);
     }
   };
 
@@ -214,8 +179,8 @@ function MasterWorkspaceContent() {
                     </p>
 
                     <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">
-                      {displayedProject?.name ||
-                        displayedProject?.companyName ||
+                      {displayedProject?.companyName ||
+                        displayedProject?.name ||
                         "No project selected"}
                     </h2>
                   </div>
@@ -331,21 +296,11 @@ function MasterWorkspaceContent() {
                           {module.reviewState === "Needs review" && module.outputId && (
                             <button
                               type="button"
-                              disabled={Boolean(approvingOutputId || regeneratingOutputId)}
+                              disabled={Boolean(approvingOutputId)}
                               onClick={() => void approveOutput(module.outputId as string)}
                               className="rounded-full bg-[#103c32] px-4 py-2 text-[10px] font-semibold tracking-[0.12em] text-white transition hover:bg-[#185a4b] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {approvingOutputId === module.outputId ? "APPROVING..." : "APPROVE"}
-                            </button>
-                          )}
-                          {module.outputId && module.state === "Ready" && (
-                            <button
-                              type="button"
-                              disabled={Boolean(approvingOutputId || regeneratingOutputId)}
-                              onClick={() => void regenerateOutput(module.outputId as string)}
-                              className="rounded-full border border-[#9edfe9] bg-white px-4 py-2 text-[10px] font-semibold tracking-[0.12em] text-[#0eaec4] transition hover:bg-[#ecfbfb] disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {regeneratingOutputId === module.outputId ? "REGENERATING..." : "REGENERATE"}
                             </button>
                           )}
                         </div>
