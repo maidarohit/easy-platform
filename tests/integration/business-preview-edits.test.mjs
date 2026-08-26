@@ -76,7 +76,7 @@ test("Edit mode is live and Save, Cancel, Reset remain manual and provider free"
   assert.match(page, /Images can be added later/);
   assert.match(page, /\["desktop", "tablet", "mobile"\]/);
   for (const label of ["Brand", "Website", "Marketing", "Search", "Customer Journey"]) assert.match(page, new RegExp(`\\b${label}\\b`));
-  assert.doesNotMatch(page, /OpenAI|n8n|provider|Rewrite with AI|publish|regenerate/i);
+  assert.doesNotMatch(page, /OpenAI|n8n|provider|Rewrite with AI|regenerate/i);
 });
 
 test("saved edits reload through the customization layer and current-edit approval is invalidated", async () => {

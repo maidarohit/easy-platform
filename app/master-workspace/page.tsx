@@ -23,6 +23,7 @@ type WorkspaceData = {
     retryTaskId: string | null;
   }>;
 };
+type BusinessPublication = { status: "unpublished" | "active" | "inactive"; publicUrl?: string; changesAwaitingApproval?: boolean };
 
 const MODULE_DETAILS: Readonly<Record<string, { number: string; title: string; description: string; href: string }>> = {
   "ai-manager": { number: "01", title: "AI Manager", description: "Unified business intelligence and master strategy.", href: "/ai-manager" },
@@ -51,6 +52,7 @@ function MasterWorkspaceContent() {
   const [workspaceLoading, setWorkspaceLoading] = useState(Boolean(projectId));
   const [workspaceError, setWorkspaceError] = useState("");
   const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
+  const [publication, setPublication] = useState<BusinessPublication>({ status: "unpublished" });
 
   useEffect(() => {
     if (!projectId) return;
@@ -63,6 +65,15 @@ function MasterWorkspaceContent() {
       })
       .catch((loadError) => { if (active) setWorkspaceError(loadError instanceof Error ? loadError.message : "Unable to load this workspace."); })
       .finally(() => { if (active) setWorkspaceLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    void authenticatedFetch(`/api/business-publications?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" })
+      .then(async (response) => { const data = await response.json(); if (response.ok && active) setPublication(data.publication as BusinessPublication); })
+      .catch(() => undefined);
     return () => { active = false; };
   }, [projectId]);
 
@@ -129,6 +140,7 @@ function MasterWorkspaceContent() {
           {/* HEADER */}
           <section className="mb-8">
             <div className="mb-4 flex flex-wrap justify-end gap-3">
+              {publication.status === "active" && publication.publicUrl && <Link href={publication.publicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">View Live Business</Link>}
               <Link
                 href={projectLink("/business-preview")}
                 className="inline-flex min-h-11 items-center rounded-full bg-[#103c32] px-5 text-sm font-semibold text-white transition hover:bg-[#185a4b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103c32] focus-visible:ring-offset-2"
@@ -191,6 +203,7 @@ function MasterWorkspaceContent() {
                         displayedProject?.name ||
                         "No project selected"}
                     </h2>
+                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.15em] text-[#8A713F]">{publication.changesAwaitingApproval ? "Changes awaiting approval" : publication.status === "active" ? "Published" : "Not published"}</p>
                   </div>
                 </div>
 

@@ -15,6 +15,7 @@ import {
 import { sql } from "drizzle-orm";
 import type { BusinessDnaContent } from "@/app/lib/business-dna";
 import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
+import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -158,6 +159,46 @@ export const projectPreviewCustomizations = pgTable(
   (table) => [
     index("project_preview_customizations_owner_idx").on(table.userId),
     check("project_preview_customizations_revision_check", sql`${table.revisionCount} >= 0`),
+  ],
+);
+
+export type BusinessPublicationStatus = "active" | "inactive";
+export const businessPublications = pgTable(
+  "business_publications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    publicSlug: varchar("public_slug", { length: 63 }).notNull(),
+    status: varchar("status", { length: 16 }).$type<BusinessPublicationStatus>().notNull().default("active"),
+    publishedPreviewRevision: integer("published_preview_revision").notNull(),
+    currentVersion: integer("current_version").notNull().default(1),
+    publishedAt: timestamp("published_at", { withTimezone: true }).notNull(),
+    unpublishedAt: timestamp("unpublished_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("business_publications_project_unique").on(table.projectId),
+    uniqueIndex("business_publications_slug_unique").on(table.publicSlug),
+    index("business_publications_owner_idx").on(table.userId),
+    check("business_publications_status_check", sql`${table.status} in ('active','inactive')`),
+    check("business_publications_revision_check", sql`${table.publishedPreviewRevision} >= 0`),
+  ],
+);
+
+export const businessPublicationVersions = pgTable(
+  "business_publication_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    publicationId: uuid("publication_id").notNull().references(() => businessPublications.id, { onDelete: "restrict" }),
+    versionNumber: integer("version_number").notNull(),
+    previewRevision: integer("preview_revision").notNull(),
+    snapshot: jsonb("snapshot").$type<PublishedBusinessSnapshot>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("business_publication_versions_publication_version_unique").on(table.publicationId, table.versionNumber),
+    index("business_publication_versions_publication_idx").on(table.publicationId),
   ],
 );
 

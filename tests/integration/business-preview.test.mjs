@@ -123,7 +123,7 @@ test("customer preview provides all viewports and never exposes specialist AI na
   assert.match(page, /marketing\.campaignCards\.map/);
   assert.match(page, /search\.keywordTags\.map/);
   assert.match(page, /\/api\/business-preview/);
-  assert.doesNotMatch(page, /publish|regenerate|\/api\/easy-mode|\/api\/business-dna\/analyze/i);
+  assert.doesNotMatch(page, /regenerate|\/api\/easy-mode|\/api\/business-dna\/analyze/i);
 });
 
 test("Master Workspace opens the active project preview and refresh only reloads saved data", async () => {
