@@ -120,6 +120,13 @@
       "when": 1787904000000,
       "tag": "0016_add-project-business-dna",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1787907600000,
+      "tag": "0017_add-project-preview-customizations",
+      "breakpoints": true
     }
   ]
 }

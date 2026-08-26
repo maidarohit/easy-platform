@@ -1,10 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import type { BusinessPreview } from "@/app/lib/business-preview";
+import {
+  applyPreviewOverrides, PREVIEW_EDIT_RULES, previewFieldValue, validatePreviewOverrides,
+  type PreviewEditableField, type PreviewOverrides,
+} from "@/app/lib/business-preview-edits";
 
 type Viewport = "desktop" | "tablet" | "mobile";
 const VIEWPORT_WIDTH: Readonly<Record<Viewport, string>> = {
@@ -26,9 +29,14 @@ function ExpandableText({ value, className = "", previewLength = 220, inverse = 
 function BusinessPreviewContent() {
   const projectId = useSearchParams().get("projectId")?.trim() ?? "";
   const [preview, setPreview] = useState<BusinessPreview | null>(null);
+  const [originalPreview, setOriginalPreview] = useState<BusinessPreview | null>(null);
+  const [savedOverrides, setSavedOverrides] = useState<PreviewOverrides>({});
+  const [draftOverrides, setDraftOverrides] = useState<PreviewOverrides>({});
   const [viewport, setViewport] = useState<Viewport>("desktop");
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -38,7 +46,12 @@ function BusinessPreviewContent() {
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Unable to open your preview.");
-        if (active) setPreview(data.preview as BusinessPreview);
+        if (active) {
+          setPreview(data.preview as BusinessPreview);
+          setOriginalPreview(data.originalPreview as BusinessPreview);
+          setSavedOverrides(data.overrides as PreviewOverrides);
+          setDraftOverrides(data.overrides as PreviewOverrides);
+        }
       })
       .catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open your preview."); })
       .finally(() => { if (active) setLoading(false); });
@@ -58,6 +71,53 @@ function BusinessPreviewContent() {
     } catch (approvalError) {
       setError(approvalError instanceof Error ? approvalError.message : "Unable to approve this preview.");
     } finally { setApproving(false); }
+  }
+
+  function startEditing() {
+    setDraftOverrides(savedOverrides);
+    setEditing(true);
+    setError("");
+  }
+
+  function updateDraft(field: PreviewEditableField, value: string) {
+    if (!originalPreview) return;
+    const next = { ...draftOverrides, [field]: value };
+    setDraftOverrides(next);
+    setPreview(applyPreviewOverrides(originalPreview, next));
+  }
+
+  function cancelEditing() {
+    if (originalPreview) setPreview(applyPreviewOverrides(originalPreview, savedOverrides));
+    setDraftOverrides(savedOverrides);
+    setEditing(false);
+    setError("");
+  }
+
+  function resetToOriginal() {
+    if (originalPreview) setPreview(originalPreview);
+    setDraftOverrides({});
+    setError("");
+  }
+
+  async function saveChanges() {
+    if (!projectId || !originalPreview || saving) return;
+    const checked = validatePreviewOverrides(draftOverrides, originalPreview);
+    if (!checked.valid) { setError(checked.error); return; }
+    setSaving(true); setError("");
+    try {
+      const response = await authenticatedFetch("/api/business-preview/edits", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, overrides: checked.overrides }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to save your preview changes.");
+      setPreview(data.preview as BusinessPreview);
+      setSavedOverrides(data.overrides as PreviewOverrides);
+      setDraftOverrides(data.overrides as PreviewOverrides);
+      setEditing(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save your preview changes.");
+    } finally { setSaving(false); }
   }
 
   if (!projectId) return <main className="flex min-h-screen items-center justify-center bg-[#F7F4EC] p-6 text-center text-red-700">Open a valid business project.</main>;
@@ -84,12 +144,14 @@ function BusinessPreviewContent() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link href={`/onboarding?projectId=${encodeURIComponent(projectId)}`} className="inline-flex min-h-12 items-center rounded-[14px] border border-[#A8B8A7] bg-white px-6 font-semibold text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Edit</Link>
-              <button type="button" disabled={approving || preview.approval.approved} onClick={() => void approvePreview()} className="min-h-12 rounded-[14px] bg-[#173D32] px-6 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-4">{preview.approval.approved ? "Preview Approved" : approving ? "Approving..." : "Approve Preview"}</button>
+              <button type="button" onClick={startEditing} disabled={editing} className="inline-flex min-h-12 items-center rounded-[14px] border border-[#A8B8A7] bg-white px-6 font-semibold text-[#173D32] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Edit</button>
+              <button type="button" disabled={editing || approving || preview.approval.approved} onClick={() => void approvePreview()} className="min-h-12 rounded-[14px] bg-[#173D32] px-6 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-4">{editing ? "Save before approval" : preview.approval.approved ? "Preview Approved" : approving ? "Approving..." : "Approve Preview"}</button>
             </div>
           </div>
           {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         </header>
+
+        {editing && originalPreview && <section aria-label="Edit Preview" className="sticky top-3 z-20 mt-5 rounded-[26px] border border-[#A8B8A7] bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Edit Preview</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">Make simple text changes</h2><p className="mt-2 text-sm text-[#606A64]">Your generated originals stay unchanged.</p></div><div className="rounded-xl border border-dashed border-[#C7CDBF] bg-[#F7F4EC] px-4 py-3 text-sm text-[#606A64]">Images can be added later.</div></div><div className="mt-6 grid max-h-[48vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2">{(Object.keys(PREVIEW_EDIT_RULES) as PreviewEditableField[]).map((field) => { const baseline = previewFieldValue(originalPreview, field); if (!baseline) return null; const rule = PREVIEW_EDIT_RULES[field]; const edited = Object.hasOwn(draftOverrides, field); return <label key={field} className="block rounded-2xl border border-[#E4E5DD] bg-[#FCFBF7] p-4"><span className="flex items-center justify-between gap-3 text-sm font-semibold text-[#173D32]"><span>{rule.label}</span>{edited && <span className="text-xs font-medium text-[#8A713F]">Edited</span>}</span><textarea value={draftOverrides[field] ?? baseline} maxLength={rule.maximum} rows={field.includes("title") || field.includes("Headline") || field.includes("Cta") || field === "brand.tagline" ? 2 : 4} onChange={(event) => updateDraft(field, event.target.value)} className="mt-3 w-full resize-y rounded-xl border border-[#C7CDBF] bg-white p-3 text-sm leading-6 text-[#1B211E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]" /><span className="mt-1 block text-right text-xs text-[#7B847E]">{(draftOverrides[field] ?? baseline).length}/{rule.maximum}</span></label>; })}</div><div className="mt-5 flex flex-wrap gap-3 border-t border-[#E4E5DD] pt-5"><button type="button" disabled={saving} onClick={() => void saveChanges()} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2">{saving ? "Saving..." : "Save Changes"}</button><button type="button" disabled={saving} onClick={cancelEditing} className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 font-semibold text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Cancel</button><button type="button" disabled={saving} onClick={resetToOriginal} className="min-h-11 rounded-xl px-5 font-semibold text-[#8A4B3D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A4B3D]">Reset to Original</button></div></section>}
 
         {brand && <section id="brand" className="scroll-mt-6 py-14">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Brand</p>

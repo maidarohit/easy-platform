@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { BusinessDnaContent } from "@/app/lib/business-dna";
+import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -140,6 +141,23 @@ export const projectBusinessDna = pgTable(
     index("project_business_dna_owner_idx").on(table.userId),
     check("project_business_dna_schema_version_check", sql`${table.schemaVersion} = 1`),
     check("project_business_dna_revision_count_check", sql`${table.revisionCount} >= 0`),
+  ],
+);
+
+export const projectPreviewCustomizations = pgTable(
+  "project_preview_customizations",
+  {
+    projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    overrides: jsonb("overrides").$type<PreviewOverrides>().notNull().default({}),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    revisionCount: integer("revision_count").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("project_preview_customizations_owner_idx").on(table.userId),
+    check("project_preview_customizations_revision_check", sql`${table.revisionCount} >= 0`),
   ],
 );
 

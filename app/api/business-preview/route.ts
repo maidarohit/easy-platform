@@ -1,11 +1,12 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/app/db";
-import { projectBusinessDna, projectOutputs, projects } from "@/app/db/schema";
+import { projectBusinessDna, projectOutputs, projectPreviewCustomizations, projects } from "@/app/db/schema";
 import {
   selectLatestWorkspaceOutputs,
   workspaceProjectPresentation,
 } from "@/app/api/master-workspace/route";
 import { BUSINESS_PREVIEW_MODULES, buildBusinessPreview } from "@/app/lib/business-preview";
+import { applyPreviewOverrides, validatePreviewOverrides } from "@/app/lib/business-preview-edits";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
@@ -31,7 +32,7 @@ export async function GET(request: Request) {
   const project = await ownedProject(userId, projectId);
   if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
 
-  const [dnaRow, outputs] = await Promise.all([
+  const [dnaRow, outputs, customization] = await Promise.all([
     db.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(
       eq(projectBusinessDna.projectId, projectId),
       eq(projectBusinessDna.userId, userId),
@@ -40,13 +41,23 @@ export async function GET(request: Request) {
     db.select().from(projectOutputs).where(and(
       eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, userId),
     )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),
+    db.select().from(projectPreviewCustomizations).where(and(
+      eq(projectPreviewCustomizations.projectId, projectId),
+      eq(projectPreviewCustomizations.userId, userId),
+    )).limit(1).then((rows) => rows[0] ?? null),
   ]);
   const latest = selectLatestWorkspaceOutputs(outputs);
-  const preview = buildBusinessPreview({
+  const originalPreview = buildBusinessPreview({
     project: workspaceProjectPresentation(project, dnaRow?.dna ?? null),
     outputs: latest,
   });
-  return Response.json({ preview }, { headers: { "Cache-Control": "no-store" } });
+  const checked = validatePreviewOverrides(customization?.overrides ?? {}, originalPreview);
+  const overrides = checked.valid ? checked.overrides : {};
+  const preview = applyPreviewOverrides(originalPreview, overrides);
+  preview.approval.approved = Object.keys(overrides).length > 0
+    ? Boolean(customization?.approvedAt)
+    : originalPreview.approval.approved;
+  return Response.json({ preview, originalPreview, overrides }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -75,11 +86,22 @@ export async function POST(request: Request) {
       eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, userId),
     )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt));
     const latest = selectLatestWorkspaceOutputs(rows);
+    const [customization] = await transaction.select().from(projectPreviewCustomizations).where(and(
+      eq(projectPreviewCustomizations.projectId, projectId),
+      eq(projectPreviewCustomizations.userId, userId),
+    )).limit(1);
     const outputIds = BUSINESS_PREVIEW_MODULES
       .map((module) => latest.get(module)?.id)
       .filter((id): id is string => Boolean(id));
     if (outputIds.length === 0) return { error: "No saved preview is ready for approval.", status: 409 as const };
     const approvedAt = new Date();
+    if (customization && Object.keys(customization.overrides).length > 0) {
+      await transaction.update(projectPreviewCustomizations).set({ approvedAt, updatedAt: approvedAt }).where(and(
+        eq(projectPreviewCustomizations.projectId, projectId),
+        eq(projectPreviewCustomizations.userId, userId),
+      ));
+      return { approvedAt, outputIds };
+    }
     await transaction.update(projectOutputs).set({ approvedAt }).where(and(
       eq(projectOutputs.projectId, projectId),
       eq(projectOutputs.userId, userId),
