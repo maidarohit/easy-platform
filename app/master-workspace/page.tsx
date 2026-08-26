@@ -149,6 +149,7 @@ function MasterWorkspaceContent() {
               </Link>
               <Link href={projectLink("/dashboard/automation")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Manage Automation</Link>
               <Link href={projectLink("/social")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Social &amp; Content</Link>
+              <Link href={projectLink("/reports")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Weekly Report</Link>
               <ProductTutorial area="master-workspace" />
               <WorkspaceGuide />
             </div>
