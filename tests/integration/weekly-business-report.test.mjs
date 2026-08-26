@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildWeeklyBusinessReport, nextWeeklyDeliveryAt, weeklyReportWindow } from "../../app/lib/weekly-business-report.ts";
-import { weeklyReportMessage } from "../../app/lib/weekly-report-delivery.ts";
+import { absoluteWeeklyReportUrl, canonicalApplicationOrigin, weeklyReportMessage } from "../../app/lib/weekly-report-delivery.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -36,6 +36,19 @@ test("email and WhatsApp preview is composed only from the stored report", () =>
   const message = weeklyReportMessage({ ...built, period: { start: "2026-08-17T00:00:00.000Z", end: "2026-08-24T00:00:00.000Z" }, social: { proposed: 1, approved: 0, skipped: 0, published: 0 } }, "https://buzypeezy.ai/reports?projectId=saved");
   assert.match(message, /Website output saved/); assert.match(message, /Publication: Published/); assert.match(message, /proposed/); assert.match(message, /View Full Report/);
   assert.doesNotMatch(message, /revenue|leads|ROI|reach/i);
+});
+
+test("delivery messages use the configured canonical absolute report URL", () => {
+  const previous = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "https://buzypeezy.ai///";
+    assert.equal(canonicalApplicationOrigin(), "https://buzypeezy.ai");
+    assert.equal(absoluteWeeklyReportUrl("project id"), "https://buzypeezy.ai/reports?projectId=project%20id");
+    process.env.NEXT_PUBLIC_APP_URL = "javascript:alert(1)";
+    assert.equal(absoluteWeeklyReportUrl("project"), null);
+    process.env.NEXT_PUBLIC_APP_URL = "https://user:secret@buzypeezy.ai";
+    assert.equal(absoluteWeeklyReportUrl("project"), null);
+  } finally { if (previous === undefined) delete process.env.NEXT_PUBLIC_APP_URL; else process.env.NEXT_PUBLIC_APP_URL = previous; }
 });
 
 test("route is owner scoped, preserves projectId and contains no fabricated metrics or generation", async () => {

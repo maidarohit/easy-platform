@@ -17,6 +17,19 @@ export function weeklyDeliveryConfiguration() {
   };
 }
 
+export function canonicalApplicationOrigin() {
+  try {
+    const url = new URL(process.env.NEXT_PUBLIC_APP_URL ?? "");
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return null;
+    return url.origin;
+  } catch { return null; }
+}
+
+export function absoluteWeeklyReportUrl(projectId: string) {
+  const origin = canonicalApplicationOrigin();
+  return origin ? `${origin}/reports?projectId=${encodeURIComponent(projectId)}` : null;
+}
+
 export async function sendWeeklyEmail(to: string, subject: string, text: string) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.WEEKLY_REPORT_FROM_EMAIL;

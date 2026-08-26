@@ -3,7 +3,7 @@ import { db } from "@/app/db";
 import { projects, weeklyReportDeliveries, weeklyReportPreferences } from "@/app/db/schema";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { getFirebaseDeliveryIdentity, verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { weeklyDeliveryConfiguration } from "@/app/lib/weekly-report-delivery";
+import { absoluteWeeklyReportUrl, weeklyDeliveryConfiguration } from "@/app/lib/weekly-report-delivery";
 import { nextWeeklyDeliveryAt } from "@/app/lib/weekly-business-report";
 
 async function owner(request: Request, projectId: string) { const token = await verifyFirebaseIdToken(request); const [project] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, token.uid))).limit(1); return project ? token.uid : null; }
@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     const userId = await owner(request, projectId); if (!userId) return Response.json({ error: "Project not found." }, { status: 404 });
     const [identity, preferences, deliveries] = await Promise.all([getFirebaseDeliveryIdentity(userId), db.select().from(weeklyReportPreferences).where(and(eq(weeklyReportPreferences.projectId, projectId), eq(weeklyReportPreferences.userId, userId))).limit(1), db.select().from(weeklyReportDeliveries).where(and(eq(weeklyReportDeliveries.projectId, projectId), eq(weeklyReportDeliveries.userId, userId))).orderBy(desc(weeklyReportDeliveries.weekStart), desc(weeklyReportDeliveries.updatedAt))]);
     const config = weeklyDeliveryConfiguration(); const preference = preferences[0]; const last = (channel: "email" | "whatsapp") => deliveries.find((item) => item.channel === channel) ?? null;
-    return Response.json({ enabled: preference?.enabled ?? true, schedule: "Every Monday at 9:00 AM IST", nextDeliveryAt: nextWeeklyDeliveryAt().toISOString(), email: { destination: mask(identity.email), readiness: identity.email && config.email ? "ready" : "needs_attention", last: last("email") }, whatsapp: { destination: mask(identity.phoneNumber), readiness: identity.phoneNumber && preference?.whatsappOptInAt && config.whatsapp ? "ready" : "setup_required", last: last("whatsapp") } });
+    const reportUrl = absoluteWeeklyReportUrl(projectId);
+    if (!reportUrl) return Response.json({ error: "Canonical application URL is not configured." }, { status: 503 });
+    return Response.json({ enabled: preference?.enabled ?? true, schedule: "Every Monday at 9:00 AM IST", nextDeliveryAt: nextWeeklyDeliveryAt().toISOString(), reportUrl, email: { destination: mask(identity.email), readiness: identity.email && config.email ? "ready" : "needs_attention", last: last("email") }, whatsapp: { destination: mask(identity.phoneNumber), readiness: identity.phoneNumber && preference?.whatsappOptInAt && config.whatsapp ? "ready" : "setup_required", last: last("whatsapp") } });
   } catch { return Response.json({ error: "Weekly delivery setup requires the pending database migration." }, { status: 503 }); }
 }
 
