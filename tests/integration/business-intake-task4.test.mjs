@@ -6,7 +6,7 @@ import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToP
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, extractExplicitVisionDna, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
-import { countSavedBusinessIntakeAnswers, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
+import { BUSINESS_INTAKE_QUESTIONS, countSavedBusinessIntakeAnswers, eligibleBusinessIntakeQuestions, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
 import { handleBusinessDnaPatch } from "../../app/api/business-dna/route.ts";
 
@@ -230,4 +230,35 @@ test("35 legacy project recovery extracts only an explicitly stated 6–12 month
   const vision = "I run an agency. I want to attract serious clients and generate qualified enquiries over the next 6 to 12 months.";
   assert.equal(extractExplicitVisionDna(vision).goals?.sixToTwelveMonthGoal, "I want to attract serious clients and generate qualified enquiries over the next 6 to 12 months.");
   assert.equal(extractExplicitVisionDna("I run an agency with a small team.").goals, undefined);
+});
+test("36 explicit run wording recovers canonical existing-business stage", () => {
+  assert.equal(extractExplicitVisionDna("I run a digital marketing agency").identity?.businessStage, "established/existing");
+});
+test("37 operating duration recovers both stage and canonical business age", () => {
+  const recovered = extractExplicitVisionDna("We have been operating for two years in Bangalore.");
+  assert.equal(recovered.identity?.businessStage, "established/existing");
+  assert.equal(recovered.founderHistory?.businessAge, "two years");
+});
+test("38 persisted stage overrides recovered stage", () => {
+  const recovered = extractExplicitVisionDna("I run a digital marketing agency.");
+  assert.equal(mergeExplicitDnaWithInferences({ identity: { businessStage: "startup/new" } }, recovered).identity?.businessStage, "startup/new");
+});
+test("39 starting and ambiguous wording do not become existing businesses", () => {
+  assert.equal(extractExplicitVisionDna("I am starting a new digital agency.").identity?.businessStage, undefined);
+  assert.equal(extractExplicitVisionDna("Digital marketing could be a useful opportunity.").identity?.businessStage, undefined);
+});
+test("40 recovered stage removes the stage question while unknown stage remains eligible", () => {
+  const recovered = extractExplicitVisionDna("I run a digital marketing agency and have been operating for two years.");
+  assert.ok(!eligibleBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, recovered).some((question) => question.id === "business-stage"));
+  assert.ok(eligibleBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, {}).some((question) => question.id === "business-stage"));
+});
+test("41 legacy recovery preserves six saved answers and remains unconfirmed", () => {
+  const saved = { identity: { businessName: "Agency" }, customers: { desiredCustomers: "Serious clients" }, digitalPresence: { existingWebsite: "no" }, goals: { primaryGoal: "Professional presence", sixToTwelveMonthGoal: "Qualified enquiries", primaryLeadObjective: "More enquiries" } };
+  const before = structuredClone(saved);
+  const recovered = mergeExplicitDnaWithInferences(saved, extractExplicitVisionDna("I run a digital marketing agency and have been operating for two years."));
+  assert.equal(countSavedBusinessIntakeAnswers(saved), 6);
+  assert.deepEqual(saved, before);
+  assert.equal(recovered.identity?.businessStage, "established/existing");
+  assert.equal(recovered.founderHistory?.businessAge, "two years");
+  assert.equal("confirmed" in (recovered.conversation ?? {}), false);
 });

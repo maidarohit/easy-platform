@@ -63,15 +63,23 @@ export function planAdaptiveQuestions(dna: BusinessDnaContent, language: Busines
 export function extractExplicitVisionDna(vision: string): BusinessDnaContent {
   const dna: BusinessDnaContent = {};
   const city = vision.match(/\b(?:in|based in|from)\s+([A-Z][A-Za-z.-]+(?:\s+[A-Z][A-Za-z.-]+)?)/)?.[1];
-  const age = vision.match(/\b(?:for|since)\s+((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:years?|months?))/i)?.[1];
+  const duration = "(?:\\d+|one|two|three|four|five|six|seven|eight|nine|ten)\\s+(?:years?|months?)";
+  const age = vision.match(new RegExp(`\\b(?:operat(?:e|ing|ed)|run(?:ning)?|in business|have been operating|have been running)\\s+(?:for|since)\\s+(${duration})`, "i"))?.[1]
+    ?? vision.match(new RegExp(`\\b(?:for|since)\\s+(${duration})`, "i"))?.[1];
   const industry = vision.match(/\b(?:run|own|starting|building)\s+(?:an?\s+)?([a-z][a-z -]{2,40}?)(?:\s+(?:in|for|that|which)|[.,]|$)/i)?.[1];
+  const explicitlyStarting = /\b(?:i(?:'m| am)|we(?:'re| are))\s+(?:starting|launching|planning to start|wanting to start|building a new)\b/i.test(vision) ||
+    /\b(?:i|we)\s+(?:plan|want)\s+to\s+start\b/i.test(vision);
+  const explicitlyOperating = /\b(?:i|we)\s+(?:currently\s+)?(?:run|own|operate|manage)\b/i.test(vision) ||
+    /\b(?:i|we)(?:'ve| have)\s+been\s+(?:running|operating)\b/i.test(vision) ||
+    new RegExp(`\\b(?:operating|in business)\\s+for\\s+${duration}`, "i").test(vision);
+  const businessStage = !explicitlyStarting && explicitlyOperating ? "established/existing" : undefined;
   const website = /\b(?:no|don'?t have|without)\s+(?:a\s+)?website\b/i.test(vision) ? "no" : undefined;
   const horizonGoal = vision.split(/(?<=[.!?])\s+|\n+/).map((sentence) => sentence.trim()).find((sentence) =>
     /\b(?:6\s*(?:-|–|to)\s*12|next\s+(?:six|6|twelve|12)\s+months?|next\s+year)\b/i.test(sentence) &&
     /\b(?:want|goal|aim|plan|grow|build|generate|attract|increase|expand|launch)\b/i.test(sentence));
   if (city) dna.location = { city };
   if (age) dna.founderHistory = { businessAge: age };
-  if (industry) dna.identity = { industry: industry.trim() };
+  if (industry || businessStage) dna.identity = { ...(industry ? { industry: industry.trim() } : {}), ...(businessStage ? { businessStage } : {}) };
   if (website) dna.digitalPresence = { existingWebsite: website };
   if (horizonGoal) dna.goals = { sixToTwelveMonthGoal: horizonGoal };
   return dna;
