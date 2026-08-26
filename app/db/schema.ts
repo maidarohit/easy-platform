@@ -125,6 +125,56 @@ export const projectOutputs = pgTable("project_outputs", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type SocialProvider = "meta" | "linkedin";
+export type SocialConnectionStatus = "setup_required" | "connected" | "needs_attention";
+export const socialConnections = pgTable(
+  "social_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 16 }).$type<SocialProvider>().notNull(),
+    providerAccountId: varchar("provider_account_id", { length: 255 }),
+    accountName: varchar("account_name", { length: 255 }),
+    status: varchar("status", { length: 24 }).$type<SocialConnectionStatus>().notNull().default("setup_required"),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("social_connections_project_provider_unique").on(table.projectId, table.provider),
+    index("social_connections_owner_idx").on(table.userId),
+  ],
+);
+
+export type SocialDailyPostStatus = "proposed" | "approved" | "skipped" | "published" | "failed";
+export const socialDailyPosts = pgTable(
+  "social_daily_posts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    localDate: varchar("local_date", { length: 10 }).notNull(),
+    sourceHash: varchar("source_hash", { length: 64 }).notNull(),
+    originalContent: text("original_content").notNull(),
+    editedContent: text("edited_content"),
+    platform: varchar("platform", { length: 24 }).notNull().default("general"),
+    theme: varchar("theme", { length: 160 }),
+    recommendedAction: varchar("recommended_action", { length: 255 }),
+    status: varchar("status", { length: 16 }).$type<SocialDailyPostStatus>().notNull().default("proposed"),
+    provider: varchar("provider", { length: 16 }).$type<SocialProvider>(),
+    providerAccountId: varchar("provider_account_id", { length: 255 }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("social_daily_posts_project_date_unique").on(table.projectId, table.localDate),
+    index("social_daily_posts_owner_idx").on(table.userId),
+    check("social_daily_posts_date_check", sql`${table.localDate} ~ '^\\d{4}-\\d{2}-\\d{2}$'`),
+  ],
+);
+
 export const projectBusinessDna = pgTable(
   "project_business_dna",
   {
