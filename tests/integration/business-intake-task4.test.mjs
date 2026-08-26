@@ -46,6 +46,32 @@ test("8c saved provider question sequence resumes without an invalid website que
   ] };
   assert.deepEqual(unansweredSuggestedQuestions(analysis, { digitalPresence: { existingWebsite: "have_portfolio" } }).map((question) => question.id), ["desired-customers"]);
 });
+test("8d stored 6–12 month goal skips a mis-tagged duplicate goal suggestion", () => {
+  const analysis = { ...validAnalysis, suggestedQuestions: [
+    { id: "duplicate-future-goal", dnaPath: "goals.primaryGoal", question: "What would you like the business to achieve in the next 6 to 12 months?", reason: "Goal context", required: true, answerType: "textarea" },
+  ] };
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { sixToTwelveMonthGoal: "Grow qualified enquiries over the next year" } }), []);
+});
+test("8e original-vision inferred goal skips the resumed duplicate", () => {
+  const analysis = { ...validAnalysis, extractedDna: { goals: { sixToTwelveMonthGoal: "Build a professional presence in the next year" } }, suggestedQuestions: [
+    { id: "duplicate-future-goal", dnaPath: "goals.primaryGoal", question: "Where should the business be in the next 12 months?", reason: "Goal context", required: true, answerType: "textarea" },
+  ] };
+  const currentDna = mergeExplicitDnaWithInferences({}, analysis.extractedDna);
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, currentDna), []);
+});
+test("8f absent time-horizon goal remains eligible and distinct from a populated main goal", () => {
+  const analysis = { ...validAnalysis, suggestedQuestions: [
+    { id: "future-goal", dnaPath: "goals.sixToTwelveMonthGoal", question: "Where should the business be in the next 12 months?", reason: "Goal context", required: true, answerType: "textarea" },
+  ] };
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { primaryGoal: "Attract serious business clients" } }).map((question) => question.id), ["future-goal"]);
+});
+test("8g populated main goal skips equivalent generic goal wording but not unrelated questions", () => {
+  const analysis = { ...validAnalysis, suggestedQuestions: [
+    { id: "duplicate-main-goal", dnaPath: "goals.sixToTwelveMonthGoal", question: "What is the main goal for your business?", reason: "Goal context", required: true, answerType: "textarea" },
+    { id: "desired-customers", dnaPath: "customers.desiredCustomers", question: "Who do you want to reach?", reason: "Customer context", required: true, answerType: "textarea" },
+  ] };
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { primaryGoal: "Generate qualified enquiries" } }).map((question) => question.id), ["desired-customers"]);
+});
 test("9 startup and established MSME follow-ups differ", () => {
   const startup = planAdaptiveQuestions({ identity: { businessStage: "startup" } }, "english").map((q) => q.id);
   const msme = planAdaptiveQuestions({ identity: { businessStage: "established MSME" } }, "english").map((q) => q.id);

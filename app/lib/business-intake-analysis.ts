@@ -139,6 +139,31 @@ function hasValue(value: unknown) {
   return Array.isArray(value) ? value.length > 0 : typeof value === "string" ? value.trim().length > 0 : value !== undefined;
 }
 
+type GoalQuestionKind = "primary" | "horizon" | "lead";
+
+function goalQuestionKind(question: SuggestedBusinessIntakeQuestion): GoalQuestionKind | null {
+  if (!question.dnaPath.startsWith("goals.")) return null;
+  const wording = question.question.toLowerCase();
+  if (/\b(?:6\s*(?:-|–|to)\s*12|next\s+(?:six|6|twelve|12)\s+months?|next\s+year|months?\s+from\s+now)\b/.test(wording)) return "horizon";
+  if (/\b(?:leads?|enquir(?:y|ies)|calls?|bookings?|appointments?)\b/.test(wording)) return "lead";
+  if (/\b(?:main|primary|top)\s+goal\b/.test(wording)) return "primary";
+  if (question.dnaPath === "goals.sixToTwelveMonthGoal") return "horizon";
+  if (question.dnaPath === "goals.primaryLeadObjective") return "lead";
+  return "primary";
+}
+
+function answeredGoalKind(kind: GoalQuestionKind, dna: BusinessDnaContent) {
+  const path = kind === "horizon" ? "goals.sixToTwelveMonthGoal"
+    : kind === "lead" ? "goals.primaryLeadObjective" : "goals.primaryGoal";
+  return hasValue(pathValue(dna, path));
+}
+
+function suggestedQuestionIsAnswered(question: SuggestedBusinessIntakeQuestion, dna: BusinessDnaContent) {
+  if (hasValue(pathValue(dna, question.dnaPath))) return true;
+  const goalKind = goalQuestionKind(question);
+  return goalKind ? answeredGoalKind(goalKind, dna) : false;
+}
+
 /** Stored customer answers always win. Inferences fill only genuinely empty fields. */
 export function mergeExplicitDnaWithInferences(explicit: BusinessDnaContent, inferred: BusinessDnaContent): BusinessDnaContent {
   const merged = structuredClone(explicit);
@@ -156,5 +181,5 @@ export function mergeExplicitDnaWithInferences(explicit: BusinessDnaContent, inf
 
 export function unansweredSuggestedQuestions(analysis: BusinessIntakeAnalysis, dna: BusinessDnaContent) {
   return analysis.suggestedQuestions.filter((question) =>
-    isBusinessIntakePathApplicable(question.dnaPath, dna) && !hasValue(pathValue(dna, question.dnaPath)));
+    isBusinessIntakePathApplicable(question.dnaPath, dna) && !suggestedQuestionIsAnswered(question, dna));
 }
