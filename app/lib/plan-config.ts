@@ -14,7 +14,8 @@ export const USAGE_CATEGORIES = [
 export type UsageCategory = (typeof USAGE_CATEGORIES)[number];
 export type PaidPlan = "pro" | "business" | "enterprise";
 
-// NON-COMMERCIAL PLACEHOLDERS. Replace after pre-launch usage validation.
+// NON-COMMERCIAL PLACEHOLDERS: internal cost-safety limits only. Commercial allowances require usage-cost
+// validation before public launch and must not be advertised as final quotas.
 export const PLAN_LIMITS: Record<PaidPlan, Record<UsageCategory, number>> = {
   pro: { projects: 3, standardAiTasks: 50, aiManagerRuns: 5, imageGenerations: 10, videoGenerations: 2, presentationGenerations: 5, automationRuns: 20, assistantMessages: 100 },
   business: { projects: 10, standardAiTasks: 200, aiManagerRuns: 20, imageGenerations: 40, videoGenerations: 3, presentationGenerations: 20, automationRuns: 100, assistantMessages: 500 },

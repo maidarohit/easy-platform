@@ -1,5 +1,6 @@
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { getUserEntitlements, getUserSubscription } from "@/app/lib/subscriptions";
+import { getSafeBillingDiagnostics } from "@/app/lib/billing-configuration";
 
 export async function GET(request: Request) {
   let token;
@@ -21,5 +22,6 @@ export async function GET(request: Request) {
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     } : null,
     entitlements,
+    billingConfiguration: getSafeBillingDiagnostics(),
   });
 }

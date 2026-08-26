@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BILLING_PLANS } from "@/app/lib/billing-plans";
 
 const ArrowIcon = () => (
   <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><path d="M4 10h12m-4-4 4 4-4 4" /></svg>
@@ -29,10 +30,7 @@ export default function Home() {
     ["Review, improve and launch", "You stay in control and can refine anything later."],
   ];
   const overview = ["Your direction", "Your digital presence", "Your customer growth system", "Your business content", "Your performance overview", "Recommended next actions"];
-  const plans = [
-    { name: "Starter", price: "₹1,999", period: "/month", description: "The complete Buzypeezy workspace for growing your business.", features: ["Connected business workspace", "AI business tools", "Saved projects and outputs"] },
-    { name: "Growth", price: "₹4,999", period: "/month", description: "Expanded capacity for established businesses and teams.", features: ["Everything in Starter", "Expanded business capacity", "Priority business support"], featured: true },
-  ];
+  const plans = [BILLING_PLANS.pro, { ...BILLING_PLANS.business, featured: true }];
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#F7F4EC] text-[#1B211E] selection:bg-[#A8B8A7]/50">

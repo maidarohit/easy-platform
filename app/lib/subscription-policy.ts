@@ -1,4 +1,6 @@
-export const SUBSCRIPTION_PLANS = ["pro", "business"] as const;
+import { BILLING_PLAN_KEYS, isBillingPlanKey } from "@/app/lib/billing-plans";
+
+export const SUBSCRIPTION_PLANS = BILLING_PLAN_KEYS;
 
 export type SubscriptionPlan = (typeof SUBSCRIPTION_PLANS)[number];
 export type SubscriptionStatus =
@@ -9,7 +11,7 @@ export type SubscriptionStatus =
   | "expired";
 
 export function isSubscriptionPlan(value: unknown): value is SubscriptionPlan {
-  return typeof value === "string" && SUBSCRIPTION_PLANS.includes(value as SubscriptionPlan);
+  return isBillingPlanKey(value);
 }
 
 export function statusGrantsPaidAccess(status: SubscriptionStatus | null): boolean {

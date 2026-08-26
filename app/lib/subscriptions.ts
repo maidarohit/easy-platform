@@ -7,16 +7,16 @@ import {
   statusGrantsPaidAccess,
   type SubscriptionPlan,
 } from "@/app/lib/subscription-policy";
+import { BILLING_PLANS } from "@/app/lib/billing-plans";
+import { getBillingConfiguration } from "@/app/lib/billing-configuration";
 
 export const PLAN_PRICES_PAISE: Record<SubscriptionPlan, number> = {
-  pro: 199900,
-  business: 499900,
+  pro: BILLING_PLANS.pro.amountPaise,
+  business: BILLING_PLANS.business.amountPaise,
 };
 
 export function getRazorpayPlanId(plan: SubscriptionPlan): string {
-  const value = process.env[plan === "pro" ? "RAZORPAY_PRO_PLAN_ID" : "RAZORPAY_BUSINESS_PLAN_ID"];
-  if (!value) throw new Error(`Razorpay ${plan} plan is not configured.`);
-  return value;
+  return getBillingConfiguration().planIds[plan];
 }
 
 export async function getUserSubscription(userId: string) {
@@ -33,9 +33,7 @@ export async function getUserEntitlements(userId: string) {
 }
 
 export async function createRazorpaySubscription(planId: string, userId: string, plan: SubscriptionPlan) {
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) throw new Error("Razorpay API credentials are not configured.");
+  const { keyId, keySecret } = getBillingConfiguration();
 
   const response = await fetch("https://api.razorpay.com/v1/subscriptions", {
     method: "POST",
@@ -57,4 +55,14 @@ export async function createRazorpaySubscription(planId: string, userId: string,
   const entity = data as Record<string, unknown>;
   if (typeof entity.id !== "string" || typeof entity.short_url !== "string") throw new Error("Razorpay returned an incomplete subscription.");
   return { id: entity.id, checkoutUrl: entity.short_url };
+}
+
+export async function cancelRazorpaySubscription(providerSubscriptionId: string) {
+  const { keyId, keySecret } = getBillingConfiguration();
+  const response = await fetch(`https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(providerSubscriptionId)}/cancel`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ cancel_at_cycle_end: true }),
+  });
+  if (!response.ok) throw new Error(`Razorpay cancellation request failed (${response.status}).`);
 }

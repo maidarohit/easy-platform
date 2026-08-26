@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "@/app/db";
 import { subscriptions } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
@@ -11,7 +12,6 @@ import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscriptio
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
-  getUserSubscription,
 } from "@/app/lib/subscriptions";
 
 const MAX_CHECKOUT_BODY_BYTES = 2 * 1024;
@@ -49,24 +49,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const current = await getUserSubscription(token.uid);
-    if (current?.status === "active") {
-      return Response.json({ error: "An active subscription already exists" }, { status: 409 });
-    }
+    const reservationId = `checkout_intent_${randomUUID()}`;
+    const reservation = await db.transaction(async (transaction) => {
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`billing-checkout:${token.uid}`}))`);
+      const [current] = await transaction.select().from(subscriptions)
+        .where(eq(subscriptions.userId, token.uid))
+        .orderBy(desc(subscriptions.updatedAt)).limit(1);
+      if (current?.status === "active") return { error: "Plan changes are not available yet." } as const;
+      const recentPending = current?.status === "pending" && current.createdAt >= new Date(Date.now() - 30 * 60 * 1000);
+      const unresolvedReservation = current?.status === "pending" && current.providerSubscriptionId.startsWith("checkout_intent_");
+      if (recentPending || unresolvedReservation) return { error: current.plan === plan
+        ? "Payment setup is already in progress. Return to billing or contact support."
+        : "Another payment setup is already in progress." } as const;
+      await transaction.insert(subscriptions).values({ userId: token.uid, plan, providerSubscriptionId: reservationId, status: "pending" });
+      return { reserved: true } as const;
+    });
+    if ("error" in reservation) return Response.json({ error: reservation.error }, { status: 409 });
+
     const created = await createRazorpaySubscription(getRazorpayPlanId(plan), token.uid, plan);
-    await db.insert(subscriptions).values({
-      userId: token.uid,
-      plan,
-      providerSubscriptionId: created.id,
-      status: "pending",
-    }).onConflictDoNothing({ target: subscriptions.providerSubscriptionId });
+    await db.update(subscriptions).set({ providerSubscriptionId: created.id, updatedAt: new Date() })
+      .where(and(eq(subscriptions.userId, token.uid), eq(subscriptions.providerSubscriptionId, reservationId)));
 
     const persisted = await db.select({ userId: subscriptions.userId })
       .from(subscriptions)
       .where(eq(subscriptions.providerSubscriptionId, created.id))
       .limit(1);
     if (persisted[0]?.userId !== token.uid) throw new Error("Subscription ownership could not be established.");
-    return Response.json({ checkoutUrl: created.checkoutUrl });
+    return Response.json({ checkoutUrl: created.checkoutUrl, returnUrl: "/billing?checkout=return" });
   } catch (error) {
     console.error("Subscription checkout failed:", error instanceof Error ? error.message : "Unknown error");
     return Response.json({ error: "Unable to start subscription checkout" }, { status: 503 });
