@@ -28,6 +28,7 @@ import {
 } from "../lib/business-intake-analysis";
 import { buildBusinessReviewSections } from "../lib/business-intake-review";
 import { analyzeBusinessIntakeDeterministically } from "../lib/business-intake-planner";
+import ProductTutorial from "../components/ProductTutorial";
 
 const languageOptions: readonly { value: BusinessDnaLanguage; label: string }[] = [
   { value: "english", label: "English" },
@@ -138,6 +139,7 @@ export default function OnboardingPage() {
   const [editValue, setEditValue] = useState("");
   const [isStartingBuild, setIsStartingBuild] = useState(false);
   const [isBuildEligible, setIsBuildEligible] = useState(false);
+  const [tutorialComplete, setTutorialComplete] = useState(false);
 
   const content = useMemo(() => contentFromBusinessDna(dna), [dna]);
   const understoodContent = useMemo(() => mergeExplicitDnaWithInferences(content, analysis?.extractedDna ?? {}), [content, analysis]);
@@ -388,7 +390,10 @@ export default function OnboardingPage() {
       <div className="relative mx-auto flex min-h-screen w-full max-w-5xl flex-col px-5 py-6 sm:px-8 sm:py-8">
         <header className="flex items-center justify-between gap-6 border-b border-[#D8DCCF] pb-5">
           <span className="text-lg font-semibold tracking-[-0.02em] text-[#173D32]">Buzypeezy</span>
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#606A64]">Your business story</span>
+          <div className="flex items-center gap-3">
+            {(tutorialComplete || hasVision) && <ProductTutorial area="onboarding" />}
+            <span className="hidden text-xs font-semibold uppercase tracking-[0.18em] text-[#606A64] sm:inline">Your business story</span>
+          </div>
         </header>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex rounded-[14px] border border-[#D8DCCF] bg-[#FCFBF7] p-1" aria-label="Choose language">
@@ -400,6 +405,8 @@ export default function OnboardingPage() {
           <div className="mx-auto w-full max-w-3xl">
             {isLoading ? (
               <p role="status" className="text-center text-base text-[#606A64]">Opening your business conversation…</p>
+            ) : !hasVision && !tutorialComplete ? (
+              <ProductTutorial area="onboarding" mode="entry" onComplete={() => setTutorialComplete(true)} />
             ) : !hasVision ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Let’s begin</p>
