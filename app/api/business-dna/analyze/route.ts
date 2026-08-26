@@ -27,10 +27,16 @@ type Dependencies = Readonly<{ verify: typeof verifyFirebaseIdToken; read: typeo
   claimUsage: typeof claimIdempotentAiUsage; completeUsage: typeof completeAiUsage; failUsage: typeof failAiUsage }>;
 const dependencies: Dependencies = { verify: verifyFirebaseIdToken, read: readBusinessDnaForOwner, provider: requestBusinessIntakeAnalysis, claimUsage: claimIdempotentAiUsage, completeUsage: completeAiUsage, failUsage: failAiUsage };
 
-function logFailure(input: { stage: string; requestId: string; providerHttpStatus?: number; code: string; issuePaths?: readonly string[] }) {
+function logFailure(input: { stage: string; requestId: string; providerHttpStatus?: number; code: string; issuePaths?: readonly string[]; responseDiagnostics?: BusinessIntakeProviderError["responseDiagnostics"] }) {
   console.error("Business intake analysis failed.", {
     stage: input.stage, requestId: input.requestId, providerHttpStatus: input.providerHttpStatus ?? null,
     code: input.code, validatorIssueCount: input.issuePaths?.length ?? 0, validatorIssuePaths: input.issuePaths ?? [],
+    responseStatus: input.responseDiagnostics?.responseStatus ?? null,
+    incompleteReason: input.responseDiagnostics?.incompleteReason ?? null,
+    contentItemTypes: input.responseDiagnostics?.contentItemTypes ?? [],
+    extractedTextLength: input.responseDiagnostics?.extractedTextLength ?? 0,
+    beginsWithJsonObject: input.responseDiagnostics?.beginsWithJsonObject ?? false,
+    endsWithJsonObject: input.responseDiagnostics?.endsWithJsonObject ?? false,
   });
 }
 
@@ -70,7 +76,7 @@ export async function handleBusinessDnaAnalyze(request: Request, deps: Dependenc
     result = await deps.provider(input, { apiKey });
   } catch (error) {
     const detail = error instanceof BusinessIntakeProviderError ? error : new BusinessIntakeProviderError("provider_parse", "unexpected_provider_error");
-    logFailure({ stage: detail.stage, requestId, providerHttpStatus: detail.httpStatus, code: detail.safeCode, issuePaths: detail.issuePaths });
+    logFailure({ stage: detail.stage, requestId, providerHttpStatus: detail.httpStatus, code: detail.safeCode, issuePaths: detail.issuePaths, responseDiagnostics: detail.responseDiagnostics });
     await deps.failUsage({ usageId, durationMs: Date.now() - startedAt }).catch(() => logFailure({ stage: "usage_finalize", requestId, code: "fail_usage_failed" }));
     return Response.json({ error: "Business analysis failed. Your saved answers are safe.", requestId }, { status: 502 });
   }
