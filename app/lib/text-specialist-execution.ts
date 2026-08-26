@@ -3,7 +3,7 @@ import "server-only";
 import { getModuleAdapter, type EasyModeModuleId, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
-import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
 export type TextSpecialistModule = (typeof TEXT_SPECIALIST_MODULES)[number];
@@ -28,23 +28,24 @@ export async function loadCanonicalTextSpecialistInput(
   const ownedContext = await loadOwnedProjectContext(context);
   if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
   const { project, memory } = ownedContext;
-  const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
-  const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
-  const targetAudience = (memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
+  const dna = confirmedDnaExecutionContext(ownedContext);
+  const companyName = dna?.companyName || memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
+  const industry = dna?.industry || memory?.industry?.trim() || project.industry?.trim() || "Business services";
+  const targetAudience = (dna?.targetAudience || memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
     `Customers interested in ${industry}`).slice(0, 500);
-  const brandStyle = (memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500);
-  const brandDescription = memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
+  const brandStyle = (dna?.brandStyle || memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500);
+  const brandDescription = dna?.businessDescription || memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
     project.originalBrief?.trim() || `${companyName} provides ${industry.toLowerCase()} products or services.`;
   let candidate: Record<string, string>;
   if (module === "sales") {
     candidate = { companyName, industry, targetAudience, businessDescription: brandDescription,
-      salesGoal: memory?.marketingGoal?.trim() || project.goal?.trim() || "Grow sales" };
+      salesGoal: dna?.businessGoal || memory?.marketingGoal?.trim() || project.goal?.trim() || "Grow sales" };
   } else if (module === "analytics") {
     candidate = {
       companyName, industry, businessDescription: brandDescription,
       monthlyVisitors: "Not provided", monthlyLeads: "Not provided", monthlySales: "Not provided",
       monthlyRevenue: "Not provided", marketingBudget: "Not provided",
-      businessGoal: project.goal?.trim() || "Improve business performance",
+      businessGoal: dna?.businessGoal || project.goal?.trim() || "Improve business performance",
     };
   } else {
     candidate = { companyName, industry, targetAudience, brandStyle, brandDescription };

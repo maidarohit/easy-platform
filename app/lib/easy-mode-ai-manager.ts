@@ -7,7 +7,7 @@ import { getModuleAdapter, type ModuleExecutionInput, type TrustedModuleExecutio
 import { deriveEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { SpecialistExecutionError } from "@/app/lib/specialist-execution";
-import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const AI_MANAGER_WORKFLOW = "ai-manager";
 
@@ -23,11 +23,12 @@ export async function loadCanonicalAiManagerInput(context: TrustedModuleExecutio
   const ownedContext = await loadOwnedProjectContext(context);
   if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
   const { project, memory } = ownedContext;
+  const dna = confirmedDnaExecutionContext(ownedContext);
   const candidate = {
-    companyName: memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim(),
-    businessDescription: memory?.businessDescription?.trim() || project.brandDescription?.trim() || project.originalBrief?.trim() || "Business growth plan",
-    industry: memory?.industry?.trim() || project.industry?.trim() || "Business services",
-    businessGoal: project.goal?.trim() || "Build and improve the business",
+    companyName: dna?.companyName || memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim(),
+    businessDescription: dna?.businessDescription || memory?.businessDescription?.trim() || project.brandDescription?.trim() || project.originalBrief?.trim() || "Business growth plan",
+    industry: dna?.industry || memory?.industry?.trim() || project.industry?.trim() || "Business services",
+    businessGoal: dna?.businessGoal || project.goal?.trim() || "Build and improve the business",
   };
   const input = getModuleAdapter("ai-manager")?.validateInput(candidate);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);

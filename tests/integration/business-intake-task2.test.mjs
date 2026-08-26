@@ -164,9 +164,10 @@ test("18. Task 4 confirms Business DNA only after explicit review action", async
   assert.match(page, /Here&apos;s what I understood about your business/);
 });
 
-test("19. onboarding shows only a disabled Easy Mode preview", async () => {
+test("19. confirmed onboarding exposes only the Task 5 business-build entrypoint", async () => {
   const page = await readFile(new URL("../../app/onboarding/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /disabled className=.*Next: Build My Business/);
+  assert.match(page, /authenticatedFetch\("\/api\/business-build"/);
+  assert.match(page, /"Build My Business"/);
   assert.doesNotMatch(page, /api\/easy-mode|\/easy-mode\?|executeRun/);
 });
 

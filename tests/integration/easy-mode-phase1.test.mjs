@@ -34,10 +34,10 @@ test("Phase 1 preflight preserves ownership and cannot execute AI, n8n, or publi
   assert.doesNotMatch(route, /fetch\(|n8n|website-publications|projectOutputs|aiManagerJobs/);
 });
 
-test("onboarding and dashboard route customers into Easy Mode", async () => {
+test("confirmed onboarding enters Task 5 while dashboard retains Easy Mode", async () => {
   const onboarding = await source("app/onboarding/page.tsx");
   const dashboard = await source("app/dashboard/page.tsx");
-  assert.match(onboarding, /\/easy-mode\?projectId=/);
+  assert.match(onboarding, /\/business-build\?projectId=/);
   assert.match(dashboard, /Continue Building/);
   assert.match(dashboard, /\/easy-mode\?projectId=/);
 });

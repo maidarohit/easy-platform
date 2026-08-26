@@ -124,9 +124,9 @@ test("19. voice still cannot confirm Business DNA", async () => {
   assert.match(page, /onClick=\{\(\) => void confirmUnderstanding\(\)\}/);
 });
 
-test("20. Easy Mode preview never starts a run", async () => {
+test("20. confirmed intake hands off through the Task 5 build boundary", async () => {
   const page = await source("app/onboarding/page.tsx");
-  assert.match(page, /disabled className=.*Next: Build My Business/);
+  assert.match(page, /authenticatedFetch\("\/api\/business-build"/);
   assert.doesNotMatch(page, /api\/easy-mode|executeEasyMode|\/easy-mode\?/);
 });
 

@@ -136,6 +136,8 @@ export default function OnboardingPage() {
   const analyzingRef = useRef(false);
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [isStartingBuild, setIsStartingBuild] = useState(false);
+  const [isBuildEligible, setIsBuildEligible] = useState(false);
 
   const content = useMemo(() => contentFromBusinessDna(dna), [dna]);
   const understoodContent = useMemo(() => mergeExplicitDnaWithInferences(content, analysis?.extractedDna ?? {}), [content, analysis]);
@@ -163,6 +165,17 @@ export default function OnboardingPage() {
     },
   });
   const { speak, stopSpeaking } = speech;
+
+  useEffect(() => {
+    if (!projectId || !dna?.conversation?.confirmed) return;
+    let active = true;
+    void authenticatedFetch(`/api/business-build?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (active) setIsBuildEligible(response.ok && data.eligible === true);
+      }).catch(() => { if (active) setIsBuildEligible(false); });
+    return () => { active = false; };
+  }, [dna?.conversation?.confirmed, projectId]);
 
   const requestAnalysis = useCallback(async (id: string) => {
     if (analyzingRef.current) return;
@@ -336,6 +349,22 @@ export default function OnboardingPage() {
     finally { setIsSaving(false); }
   }
 
+  async function startBusinessBuild() {
+    if (!projectId || isStartingBuild || !dna?.conversation?.confirmed) return;
+    setIsStartingBuild(true); setError("");
+    try {
+      const response = await authenticatedFetch("/api/business-build", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "We could not start your business build.");
+      router.push(`/business-build?projectId=${encodeURIComponent(projectId)}`);
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : "We could not start your business build.");
+      setIsStartingBuild(false);
+    }
+  }
+
   function goBack() {
     const applicable = getApplicableQuestions(content);
     const historyCandidate = [...questionHistory].reverse().find((id) => applicable.some((question) => question.id === id));
@@ -389,7 +418,7 @@ export default function OnboardingPage() {
                 <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Business DNA confirmed</p>
                 <h1 className="mt-4 text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Your business is understood.</h1>
                 <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[#606A64]">Your approved business context is saved and ready for the next step.</p>
-                <button type="button" disabled className={`${primaryButtonClass} mt-8`}>Next: Build My Business — coming in Task 5</button>
+                {isBuildEligible ? <button type="button" disabled={isStartingBuild} onClick={() => void startBusinessBuild()} className={`${primaryButtonClass} mt-8`}>{isStartingBuild ? "Starting your build…" : "Build My Business"}</button> : <p className="mt-8 text-sm font-medium text-[#606A64]">Business building is not available for this project yet.</p>}
                 <button type="button" onClick={() => projectId && void saveDnaPatch(projectId, {}, false)} className="mt-6 block w-full text-sm font-semibold text-[#606A64] underline decoration-[#A8B8A7] underline-offset-4">Review or correct my details</button>
               </div>
             ) : complete ? (

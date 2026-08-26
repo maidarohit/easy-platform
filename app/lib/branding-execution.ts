@@ -10,7 +10,7 @@ import {
 } from "@/app/lib/easy-mode-execution-contracts";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
-import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
 const PROVIDER_TIMEOUT_MS = 120_000;
@@ -57,15 +57,16 @@ export async function loadCanonicalBrandingInput(
   const ownedContext = await loadOwnedProjectContext(context);
   if (!ownedContext) throw new BrandingExecutionError("PROVIDER_UNAVAILABLE", "before_dispatch", 404);
   const { project, memory } = ownedContext;
-  const companyName = memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
-  const industry = memory?.industry?.trim() || project.industry?.trim() || "Business services";
+  const dna = confirmedDnaExecutionContext(ownedContext);
+  const companyName = dna?.companyName || memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
+  const industry = dna?.industry || memory?.industry?.trim() || project.industry?.trim() || "Business services";
   const candidate = {
     companyName,
     industry,
-    targetAudience: (memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
+    targetAudience: (dna?.targetAudience || memory?.targetAudience?.trim() || project.targetAudience?.trim() ||
       `Customers interested in ${industry}`).slice(0, 500),
-    brandStyle: (memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500),
-    brandDescription: memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
+    brandStyle: (dna?.brandStyle || memory?.brandStyle?.trim() || project.brandStyle?.trim() || "Professional").slice(0, 500),
+    brandDescription: dna?.businessDescription || memory?.businessDescription?.trim() || project.brandDescription?.trim() ||
       project.originalBrief?.trim() || `${companyName} provides ${industry.toLowerCase()} products or services.`,
   };
   const validated = getModuleAdapter("branding")?.validateInput(candidate);
