@@ -1,12 +1,20 @@
 import "server-only";
 
-import { validateBusinessIntakeAnalysis, type BusinessIntakeAnalysis, type BusinessIntakeAnalysisInput } from "@/app/lib/business-intake-analysis";
+import { BUSINESS_INTAKE_QUESTION_PATHS, businessIntakeAnalysisIssuePaths, validateBusinessIntakeAnalysis, type BusinessIntakeAnalysis, type BusinessIntakeAnalysisInput } from "@/app/lib/business-intake-analysis";
 
 export const BUSINESS_INTAKE_MODEL = "gpt-5-mini";
 const TIMEOUT_MS = 45_000;
 
+export type BusinessIntakeFailureStage = "provider_http" | "provider_parse" | "schema_validation";
 export class BusinessIntakeProviderError extends Error {
-  constructor() { super("BUSINESS_INTAKE_ANALYSIS_FAILED"); this.name = "BusinessIntakeProviderError"; }
+  readonly stage: BusinessIntakeFailureStage;
+  readonly safeCode: string;
+  readonly httpStatus?: number;
+  readonly issuePaths: readonly string[];
+  constructor(stage: BusinessIntakeFailureStage, safeCode: string, httpStatus?: number, issuePaths: readonly string[] = []) {
+    super("BUSINESS_INTAKE_ANALYSIS_FAILED"); this.name = "BusinessIntakeProviderError";
+    this.stage = stage; this.safeCode = safeCode; this.httpStatus = httpStatus; this.issuePaths = issuePaths;
+  }
 }
 
 const stringField = { type: ["string", "null"], maxLength: 4000 } as const;
@@ -31,7 +39,7 @@ export const BUSINESS_INTAKE_JSON_SCHEMA = {
     missingAreas: { type: "array", maxItems: 12, items: { type: "string", maxLength: 200 } },
     suggestedQuestions: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false,
       required: ["id", "dnaPath", "question", "reason", "required", "answerType", "options"], properties: {
-        id: { type: "string", pattern: "^[a-z0-9-]{1,64}$" }, dnaPath: { type: "string" }, question: { type: "string", maxLength: 500 },
+        id: { type: "string", pattern: "^[a-z0-9-]{1,64}$" }, dnaPath: { type: "string", enum: BUSINESS_INTAKE_QUESTION_PATHS }, question: { type: "string", maxLength: 500 },
         reason: { type: "string", maxLength: 500 }, required: { type: "boolean" }, answerType: { type: "string", enum: ["text", "textarea", "choice", "choice-or-text"] },
         options: { type: "array", maxItems: 8, items: { type: "object", additionalProperties: false, required: ["label", "value"], properties: { label: { type: "string", maxLength: 200 }, value: { type: "string", maxLength: 200 } } } },
       } } },
@@ -64,16 +72,28 @@ export async function requestBusinessIntakeAnalysis(input: BusinessIntakeAnalysi
         text: { format: { type: "json_schema", name: "business_intake_analysis", strict: true, schema: BUSINESS_INTAKE_JSON_SCHEMA } },
       }),
     });
-  } catch { throw new BusinessIntakeProviderError(); }
-  if (!response.ok) throw new BusinessIntakeProviderError();
+  } catch (error) { throw new BusinessIntakeProviderError("provider_http", error instanceof DOMException && error.name === "TimeoutError" ? "timeout" : "network_error"); }
+  if (!response.ok) {
+    let code = `http_${response.status}`;
+    try {
+      const body = await response.json() as { error?: { code?: unknown; type?: unknown } };
+      const candidate = body?.error?.code ?? body?.error?.type;
+      if (typeof candidate === "string" && /^[a-zA-Z0-9_.-]{1,80}$/.test(candidate)) code = candidate;
+    } catch { /* Provider error bodies are optional and never logged raw. */ }
+    throw new BusinessIntakeProviderError("provider_http", code, response.status);
+  }
   let raw: unknown;
-  try { raw = await response.json(); } catch { throw new BusinessIntakeProviderError(); }
+  try { raw = await response.json(); } catch { throw new BusinessIntakeProviderError("provider_parse", "invalid_response_json", response.status); }
   const text = outputText(raw);
-  if (!text) throw new BusinessIntakeProviderError();
+  if (!text) {
+    const status = (raw as { status?: unknown }).status;
+    throw new BusinessIntakeProviderError("provider_parse", status === "incomplete" ? "incomplete" : "missing_output_text", response.status);
+  }
   let parsed: unknown;
-  try { parsed = JSON.parse(text); } catch { throw new BusinessIntakeProviderError(); }
-  const analysis = validateBusinessIntakeAnalysis(omitNulls(parsed));
-  if (!analysis) throw new BusinessIntakeProviderError();
+  try { parsed = JSON.parse(text); } catch { throw new BusinessIntakeProviderError("provider_parse", "invalid_output_json", response.status); }
+  const normalized = omitNulls(parsed);
+  const analysis = validateBusinessIntakeAnalysis(normalized);
+  if (!analysis) throw new BusinessIntakeProviderError("schema_validation", "runtime_validation_failed", response.status, businessIntakeAnalysisIssuePaths(normalized));
   const usage = (raw as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
   return { analysis, ...(Number.isSafeInteger(usage?.input_tokens) ? { inputTokens: usage!.input_tokens } : {}), ...(Number.isSafeInteger(usage?.output_tokens) ? { outputTokens: usage!.output_tokens } : {}) };
 }

@@ -47,14 +47,15 @@ export type BusinessIntakeAnalysisInput = Readonly<{
 }>;
 
 const PATH_SET = new Set<string>(BUSINESS_DNA_ANALYSIS_PATHS);
-const QUESTION_PATH_SET = new Set<string>([
+export const BUSINESS_INTAKE_QUESTION_PATHS = [
   "identity.businessName", "identity.businessStage", "founderHistory.founderStory", "founderHistory.whyStarted",
   "founderHistory.businessAge", "founderHistory.businessGeneration", "location.city", "location.serviceAreas",
   "offer.strongestOffers", "offer.differentiators", "customers.currentCustomers", "customers.desiredCustomers",
   "digitalPresence.existingWebsite", "digitalPresence.websiteStatus", "digitalPresence.socialPresence",
   "digitalPresence.digitalProblems", "personality.brandPersonality", "goals.sixToTwelveMonthGoal",
   "goals.primaryGoal", "goals.primaryLeadObjective",
-]);
+] as const satisfies readonly BusinessIntakePath[];
+const QUESTION_PATH_SET = new Set<string>(BUSINESS_INTAKE_QUESTION_PATHS);
 
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -109,6 +110,24 @@ export function validateBusinessIntakeAnalysis(value: unknown): BusinessIntakeAn
   }
   return { extractedDna, ...(confidence ? { confidence } : {}), missingAreas: value.missingAreas,
     suggestedQuestions: questions, understandingSummary: value.understandingSummary, buildPlanSummary: value.buildPlanSummary };
+}
+
+export function businessIntakeAnalysisIssuePaths(value: unknown): string[] {
+  if (validateBusinessIntakeAnalysis(value)) return [];
+  const issues = new Set<string>();
+  if (!object(value)) return ["$"];
+  const dna = validateBusinessDnaPatch(value.extractedDna);
+  if (!dna || dna.conversation) issues.add("extractedDna");
+  if (!strings(value.missingAreas, 12)) issues.add("missingAreas");
+  if (!strings(value.buildPlanSummary, 8)) issues.add("buildPlanSummary");
+  if (typeof value.understandingSummary !== "string" || !value.understandingSummary.trim() || value.understandingSummary.length > 2_000) issues.add("understandingSummary");
+  if (!Array.isArray(value.suggestedQuestions)) issues.add("suggestedQuestions");
+  else value.suggestedQuestions.forEach((candidate, index) => {
+    if (!object(candidate)) issues.add(`suggestedQuestions.${index}`);
+    else if (typeof candidate.dnaPath !== "string" || !QUESTION_PATH_SET.has(candidate.dnaPath)) issues.add(`suggestedQuestions.${index}.dnaPath`);
+  });
+  if (value.confidence !== undefined && !object(value.confidence)) issues.add("confidence");
+  return [...issues].slice(0, 12);
 }
 
 function pathValue(dna: BusinessDnaContent, path: string): unknown {

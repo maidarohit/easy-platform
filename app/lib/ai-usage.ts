@@ -9,7 +9,7 @@ import {
 import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
 import { requirePaidModule } from "@/app/lib/paid-entitlements";
 import { categoryForModule } from "@/app/lib/plan-config";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 type StartAiUsageInput = {
   userId: string;
@@ -92,6 +92,25 @@ export async function startAiUsage({
 
     if (!usage) throw new Error("AI usage row was not created.");
     return usage.id;
+  });
+}
+
+export async function claimIdempotentAiUsage(input: StartAiUsageInput): Promise<{ usageId: string; created: boolean; status: string }> {
+  return db.transaction(async (transaction) => {
+    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`ai-usage:${input.userId}:${input.projectId}:${input.module}:${input.workflow}`}))`);
+    const [existing] = await transaction.select({ id: aiUsage.id, status: aiUsage.status }).from(aiUsage).where(and(
+      eq(aiUsage.userId, input.userId), eq(aiUsage.projectId, input.projectId), eq(aiUsage.module, input.module), eq(aiUsage.workflow, input.workflow),
+    )).limit(1);
+    if (existing) return { usageId: existing.id, created: false, status: existing.status };
+    const access = await requirePaidModule(input.userId, input.module);
+    if (!access.ok) throw access.response;
+    const [usage] = await transaction.insert(aiUsage).values({
+      userId: input.userId, projectId: input.projectId, module: input.module, workflow: input.workflow,
+      model: input.model ?? null, requestCount: 1, inputTokens: null, outputTokens: null,
+      estimatedCostUsd: "0", durationMs: null, status: "started",
+    }).returning({ id: aiUsage.id, status: aiUsage.status });
+    if (!usage) throw new Error("AI usage row was not created.");
+    return { usageId: usage.id, created: true, status: usage.status };
   });
 }
 

@@ -62,21 +62,21 @@ test("23 no specialist workflow starts", async () => assert.doesNotMatch(await r
 test("24 provider failure preserves saved intake", async () => {
   const old = process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = "true"; process.env.OPENAI_API_KEY = "test";
   const dna = materializeBusinessDna({ content: { conversation: { originalVisionText: "Saved", preferredLanguage: "english" } }, confirmed: false, confirmedAt: null, revisionCount: 0, createdAt: new Date(0), updatedAt: new Date(0) });
-  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, provider: async () => { throw new Error("fail"); }, startUsage: async () => "usage", completeUsage: async () => {}, failUsage: async () => {} });
+  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, provider: async () => { throw new Error("fail"); }, claimUsage: async () => ({ usageId: "usage", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 502); assert.equal(dna.conversation.originalVisionText, "Saved");
   process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = old; delete process.env.OPENAI_API_KEY;
 });
 test("25 retry does not duplicate persisted analysis", async () => assert.doesNotMatch(await readFile("app/api/business-dna/analyze/route.ts", "utf8"), /insert\(|updateBusinessDna/));
 test("26 unauthorized project rejected", async () => {
-  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "other", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => undefined, provider: async () => { throw new Error(); }, startUsage: async () => "", completeUsage: async () => {}, failUsage: async () => {} });
+  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "other", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => undefined, provider: async () => { throw new Error(); }, claimUsage: async () => ({ usageId: "", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 404);
 });
 test("27 client userId cannot override ownership", async () => {
-  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123", userId: "attacker" }) }), { verify: async () => ({ uid: "owner" }), read: async () => undefined, provider: async () => { throw new Error(); }, startUsage: async () => "", completeUsage: async () => {}, failUsage: async () => {} });
+  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123", userId: "attacker" }) }), { verify: async () => ({ uid: "owner" }), read: async () => undefined, provider: async () => { throw new Error(); }, claimUsage: async () => ({ usageId: "", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 400);
 });
 test("28 two projects cannot leak analysis DNA", async () => {
-  let readArgs; const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "project-a", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner-a" }), read: async (...args) => { readArgs = args; return undefined; }, provider: async () => { throw new Error(); }, startUsage: async () => "", completeUsage: async () => {}, failUsage: async () => {} });
+  let readArgs; const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "project-a", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner-a" }), read: async (...args) => { readArgs = args; return undefined; }, provider: async () => { throw new Error(); }, claimUsage: async () => ({ usageId: "", created: true, status: "started" }), completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 404); assert.deepEqual(readArgs, ["owner-a", "project-a"]);
 });
 test("29 two similar businesses produce materially different DNA projections", () => {
@@ -88,7 +88,7 @@ test("30 deterministic fallback still works without AI", () => assert.ok(analyze
 test("31 mocked analysis does not create real usage or provider call", async () => {
   const old = process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; delete process.env.BUSINESS_INTAKE_PROVIDER_ENABLED; let called = false;
   const dna = materializeBusinessDna({ content: { conversation: { originalVisionText: "A bakery in Pune", preferredLanguage: "english" } }, confirmed: false, confirmedAt: null, revisionCount: 0, createdAt: new Date(0), updatedAt: new Date(0) });
-  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, provider: async () => { called = true; return { analysis: validAnalysis }; }, startUsage: async () => { called = true; return ""; }, completeUsage: async () => {}, failUsage: async () => {} });
+  const response = await handleBusinessDnaAnalyze(new Request("http://local", { method: "POST", body: JSON.stringify({ projectId: "p1", requestId: "request-123" }) }), { verify: async () => ({ uid: "owner" }), read: async () => dna, provider: async () => { called = true; return { analysis: validAnalysis }; }, claimUsage: async () => { called = true; return { usageId: "", created: true, status: "started" }; }, completeUsage: async () => {}, failUsage: async () => {} });
   assert.equal(response.status, 200); assert.equal(called, false); process.env.BUSINESS_INTAKE_PROVIDER_ENABLED = old;
 });
 test("32 existing Task 2 resume behavior remains intact", async () => assert.match(await readFile("app/onboarding/page.tsx", "utf8"), /business-dna\?projectId=.*requestAnalysis/si));
