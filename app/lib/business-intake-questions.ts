@@ -241,6 +241,20 @@ export function isBusinessIntakePathApplicable(path: BusinessIntakePath, dna: Bu
   return question?.applicability?.(dna) ?? true;
 }
 
+export function eligibleBusinessIntakeQuestions(questions: readonly BusinessIntakeQuestion[], dna: BusinessDnaContent) {
+  return questions.filter((question) =>
+    isBusinessIntakePathApplicable(question.path, dna) && !isQuestionComplete(question, dna));
+}
+
+export function selectCurrentBusinessIntakeQuestion(input: {
+  questions: readonly BusinessIntakeQuestion[];
+  dna: BusinessDnaContent;
+  currentQuestionId: string | null;
+}) {
+  const eligible = eligibleBusinessIntakeQuestions(input.questions, input.dna);
+  return eligible.find((question) => question.id === input.currentQuestionId) ?? eligible[0] ?? null;
+}
+
 export function getApplicableQuestions(dna: BusinessDnaContent) {
   const applicable = BUSINESS_INTAKE_QUESTIONS.filter((question) => question.applicability?.(dna) ?? true);
   if (!isStartupBusiness(dna)) return applicable;

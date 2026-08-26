@@ -6,7 +6,7 @@ import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToP
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
-import { countSavedBusinessIntakeAnswers } from "../../app/lib/business-intake-questions.ts";
+import { countSavedBusinessIntakeAnswers, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
 import { handleBusinessDnaPatch } from "../../app/api/business-dna/route.ts";
 
@@ -71,6 +71,35 @@ test("8g populated main goal skips equivalent generic goal wording but not unrel
     { id: "desired-customers", dnaPath: "customers.desiredCustomers", question: "Who do you want to reach?", reason: "Customer context", required: true, answerType: "textarea" },
   ] };
   assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { primaryGoal: "Generate qualified enquiries" } }).map((question) => question.id), ["desired-customers"]);
+});
+test("8h persisted duplicate goal question is removed on resume and never rendered", () => {
+  const questions = [
+    { id: "duplicate-future-goal", path: "goals.sixToTwelveMonthGoal", question: "What should happen in the next year?", required: true, answerType: "textarea" },
+  ];
+  assert.equal(selectCurrentBusinessIntakeQuestion({ questions, dna: { goals: { sixToTwelveMonthGoal: "Generate qualified enquiries" } }, currentQuestionId: "duplicate-future-goal" }), null);
+});
+test("8i invalid persisted current question automatically advances to the next valid question", () => {
+  const questions = [
+    { id: "future-goal", path: "goals.sixToTwelveMonthGoal", question: "Future goal?", required: true, answerType: "textarea" },
+    { id: "desired-customers", path: "customers.desiredCustomers", question: "Desired customers?", required: true, answerType: "textarea" },
+  ];
+  assert.equal(selectCurrentBusinessIntakeQuestion({ questions, dna: { goals: { sixToTwelveMonthGoal: "Already saved" } }, currentQuestionId: "future-goal" })?.id, "desired-customers");
+});
+test("8j no valid resumed questions advances directly to review without changing six saved answers", () => {
+  const dna = { identity: { businessName: "Agency", businessStage: "established" }, customers: { desiredCustomers: "Serious clients" }, goals: { primaryGoal: "Professional presence", sixToTwelveMonthGoal: "Qualified enquiries", primaryLeadObjective: "More enquiries" } };
+  const before = structuredClone(dna);
+  const questions = [
+    { id: "future-goal", path: "goals.sixToTwelveMonthGoal", question: "Future goal?", required: true, answerType: "textarea" },
+    { id: "primary-goal", path: "goals.primaryGoal", question: "Main goal?", required: true, answerType: "textarea" },
+    { id: "lead-objective", path: "goals.primaryLeadObjective", question: "Lead goal?", required: true, answerType: "choice-or-text" },
+  ];
+  assert.equal(countSavedBusinessIntakeAnswers(dna), 6);
+  assert.equal(selectCurrentBusinessIntakeQuestion({ questions, dna, currentQuestionId: "future-goal" }), null);
+  assert.deepEqual(dna, before);
+});
+test("8k resume/render selection contains no provider, Easy Mode or Task 5 execution", async () => {
+  const source = await readFile("app/lib/business-intake-questions.ts", "utf8");
+  assert.doesNotMatch(source, /fetch\s*\(|requestBusinessIntakeAnalysis|executeEasyMode|easyModeRuns|Task 5/i);
 });
 test("9 startup and established MSME follow-ups differ", () => {
   const startup = planAdaptiveQuestions({ identity: { businessStage: "startup" } }, "english").map((q) => q.id);

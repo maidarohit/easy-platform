@@ -16,6 +16,8 @@ import {
   isQuestionComplete,
   businessIntakeQuestionText,
   countSavedBusinessIntakeAnswers,
+  eligibleBusinessIntakeQuestions,
+  selectCurrentBusinessIntakeQuestion,
   type BusinessIntakeQuestion,
 } from "../lib/business-intake-questions";
 import {
@@ -138,8 +140,11 @@ export default function OnboardingPage() {
   const adaptiveQuestions = useMemo<BusinessIntakeQuestion[]>(() => analysis ? unansweredSuggestedQuestions(analysis, understoodContent).map((item): BusinessIntakeQuestion => ({
     id: item.id, path: item.dnaPath, question: item.question, required: item.required, answerType: item.answerType, options: item.options,
   })) : [], [analysis, understoodContent]);
-  const nextQuestion = useMemo(() => analysis ? adaptiveQuestions[0] ?? null : getNextBusinessIntakeQuestion(content), [analysis, adaptiveQuestions, content]);
-  const activeQuestion = useMemo(() => [...adaptiveQuestions, ...BUSINESS_INTAKE_QUESTIONS].find((question) => question.id === activeQuestionId) ?? nextQuestion, [activeQuestionId, adaptiveQuestions, nextQuestion]);
+  const questionCandidates = useMemo(() => analysis ? adaptiveQuestions : getApplicableQuestions(content), [analysis, adaptiveQuestions, content]);
+  const eligibleQuestions = useMemo(() => eligibleBusinessIntakeQuestions(questionCandidates, understoodContent), [questionCandidates, understoodContent]);
+  const activeQuestion = useMemo(() => selectCurrentBusinessIntakeQuestion({
+    questions: eligibleQuestions, dna: understoodContent, currentQuestionId: activeQuestionId,
+  }), [activeQuestionId, eligibleQuestions, understoodContent]);
   const hasVision = Boolean(content.conversation?.originalVisionText?.trim());
   const deterministicComplete = hasVision && !getNextBusinessIntakeQuestion(content);
   const complete = hasVision && !activeQuestion && (Boolean(analysis) || deterministicComplete);
@@ -331,7 +336,7 @@ export default function OnboardingPage() {
     }
   }
 
-  const applicableQuestions = analysis ? adaptiveQuestions : getApplicableQuestions(content);
+  const applicableQuestions = eligibleQuestions;
   const completedCount = countSavedBusinessIntakeAnswers(content);
   const progressQuestionCount = Math.max(completedCount + applicableQuestions.length, 1);
 
