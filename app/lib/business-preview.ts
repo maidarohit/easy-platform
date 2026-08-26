@@ -38,6 +38,46 @@ export function extractBrandColours(value: unknown) {
   return [...new Set(palette.match(/#[0-9a-f]{6}\b/gi) ?? [])].slice(0, 8).map((hex) => hex.toUpperCase());
 }
 
+const LIST_MARKER = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
+
+export function cleanFirstListCandidate(value: unknown) {
+  const source = text(value);
+  if (!source) return null;
+  const candidates = source
+    .split(/(?:\r?\n|;|\s+(?=\d{1,2}[.)]\s))/)
+    .map((candidate) => candidate.replace(LIST_MARKER, "").trim())
+    .filter(Boolean);
+  return candidates[0] ?? null;
+}
+
+export function parsePreviewCards(value: unknown, maximum = 6) {
+  const source = text(value);
+  if (!source) return [];
+  const items = source.split(/(?:\r?\n|;|\s+(?=\d{1,2}[.)]\s))/)
+    .map((item) => item.replace(LIST_MARKER, "").trim()).filter(Boolean);
+  const cards = items.map((item) => {
+    const parts = item.match(/^([^:—–]{2,80})\s*(?::|—|–)\s*(.+)$/);
+    return parts ? { title: parts[1].trim(), description: parts[2].trim() } : null;
+  }).filter((card): card is { title: string; description: string } => Boolean(card));
+  return cards.length >= 3 ? cards.slice(0, maximum) : [];
+}
+
+export function parseDisplayItems(value: unknown, maximum = 6) {
+  const source = text(value);
+  if (!source) return [];
+  const items = source.split(/(?:\r?\n|;|\s+(?=\d{1,2}[.)]\s))/)
+    .map((item) => item.replace(LIST_MARKER, "").trim()).filter(Boolean);
+  return (items.length > 1 ? items : [source]).slice(0, maximum);
+}
+
+export function parseKeywordTags(value: unknown, maximum = 16) {
+  const source = text(value);
+  if (!source) return [];
+  return [...new Set(source.split(/(?:[,;\r\n]+|\s+(?=\d{1,2}[.)]\s))/)
+    .map((item) => item.replace(LIST_MARKER, "").trim())
+    .filter((item) => item.length >= 2 && item.length <= 80))].slice(0, maximum);
+}
+
 export function buildBusinessPreview(source: BusinessPreviewSource) {
   const branding = source.outputs.get("branding")?.output;
   const website = source.outputs.get("website")?.output;
@@ -75,25 +115,30 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
       heroHeadline: text(websiteEdits?.heroHeadline) || text(branding?.tagline),
       supportingText: excerpt(websiteEdits?.heroDescription || website.websiteOverview, 650),
       primaryCta: text(websiteEdits?.primaryCtaLabel),
-      services: excerpt(websiteEdits?.servicesText || website.recommendedPages, 900),
+      services: text(websiteEdits?.servicesText || website.recommendedPages),
+      serviceCards: parsePreviewCards(websiteEdits?.servicesText || website.recommendedPages),
       trust: excerpt(branding?.marketingSuggestions, 650),
       about: excerpt(websiteEdits?.aboutText || branding?.story, 900),
       features: excerpt(website.websiteFeatures, 800),
       contact: text(websiteEdits?.email) || text(websiteEdits?.phone) || text(websiteEdits?.whatsapp),
     } : null,
     marketing: marketing ? {
-      positioning: excerpt(marketing.marketingStrategy, 850),
-      campaign: excerpt(marketing.campaignTimeline || marketing.paidAdsStrategy, 750),
-      audience: excerpt(marketing.targetAudienceAnalysis, 750),
+      positioning: text(marketing.marketingStrategy),
+      campaign: text(marketing.campaignTimeline || marketing.paidAdsStrategy),
+      audience: text(marketing.targetAudienceAnalysis),
       socialCards: [marketing.contentIdeas, marketing.socialMediaStrategy, marketing.adCopy]
-        .map((item) => excerpt(item, 500)).filter((item): item is string => Boolean(item)),
+        .map((item) => text(item)).filter((item): item is string => Boolean(item)),
+      campaignCards: [marketing.campaignTimeline || marketing.paidAdsStrategy,
+        marketing.contentIdeas, marketing.socialMediaStrategy, marketing.adCopy]
+        .flatMap((item) => parseDisplayItems(item)).slice(0, 6),
     } : null,
     search: seo ? {
       positioning: excerpt(seo.seoStrategy || seo.seoAudit, 850),
-      keywords: excerpt(seo.keywords || seo.keywordResearch, 650),
+      keywords: text(seo.keywords || seo.keywordResearch),
+      keywordTags: parseKeywordTags(seo.keywords || seo.keywordResearch),
       localFocus: excerpt(seo.growthRecommendations, 650),
-      title: excerpt(seo.metaTitles, 180),
-      description: excerpt(seo.metaDescriptions, 320),
+      title: cleanFirstListCandidate(seo.metaTitles),
+      description: cleanFirstListCandidate(seo.metaDescriptions),
     } : null,
     journey: sales || uiux ? {
       leadAction: excerpt(sales?.leadGenerationStrategy, 750),

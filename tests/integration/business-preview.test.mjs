@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildBusinessPreview, extractBrandColours } from "../../app/lib/business-preview.ts";
+import {
+  buildBusinessPreview, cleanFirstListCandidate, extractBrandColours,
+  parseKeywordTags, parsePreviewCards,
+} from "../../app/lib/business-preview.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -60,6 +63,40 @@ test("missing optional saved fields stay absent and invalid colours are not fabr
   assert.deepEqual(extractBrandColours("#123456, #123456, broken #123"), ["#123456"]);
 });
 
+test("saved website section lists become visual cards only when deterministic parsing is safe", () => {
+  assert.deepEqual(parsePreviewCards(
+    "Home — Main introduction; Services — What customers can buy; Work — Existing customer proof; Contact — Enquiry options",
+  ), [
+    { title: "Home", description: "Main introduction" },
+    { title: "Services", description: "What customers can buy" },
+    { title: "Work", description: "Existing customer proof" },
+    { title: "Contact", description: "Enquiry options" },
+  ]);
+  assert.deepEqual(parsePreviewCards("A narrative that cannot be safely separated"), []);
+});
+
+test("search normalization selects one saved candidate and cleans keyword tags", () => {
+  assert.equal(cleanFirstListCandidate("1. BrightReach Digital | Bangalore 2. Branding Services | BrightReach"), "BrightReach Digital | Bangalore");
+  assert.equal(cleanFirstListCandidate("1) Local digital growth for MSMEs.\n2) Practical branding and websites."), "Local digital growth for MSMEs.");
+  assert.deepEqual(parseKeywordTags("1. digital marketing Bangalore, 2. branding services; qualified enquiries"), [
+    "digital marketing Bangalore", "branding services", "qualified enquiries",
+  ]);
+});
+
+test("presentation mapping retains complete saved text and does not mutate source outputs", () => {
+  const longPositioning = "Saved positioning ".repeat(80).trim();
+  const marketing = Object.freeze({ marketingStrategy: longPositioning, contentIdeas: "1. Proof post; 2. Local case study" });
+  const outputs = new Map([["marketing", output("marketing-1", marketing)]]);
+  const before = JSON.stringify(marketing);
+  const preview = buildBusinessPreview({
+    project: { id: "project-3", name: "Business", companyName: null, industry: null, goal: null, businessDescription: null },
+    outputs,
+  });
+  assert.equal(preview.marketing?.positioning, longPositioning);
+  assert.deepEqual(preview.marketing?.campaignCards, ["Proof post", "Local case study"]);
+  assert.equal(JSON.stringify(marketing), before);
+});
+
 test("preview route reads validated saved outputs and approval only timestamps those outputs", async () => {
   const route = await source("app/api/business-preview/route.ts");
   assert.match(route, /verifyFirebaseIdToken\(request\)/);
@@ -81,6 +118,10 @@ test("customer preview provides all viewports and never exposes specialist AI na
     assert.doesNotMatch(page, new RegExp(technical));
   }
   assert.match(page, /method: "POST"/);
+  assert.match(page, /View more/);
+  assert.match(page, /website\.serviceCards\.map/);
+  assert.match(page, /marketing\.campaignCards\.map/);
+  assert.match(page, /search\.keywordTags\.map/);
   assert.match(page, /\/api\/business-preview/);
   assert.doesNotMatch(page, /publish|regenerate|\/api\/easy-mode|\/api\/business-dna\/analyze/i);
 });
