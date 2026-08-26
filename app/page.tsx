@@ -58,32 +58,18 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative border-b border-[#173D32]/10 py-20 sm:py-28 lg:py-32">
+      <section className="relative border-b border-[#173D32]/10 py-24 sm:py-32 lg:py-40">
         <div className="pointer-events-none absolute -left-44 top-10 h-96 w-96 rounded-full bg-[#A8B8A7]/20 blur-3xl" />
         <div className="pointer-events-none absolute -right-40 bottom-0 h-96 w-96 rounded-full bg-[#DCCBAA]/25 blur-3xl" />
-        <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 sm:px-8 lg:grid-cols-[1.05fr_.95fr] lg:gap-20">
-          <div>
+        <div className="relative mx-auto max-w-5xl px-5 text-center sm:px-8">
+          <div className="mx-auto flex max-w-4xl flex-col items-center">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">Business, made easier</p>
-            <h1 className="mt-7 max-w-4xl [font-size:clamp(2.75rem,7vw,5.5rem)] font-semibold leading-[0.96] tracking-[-0.06em] text-[#1B211E]">Your business.<br /><span className="text-[#173D32]">Built intelligently.</span></h1>
+            <h1 className="mt-7 max-w-4xl [font-size:clamp(2.75rem,7vw,5.75rem)] font-semibold leading-[0.96] tracking-[-0.06em] text-[#1B211E]">Your business.<br /><span className="text-[#173D32]">Built intelligently.</span></h1>
             <p className="mt-8 max-w-2xl [font-size:clamp(1.0625rem,1.7vw,1.375rem)] leading-[1.65] text-[#626A64]">Tell Buzypeezy what you do and where you want to go. We’ll turn it into a complete digital business system — ready to build, grow and improve.</p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-10 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
               <Link href="/signup" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173D32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(23,61,50,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]">Start Building <ArrowIcon /></Link>
               <a href="#how-it-works" className="inline-flex items-center justify-center rounded-xl border border-[#173D32]/20 bg-[#FCFBF7]/70 px-6 py-3.5 text-sm font-semibold text-[#173D32] transition hover:-translate-y-0.5 hover:border-[#173D32]/35 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">See How It Works</a>
             </div>
-          </div>
-
-          <div className="relative rounded-[32px] border border-[#173D32]/15 bg-[#FCFBF7] p-6 shadow-[0_30px_80px_rgba(40,52,45,0.10)] sm:p-8">
-            <div className="absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-[#B89A61] to-transparent" />
-            <div className="flex items-center justify-between border-b border-[#173D32]/10 pb-5"><div><p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#738174]">Your business · Example preview</p><h2 className="mt-2 text-2xl font-semibold text-[#0E2C24]">MAYA Realty</h2><p className="mt-1 text-sm text-[#717872]">Luxury Real Estate • Bangalore</p></div><div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#B89A61]/35 bg-[#F4EEE1] text-[#8A713F]"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5"><path d="M4 20V9l8-5 8 5v11M8 20v-7h8v7" /></svg></div></div>
-            <div className="mt-6 space-y-3">
-              {[
-                ["Understanding your business", "complete"],
-                ["Building your direction", "complete"],
-                ["Creating your digital presence", "active"],
-                ["Preparing your growth system", "upcoming"],
-              ].map(([label, status], index) => <div key={label} className={`flex items-center gap-4 rounded-2xl border px-4 py-4 ${status === "active" ? "border-[#B89A61]/35 bg-[#F6F0E4]" : "border-[#173D32]/8 bg-white/60"}`}><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${status === "complete" ? "bg-[#173D32] text-white" : status === "active" ? "bg-[#B89A61] text-white" : "bg-[#EEE9DC] text-[#8A918C]"}`}>{status === "complete" ? <CheckIcon /> : `0${index + 1}`}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-[#27332E]">{label}</p><span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#7A817C]">{status}</span></div>{status === "active" && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#DDD6C7]"><div className="h-full w-2/3 animate-pulse rounded-full bg-[#173D32]" /></div>}</div></div>)}
-            </div>
-            <p className="mt-6 text-center text-sm font-medium text-[#52605A]">Buzypeezy is taking care of it.</p>
           </div>
         </div>
       </section>
