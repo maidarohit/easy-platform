@@ -34,6 +34,45 @@ export type BusinessIntakeQuestion = Readonly<{
   applicability?: (dna: BusinessDnaContent) => boolean;
 }>;
 
+export type BusinessIntakeIntent =
+  | "business_name" | "industry" | "business_stage" | "business_age" | "business_origin"
+  | "current_customer" | "target_customer" | "products_services" | "strongest_offer"
+  | "location" | "service_area" | "differentiator" | "website_status" | "website_problem"
+  | "website_priority" | "social_presence" | "portfolio_proof" | "main_goal"
+  | "six_to_twelve_month_goal" | "lead_goal" | "growth_objective" | "online_challenges" | "brand_personality";
+
+export const BUSINESS_INTAKE_COMPLETION_MATRIX: Readonly<Record<BusinessIntakeIntent, readonly string[]>> = {
+  business_name: ["identity.businessName"], industry: ["identity.industry"], business_stage: ["identity.businessStage"],
+  business_age: ["founderHistory.businessAge"], business_origin: ["founderHistory.businessGeneration", "founderHistory.whyStarted", "founderHistory.founderStory"],
+  current_customer: ["customers.currentCustomers"], target_customer: ["customers.desiredCustomers", "customers.targetAudience"],
+  products_services: ["offer.strongestOffers", "offer.products", "offer.services"], strongest_offer: ["offer.strongestOffers"],
+  location: ["location.city", "location.region", "location.country"], service_area: ["location.serviceAreas"], differentiator: ["offer.differentiators"],
+  website_status: ["digitalPresence.existingWebsite"], website_problem: ["digitalPresence.websiteStatus"], website_priority: ["digitalPresence.websiteStatus"],
+  social_presence: ["digitalPresence.socialPresence"], portfolio_proof: ["personality.trustSignals"], online_challenges: ["digitalPresence.digitalProblems"],
+  main_goal: ["goals.primaryGoal"], six_to_twelve_month_goal: ["goals.sixToTwelveMonthGoal"], lead_goal: ["goals.primaryLeadObjective"],
+  growth_objective: ["goals.primaryGoal", "goals.sixToTwelveMonthGoal"],
+  brand_personality: ["personality.brandPersonality"],
+};
+
+const STATIC_QUESTION_INTENTS: Readonly<Record<string, BusinessIntakeIntent>> = {
+  "business-name": "business_name", "business-stage": "business_stage", "business-age": "business_age", "business-generation": "business_origin",
+  "why-started": "business_origin", "founder-story": "business_origin", location: "location", "service-areas": "service_area",
+  "current-customers": "current_customer", "desired-customers": "target_customer", "strongest-offers": "products_services", differentiators: "differentiator",
+  "existing-website": "website_status", "website-problem": "website_problem", "social-presence": "social_presence", "digital-problems": "online_challenges",
+  "primary-goal": "main_goal", "future-goal": "six_to_twelve_month_goal", "lead-objective": "lead_goal", "brand-personality": "brand_personality",
+};
+
+const PATH_INTENTS: Readonly<Record<string, BusinessIntakeIntent>> = {
+  "identity.businessName": "business_name", "identity.industry": "industry", "identity.businessStage": "business_stage",
+  "founderHistory.businessAge": "business_age", "founderHistory.businessGeneration": "business_origin", "founderHistory.whyStarted": "business_origin", "founderHistory.founderStory": "business_origin",
+  "customers.currentCustomers": "current_customer", "customers.desiredCustomers": "target_customer", "customers.targetAudience": "target_customer",
+  "offer.products": "products_services", "offer.services": "products_services", "offer.strongestOffers": "products_services", "offer.differentiators": "differentiator",
+  "location.city": "location", "location.serviceAreas": "service_area", "digitalPresence.existingWebsite": "website_status",
+  "digitalPresence.websiteStatus": "website_problem", "digitalPresence.socialPresence": "social_presence", "digitalPresence.digitalProblems": "online_challenges",
+  "personality.trustSignals": "portfolio_proof", "personality.brandPersonality": "brand_personality", "goals.primaryGoal": "main_goal",
+  "goals.sixToTwelveMonthGoal": "six_to_twelve_month_goal", "goals.primaryLeadObjective": "lead_goal",
+};
+
 const HINDI_QUESTIONS: Readonly<Record<string, string>> = {
   "business-name": "आपके व्यवसाय का नाम क्या है?",
   "business-stage": "आज आपके व्यवसाय की स्थिति क्या है?",
@@ -225,6 +264,51 @@ function pathValue(dna: BusinessDnaContent, path: BusinessIntakePath): unknown {
   return (dna[section] as Record<string, unknown> | undefined)?.[field];
 }
 
+function valueAtAnyPath(dna: BusinessDnaContent, path: string): unknown {
+  const [section, field] = path.split(".");
+  return (dna[section as keyof BusinessDnaContent] as Record<string, unknown> | undefined)?.[field];
+}
+
+function meaningful(value: unknown) {
+  return Array.isArray(value) ? value.some((item) => typeof item === "string" && item.trim())
+    : typeof value === "string" ? Boolean(value.trim()) : false;
+}
+
+export function businessIntakeQuestionIntent(question: { id?: string; path?: string; dnaPath?: string; question: string }): BusinessIntakeIntent | null {
+  const wording = question.question.toLowerCase();
+  if (/\b(?:portfolio|case stud(?:y|ies)|testimonials?|proof)\b/.test(wording)) return "portfolio_proof";
+  if (/\b(?:social profiles?|social channels?|instagram|facebook|linkedin)\b/.test(wording)) return "social_presence";
+  if (/\b(?:website|site)\b/.test(wording) && /\b(?:build|create|future|want|need|priority|priorities|should include)\b/.test(wording)) return "website_priority";
+  if (/\b(?:website|site)\b/.test(wording) && /\b(?:wrong|problem|performance|traffic|conversion|working well|not working)\b/.test(wording)) return "website_problem";
+  if (/\b(?:website|site)\b/.test(wording) && /\b(?:have|existing|currently|already)\b/.test(wording)) return "website_status";
+  if (/\b(?:6\s*(?:-|–|to)\s*12|next\s+(?:six|6|twelve|12)\s+months?|next\s+year)\b/.test(wording)) return "six_to_twelve_month_goal";
+  if (/\b(?:leads?|enquir(?:y|ies)|calls?|bookings?|appointments?)\b/.test(wording) && /\b(?:goal|valuable|want|need|generate|more)\b/.test(wording)) return "lead_goal";
+  if (/\b(?:main|primary|top)\s+goal\b/.test(wording)) return "main_goal";
+  if (/\b(?:growth objective|grow (?:the |your )?business|business growth)\b/.test(wording)) return "growth_objective";
+  if (/\b(?:customer|client|audience)\b/.test(wording) && /\b(?:want|reach|target|ideal|more|most)\b/.test(wording)) return "target_customer";
+  if (/\b(?:customer|client)\b/.test(wording) && /\b(?:current|today|usually|already|buys?)\b/.test(wording)) return "current_customer";
+  if (/\b(?:products?|services?|offerings?|sell|provide|known for)\b/.test(wording)) return "products_services";
+  if (/\b(?:different|choose you|instead|unique|usp)\b/.test(wording)) return "differentiator";
+  if (/\b(?:how long|business age|operating|in business)\b/.test(wording)) return "business_age";
+  if (/\b(?:stage|starting|existing business|family business|msme)\b/.test(wording)) return "business_stage";
+  if (question.id && STATIC_QUESTION_INTENTS[question.id]) return STATIC_QUESTION_INTENTS[question.id];
+  return PATH_INTENTS[question.path ?? question.dnaPath ?? ""] ?? null;
+}
+
+export function isBusinessIntakeIntentComplete(intent: BusinessIntakeIntent, dna: BusinessDnaContent) {
+  if (intent === "portfolio_proof" && dna.digitalPresence?.existingWebsite?.trim().toLowerCase() === "have_portfolio") return true;
+  return BUSINESS_INTAKE_COMPLETION_MATRIX[intent].some((path) => meaningful(valueAtAnyPath(dna, path)));
+}
+
+export function isBusinessIntakeIntentApplicable(intent: BusinessIntakeIntent, dna: BusinessDnaContent) {
+  return intent !== "website_problem" || hasExistingWebsite(dna);
+}
+
+export function isBusinessIntakeQuestionSemanticallyEligible(question: { id?: string; path?: string; dnaPath?: string; question: string }, dna: BusinessDnaContent) {
+  const intent = businessIntakeQuestionIntent(question);
+  return !intent || (isBusinessIntakeIntentApplicable(intent, dna) && !isBusinessIntakeIntentComplete(intent, dna));
+}
+
 export function isQuestionComplete(question: BusinessIntakeQuestion, dna: BusinessDnaContent) {
   const value = pathValue(dna, question.path);
   if (Array.isArray(value)) return question.required ? value.length > 0 : value !== undefined;
@@ -243,7 +327,7 @@ export function isBusinessIntakePathApplicable(path: BusinessIntakePath, dna: Bu
 
 export function eligibleBusinessIntakeQuestions(questions: readonly BusinessIntakeQuestion[], dna: BusinessDnaContent) {
   return questions.filter((question) =>
-    isBusinessIntakePathApplicable(question.path, dna) && !isQuestionComplete(question, dna));
+    isBusinessIntakePathApplicable(question.path, dna) && !isQuestionComplete(question, dna) && isBusinessIntakeQuestionSemanticallyEligible(question, dna));
 }
 
 export function selectCurrentBusinessIntakeQuestion(input: {

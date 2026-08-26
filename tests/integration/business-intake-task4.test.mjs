@@ -6,7 +6,7 @@ import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToP
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, extractExplicitVisionDna, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
-import { BUSINESS_INTAKE_QUESTIONS, countSavedBusinessIntakeAnswers, eligibleBusinessIntakeQuestions, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
+import { BUSINESS_INTAKE_COMPLETION_MATRIX, BUSINESS_INTAKE_QUESTIONS, businessIntakeQuestionIntent, countSavedBusinessIntakeAnswers, eligibleBusinessIntakeQuestions, isBusinessIntakeQuestionSemanticallyEligible, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
 import { handleBusinessDnaPatch } from "../../app/api/business-dna/route.ts";
 
@@ -261,4 +261,45 @@ test("41 legacy recovery preserves six saved answers and remains unconfirmed", (
   assert.equal(recovered.identity?.businessStage, "established/existing");
   assert.equal(recovered.founderHistory?.businessAge, "two years");
   assert.equal("confirmed" in (recovered.conversation ?? {}), false);
+});
+test("42 canonical completion matrix covers every normalized intake concept", () => {
+  assert.deepEqual(BUSINESS_INTAKE_COMPLETION_MATRIX.target_customer, ["customers.desiredCustomers", "customers.targetAudience"]);
+  assert.deepEqual(BUSINESS_INTAKE_COMPLETION_MATRIX.products_services, ["offer.strongestOffers", "offer.products", "offer.services"]);
+  assert.deepEqual(BUSINESS_INTAKE_COMPLETION_MATRIX.six_to_twelve_month_goal, ["goals.sixToTwelveMonthGoal"]);
+  assert.equal(Object.keys(BUSINESS_INTAKE_COMPLETION_MATRIX).length, 23);
+});
+test("43 target-customer intent accepts desired customer or target audience aliases", () => {
+  const question = { dnaPath: "customers.desiredCustomers", question: "Who is the customer you most want to reach?" };
+  assert.equal(businessIntakeQuestionIntent(question), "target_customer");
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, { customers: { desiredCustomers: "Local MSMEs" } }), false);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, { customers: { targetAudience: "Bangalore small businesses" } }), false);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, {}), true);
+});
+test("44 mis-tagged provider customer question is skipped by semantic intent", () => {
+  const analysis = { ...validAnalysis, suggestedQuestions: [
+    { id: "customer-focus", dnaPath: "goals.primaryGoal", question: "Who is the customer you most want to reach?", reason: "Customer context", required: true, answerType: "textarea" },
+  ] };
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { customers: { targetAudience: "Established local MSMEs" } }), []);
+});
+test("45 services intent uses products, services or strongest offers as completion", () => {
+  const question = { dnaPath: "offer.strongestOffers", question: "What products or services do you want to be known for?" };
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, { offer: { services: ["Website design"] } }), false);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, {}), true);
+});
+test("46 social and portfolio intents honor explicit negative and proof states", () => {
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible({ dnaPath: "digitalPresence.socialPresence", question: "Do you have any social profiles?" }, { digitalPresence: { socialPresence: ["no_profiles"] } }), false);
+  const proofQuestion = { dnaPath: "offer.differentiators", question: "Do you have case studies or testimonials to share?" };
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(proofQuestion, { personality: { trustSignals: ["have_portfolio"] } }), false);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(proofQuestion, { digitalPresence: { existingWebsite: "have_portfolio" } }), false);
+});
+test("47 website problems remain globally inapplicable without an existing website", () => {
+  const question = { dnaPath: "digitalPresence.websiteStatus", question: "What traffic or conversion problems does your current website have?" };
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, { digitalPresence: { existingWebsite: "no" } }), false);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible(question, { digitalPresence: { existingWebsite: "https://example.com" } }), true);
+  assert.equal(isBusinessIntakeQuestionSemanticallyEligible({ dnaPath: "digitalPresence.websiteStatus", question: "What should your future website include?" }, { digitalPresence: { existingWebsite: "no" } }), true);
+});
+test("48 review formats stage enums and preserves correct online categories", () => {
+  const items = buildBusinessReviewSections({ identity: { businessStage: "established/existing" }, digitalPresence: { existingWebsite: "have_portfolio", socialPresence: ["no_profiles"] } }).flatMap((section) => section.items);
+  assert.equal(items.find((item) => item.label === "Stage")?.value, "Existing / operating business");
+  assert.ok(items.every((item) => !/established\/existing|have_portfolio|no_profiles/.test(item.value)));
 });

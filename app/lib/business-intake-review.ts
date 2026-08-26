@@ -21,6 +21,8 @@ function rawValueAt(dna: BusinessDnaContent, path: string) {
 const customerCopy: Readonly<Record<string, string>> = {
   have_portfolio: "Has case studies or testimonials to share",
   no_profiles: "No social profiles yet",
+  "established/existing": "Existing / operating business",
+  "startup/new": "Starting something new",
 };
 
 function customerFacingPart(value: string) {
