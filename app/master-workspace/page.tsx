@@ -145,14 +145,15 @@ function MasterWorkspaceContent() {
                 href={projectLink("/business-preview")}
                 className="inline-flex min-h-11 items-center rounded-full bg-[#103c32] px-5 text-sm font-semibold text-white transition hover:bg-[#185a4b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103c32] focus-visible:ring-offset-2"
               >
-                Preview My Business
+                {publication.status === "active" ? "Preview & Edit My Business" : "Preview, Edit & Publish"}
               </Link>
+              <Link href={projectLink("/dashboard/automation")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Manage Automation</Link>
               <ProductTutorial area="master-workspace" />
               <WorkspaceGuide />
             </div>
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-[#9edfe9] bg-white/70 px-4 py-2 text-[10px] font-semibold tracking-[0.25em] text-[#13cdea]">
-                MASTER INTELLIGENCE WORKSPACE
+                BUSINESS WORKSPACE
               </span>
 
               <span
@@ -162,17 +163,16 @@ function MasterWorkspaceContent() {
                     : "border-[#e0d7c7] bg-white text-[#9a8768]"
                 }`}
               >
-                {connected ? "● PROJECT MEMORY CONNECTED" : "PROJECT MEMORY OFFLINE"}
+                {connected ? "● BUSINESS CONNECTED" : "BUSINESS NOT CONNECTED"}
               </span>
             </div>
 
             <h1 className="text-4xl font-semibold tracking-[-0.04em] text-[#103c32] md:text-6xl">
-              Master Workspace
+              My Business
             </h1>
 
             <p className="mt-3 max-w-3xl text-base leading-7 text-[#66756f]">
-              One central operating workspace for strategy, brand, website,
-              marketing, sales, analytics and creative intelligence.
+              Your central place to review, manage, preview and publish your business.
             </p>
           </section>
 
@@ -234,7 +234,7 @@ function MasterWorkspaceContent() {
 
                 <div className="rounded-2xl border border-[#e5e0d5] bg-[#faf8f1] p-4">
                   <p className="text-[9px] font-bold tracking-[0.2em] text-[#9b8b72]">
-                    PROJECT MEMORY
+                    WORKSPACE
                   </p>
                   <p className="mt-2 font-semibold text-[#13bfd6]">
                     {connected ? "Connected" : "Not connected"}
@@ -243,7 +243,7 @@ function MasterWorkspaceContent() {
 
                 <div className="rounded-2xl border border-[#e5e0d5] bg-[#faf8f1] p-4">
                   <p className="text-[9px] font-bold tracking-[0.2em] text-[#9b8b72]">
-                    AI STRATEGY
+                    BUSINESS PLAN
                   </p>
                   <p className="mt-2 font-semibold">
                     {workspace?.sections.some((section) => section.module === "ai-manager" && section.state === "Ready") ? "Saved" : "Not generated"}
@@ -253,16 +253,18 @@ function MasterWorkspaceContent() {
             </div>
           </section>
 
-          {/* MODULE MATRIX */}
-          <section>
+          {/* ADVANCED TOOLS */}
+          <details id="advanced-tools" className="scroll-mt-6 rounded-[28px] border border-[#ded9cc] bg-white/55 p-5 md:p-7">
+            <summary className="cursor-pointer text-xl font-semibold text-[#103c32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103c32]">Advanced Tools</summary>
+          <section className="mt-6">
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <p className="text-[10px] font-bold tracking-[0.26em] text-[#13c8df]">
-                  BUSINESS INTELLIGENCE MATRIX
+                  SAVED BUSINESS AREAS
                 </p>
 
                 <h2 className="mt-2 text-3xl font-semibold tracking-[-0.035em]">
-                  Core Workspace
+                  Detailed tools and saved outputs
                 </h2>
               </div>
 
@@ -356,6 +358,7 @@ function MasterWorkspaceContent() {
               ))}
             </div>
           </section>
+          </details>
 
           {/* CREATIVE + AUTOMATION */}
           <section className="mt-8 grid gap-5 xl:grid-cols-2">
@@ -364,20 +367,19 @@ function MasterWorkspaceContent() {
               className="rounded-[28px] border border-[#f0cfca] bg-gradient-to-br from-white to-[#fff2ef] p-7 transition hover:-translate-y-1 hover:shadow-lg"
             >
               <p className="text-[10px] font-bold tracking-[0.25em] text-[#e28a7b]">
-                CREATIVE PRODUCTION
+                OPTIONAL CREATIVE TOOLS
               </p>
 
               <h3 className="mt-3 text-2xl font-semibold">
-                Creative AI Suite
+                Creative Tools
               </h3>
 
               <p className="mt-3 leading-7 text-[#6f7874]">
-                Logo concepts, image, content, presentation and video generation
-                connected to this business project.
+                Optional logo, image, content, presentation and video tools connected to this business.
               </p>
 
               <div className="mt-6 text-sm font-semibold text-[#d66f62]">
-                Open Creative Suite →
+                Open Creative Tools →
               </div>
             </Link>
 

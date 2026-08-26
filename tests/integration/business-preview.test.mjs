@@ -130,7 +130,7 @@ test("Master Workspace opens the active project preview and refresh only reloads
   const [workspace, previewPage] = await Promise.all([
     source("app/master-workspace/page.tsx"), source("app/business-preview/page.tsx"),
   ]);
-  assert.match(workspace, /Preview My Business/);
+  assert.match(workspace, /Preview (?:& Edit My Business|, Edit & Publish)/);
   assert.match(workspace, /projectLink\("\/business-preview"\)/);
   assert.match(previewPage, /cache: "no-store"/);
   assert.doesNotMatch(previewPage, /\/api\/(?:easy-mode|business-dna\/analyze)|openai|n8n|provider/i);

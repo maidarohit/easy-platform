@@ -8,6 +8,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useRouter } from "next/navigation";
+import { customerProjectAction } from "@/app/lib/customer-navigation";
 
 type Project = {
   id: string;
@@ -42,6 +43,7 @@ function DashboardPageContent() {
   const [summaryError, setSummaryError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [projectActions, setProjectActions] = useState<Record<string, { label: string; href: string }>>({});
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
@@ -127,12 +129,38 @@ function DashboardPageContent() {
     return unsubscribe;
   }, []);
 
-  const openInAIManager = (project: Project) => {
-    router.push(`/ai-manager?projectId=${encodeURIComponent(project.id)}`);
+  useEffect(() => {
+    if (projects.length === 0) return;
+    let active = true;
+    void Promise.all(projects.map(async (project) => {
+      const fallback = customerProjectAction(project);
+      if (fallback.label === "Tell us about your business") return [project.id, fallback] as const;
+      try {
+        const [previewResponse, publicationResponse] = await Promise.all([
+          authenticatedFetch(`/api/business-preview?projectId=${encodeURIComponent(project.id)}`, { cache: "no-store" }),
+          authenticatedFetch(`/api/business-publications?projectId=${encodeURIComponent(project.id)}`, { cache: "no-store" }),
+        ]);
+        const publicationData = await publicationResponse.json();
+        if (publicationResponse.ok && publicationData.publication?.status === "active" && publicationData.publication.publicUrl) {
+          return [project.id, { label: "View Live Business", href: publicationData.publication.publicUrl as string }] as const;
+        }
+        if (!previewResponse.ok) return [project.id, fallback] as const;
+        const previewData = await previewResponse.json();
+        const outputIds = Array.isArray(previewData.preview?.approval?.outputIds) ? previewData.preview.approval.outputIds : [];
+        if (outputIds.length === 0) return [project.id, { label: "Build My Business", href: `/onboarding?projectId=${encodeURIComponent(project.id)}` }] as const;
+        return [project.id, {
+          label: previewData.preview?.approval?.approved ? "Publish My Business" : "Review My Business",
+          href: `/business-preview?projectId=${encodeURIComponent(project.id)}`,
+        }] as const;
+      } catch { return [project.id, fallback] as const; }
+    })).then((entries) => { if (active) setProjectActions(Object.fromEntries(entries)); });
+    return () => { active = false; };
+  }, [projects]);
+
+  const openAdvancedTools = (project: Project) => {
+    router.push(`/master-workspace?projectId=${encodeURIComponent(project.id)}#advanced-tools`);
   };
-  const continueBuilding = (project: Project) => {
-    router.push(`/easy-mode?projectId=${encodeURIComponent(project.id)}`);
-  };
+  const continueBusiness = (project: Project) => router.push((projectActions[project.id] ?? customerProjectAction(project)).href);
   const filteredProjects = projects.filter((project) => {
   const query = searchQuery.toLowerCase();
 
@@ -173,7 +201,7 @@ function DashboardPageContent() {
         <span className="h-2 w-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.9)]" />
 
         <span className="text-xs font-semibold uppercase tracking-[0.28em] text-red-300">
-          Command Center
+          Your business
         </span>
       </div>
 
@@ -183,7 +211,7 @@ function DashboardPageContent() {
       </h1>
 
       <p className="mt-2 text-sm text-slate-400">
-        Control your projects, AI agents and platform activity.
+        Continue building, reviewing and publishing your business.
       </p>
     </div>
   </div>
@@ -217,7 +245,7 @@ function DashboardPageContent() {
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-400">
-                  Continue building your business or open advanced tools.
+                  Open your business workspace or use advanced tools when you need them.
                 </p>
               </div>
 
@@ -321,7 +349,7 @@ function DashboardPageContent() {
           />
 
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-400">
-            Active Project
+            My Business
           </p>
         </div>
 
@@ -341,7 +369,7 @@ function DashboardPageContent() {
         tracking-[0.18em] text-red-300
       "
     >
-      Memory Ready
+      Saved
     </div>
   </div>
 
@@ -398,14 +426,14 @@ function DashboardPageContent() {
 
   {/* PROJECT ACTIONS */}
   <button
-    onClick={() => continueBuilding(project)}
+    onClick={() => continueBusiness(project)}
     className="relative mt-6 flex w-full items-center justify-between overflow-hidden rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3.5 font-semibold text-white transition-all duration-300 hover:border-cyan-300/60 hover:bg-cyan-400/15"
   >
-    <span>Continue Building</span>
+    <span>{(projectActions[project.id] ?? customerProjectAction(project)).label}</span>
     <span aria-hidden="true">→</span>
   </button>
   <button
-    onClick={() => openInAIManager(project)}
+    onClick={() => openAdvancedTools(project)}
     className="
       relative mt-3 flex w-full items-center justify-between
       overflow-hidden rounded-xl

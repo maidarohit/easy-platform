@@ -19,9 +19,9 @@ export default function StatsCards({
 
   const cards = [
     {
-      title: "AI Requests",
+      title: "Saved Activity",
       value: displaySummaryValue(aiRequests),
-      href: "/ai-manager",
+      href: "#saved-projects",
       accent: "text-[#D7C49B]",
       icon: (
         <svg
@@ -39,7 +39,7 @@ export default function StatsCards({
     },
 
     {
-      title: "Projects",
+      title: "My Businesses",
       value: String(projectCount),
       href: "#saved-projects",
       accent: "text-[#A8B8A7]",
@@ -59,9 +59,9 @@ export default function StatsCards({
     },
 
     {
-      title: "Available AI Tools",
+      title: "Business Tools",
       value: displaySummaryValue(availableAiTools),
-      href: "/ai-manager",
+      href: "#saved-projects",
       accent: "text-[#F7F4EC]",
       icon: (
         <svg
@@ -78,9 +78,9 @@ export default function StatsCards({
     },
 
     {
-      title: "Active AI Jobs",
+      title: "Work in Progress",
       value: displaySummaryValue(activeAiJobs),
-      href: "/ai-manager",
+      href: "#saved-projects",
       accent: "text-cyan-300",
       icon: (
         <svg
@@ -215,7 +215,7 @@ export default function StatsCards({
     />
 
     <span className="text-[10px] uppercase tracking-[0.18em] text-[#46534D]">
-      System Active
+      Saved securely
     </span>
   </div>
 </a>
