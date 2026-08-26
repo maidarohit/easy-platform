@@ -3,7 +3,13 @@ import "server-only";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { aiUsage, entitlementOverrides, projects } from "@/app/db/schema";
-import { categoryForModule, PLAN_LIMITS, USAGE_CATEGORIES, type UsageCategory } from "@/app/lib/plan-config";
+import {
+  categoryForModule,
+  PLAN_LIMITS,
+  USAGE_CATEGORIES,
+  type PaidPlan,
+  type UsageCategory,
+} from "@/app/lib/plan-config";
 import { getUserSubscription } from "@/app/lib/subscriptions";
 
 const ACCESS_CATEGORY = "__paid_access__";
@@ -29,6 +35,21 @@ function isPrivateBetaUser(userId: string, category: UsageCategory): boolean {
       .map((item) => item.trim())
       .filter(Boolean)
   ).has(userId);
+}
+
+export function isTestProjectLimitBypassUser(userId: string): boolean {
+  return new Set(
+    (process.env.PRIVATE_BETA_UIDS_TEST ?? "").split(",").map((item) => item.trim()).filter(Boolean),
+  ).has(userId);
+}
+
+export function projectCountAllowance(input: { userId: string; plan: PaidPlan; used: number; limit: number }) {
+  if (isTestProjectLimitBypassUser(input.userId)) {
+    return { ok: true as const, plan: input.plan, category: "projects" as const, used: input.used, limit: input.limit, testLimitBypass: true as const };
+  }
+  return input.used >= input.limit
+    ? { ok: false as const, reason: "PLAN_LIMIT_REACHED" as const, category: "projects" as const, used: input.used, limit: input.limit }
+    : { ok: true as const, plan: input.plan, category: "projects" as const, used: input.used, limit: input.limit };
 }
 
 export async function checkUsageAllowance(userId: string, category: UsageCategory) {
@@ -58,9 +79,7 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
   if (category === "projects") {
     const [row] = await db.select({ count: sql<number>`count(*)` }).from(projects).where(eq(projects.userId, userId));
     const used = Number(row?.count ?? 0);
-    return used >= limit
-      ? { ok: false as const, reason: "PLAN_LIMIT_REACHED" as const, category, used, limit }
-      : { ok: true as const, plan, category, used, limit };
+    return projectCountAllowance({ userId, plan, used, limit });
   }
 
   const modules = Object.entries({
