@@ -121,7 +121,7 @@ test("12. refresh/resume selects the next unanswered saved question", () => {
   let saved = { conversation: { originalVisionText: "Grow my workshop" } };
   saved = complete(saved, "business-name", "Acme Workshop");
   saved = complete(saved, "business-stage", "startup/new");
-  assert.equal(getNextBusinessIntakeQuestion(structuredClone(saved)).id, "why-started");
+  assert.equal(getNextBusinessIntakeQuestion(structuredClone(saved)).id, "desired-customers");
 });
 
 test("13. two projects cannot leak intake state", async () => {

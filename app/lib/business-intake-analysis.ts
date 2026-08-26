@@ -3,9 +3,9 @@ import {
   type BusinessDnaContent,
   type BusinessDnaLanguage,
 } from "@/app/lib/business-dna";
-import { isBusinessIntakePathApplicable, isBusinessIntakeQuestionSemanticallyEligible, type BusinessIntakePath } from "@/app/lib/business-intake-questions";
+import { BUSINESS_INTAKE_FOLLOW_UP_MAX, criticalBusinessIntakeQuestions, isBusinessIntakePathApplicable, isBusinessIntakeQuestionSemanticallyEligible, type BusinessIntakePath } from "@/app/lib/business-intake-questions";
 
-export const BUSINESS_INTAKE_MAX_QUESTIONS = 8;
+export const BUSINESS_INTAKE_MAX_QUESTIONS = BUSINESS_INTAKE_FOLLOW_UP_MAX;
 
 export const BUSINESS_DNA_ANALYSIS_PATHS = [
   "identity.businessName", "identity.industry", "identity.subIndustry", "identity.businessStage",
@@ -155,7 +155,8 @@ export function mergeExplicitDnaWithInferences(explicit: BusinessDnaContent, inf
 }
 
 export function unansweredSuggestedQuestions(analysis: BusinessIntakeAnalysis, dna: BusinessDnaContent) {
-  return analysis.suggestedQuestions.filter((question) =>
+  const unanswered = analysis.suggestedQuestions.filter((question) =>
     isBusinessIntakePathApplicable(question.dnaPath, dna) &&
     !hasValue(pathValue(dna, question.dnaPath)) && isBusinessIntakeQuestionSemanticallyEligible(question, dna));
+  return criticalBusinessIntakeQuestions(unanswered, dna).slice(0, BUSINESS_INTAKE_MAX_QUESTIONS);
 }

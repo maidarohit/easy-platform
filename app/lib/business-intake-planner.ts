@@ -6,7 +6,7 @@ import {
   type BusinessIntakeAnalysisInput,
   type SuggestedBusinessIntakeQuestion,
 } from "@/app/lib/business-intake-analysis";
-import { BUSINESS_INTAKE_QUESTIONS, getApplicableQuestions, hasExistingWebsite, isQuestionComplete } from "@/app/lib/business-intake-questions";
+import { BUSINESS_INTAKE_QUESTIONS, criticalBusinessIntakeQuestions, getApplicableQuestions, hasExistingWebsite, isQuestionComplete } from "@/app/lib/business-intake-questions";
 
 const text = {
   english: {
@@ -53,11 +53,12 @@ export function planAdaptiveQuestions(dna: BusinessDnaContent, language: Busines
     question("future-goal", "goals.sixToTwelveMonthGoal", copy.goal),
   ];
   const fallback = getApplicableQuestions(dna).filter((item) => item.required && !isQuestionComplete(item, dna)).map((item) => question(item.id, item.path, language === "english" ? item.question : item.questionHindi ?? item.question));
-  return [...candidates, ...fallback].filter((item, index, all) => all.findIndex((other) => other.dnaPath === item.dnaPath) === index)
+  const unanswered = [...candidates, ...fallback].filter((item, index, all) => all.findIndex((other) => other.dnaPath === item.dnaPath) === index)
     .filter((item) => {
       const original = BUSINESS_INTAKE_QUESTIONS.find((candidate) => candidate.path === item.dnaPath);
       return !original || !isQuestionComplete(original, dna);
-    }).slice(0, Math.min(maximum, BUSINESS_INTAKE_MAX_QUESTIONS));
+    });
+  return criticalBusinessIntakeQuestions(unanswered, dna).slice(0, Math.min(maximum, BUSINESS_INTAKE_MAX_QUESTIONS));
 }
 
 export function extractExplicitVisionDna(vision: string): BusinessDnaContent {

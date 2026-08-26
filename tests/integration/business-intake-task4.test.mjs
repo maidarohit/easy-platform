@@ -6,7 +6,7 @@ import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToP
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, extractExplicitVisionDna, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
-import { BUSINESS_INTAKE_COMPLETION_MATRIX, BUSINESS_INTAKE_QUESTIONS, businessIntakeQuestionIntent, countSavedBusinessIntakeAnswers, eligibleBusinessIntakeQuestions, isBusinessIntakeQuestionSemanticallyEligible, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
+import { BUSINESS_INTAKE_COMPLETION_MATRIX, BUSINESS_INTAKE_QUESTIONS, businessIntakeQuestionIntent, countSavedBusinessIntakeAnswers, criticalBusinessIntakeQuestions, eligibleBusinessIntakeQuestions, isBusinessDnaReadyForReview, isBusinessIntakeQuestionSemanticallyEligible, selectCurrentBusinessIntakeQuestion } from "../../app/lib/business-intake-questions.ts";
 import { handleBusinessDnaAnalyze } from "../../app/api/business-dna/analyze/route.ts";
 import { handleBusinessDnaPatch } from "../../app/api/business-dna/route.ts";
 
@@ -25,7 +25,7 @@ test("5 already-answered city is not asked again", () => assert.ok(!planAdaptive
 test("6 already-answered business age is not asked again", () => assert.ok(!planAdaptiveQuestions({ identity: { businessStage: "established" }, founderHistory: { businessAge: "two years" } }, "english").some((q) => q.dnaPath === "founderHistory.businessAge")));
 test("7 no-website user skips website-performance question", () => assert.ok(!planAdaptiveQuestions({ digitalPresence: { existingWebsite: "no" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
 test("7a no-proper-website state skips current website problem question", () => assert.ok(!planAdaptiveQuestions({ digitalPresence: { websiteStatus: "Does not currently have a proper website" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
-test("8 existing website user can receive relevant website-problem question", () => assert.ok(planAdaptiveQuestions({ digitalPresence: { existingWebsite: "https://example.com" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
+test("8 website-performance detail does not displace critical missing context", () => assert.ok(!planAdaptiveQuestions({ digitalPresence: { existingWebsite: "https://example.com" } }, "english").some((q) => q.dnaPath === "digitalPresence.websiteStatus")));
 test("8a explicit no-website answer overrides a conflicting inference", () => {
   const merged = mergeExplicitDnaWithInferences({ digitalPresence: { existingWebsite: "no" } }, { digitalPresence: { existingWebsite: "https://inferred.example" } });
   assert.equal(merged.digitalPresence?.existingWebsite, "no");
@@ -36,7 +36,7 @@ test("8b website filtering leaves unrelated adaptive questions unchanged", () =>
     const paths = planAdaptiveQuestions({ digitalPresence: { existingWebsite } }, "english").map((question) => question.dnaPath);
     assert.ok(paths.includes("customers.desiredCustomers"));
     assert.ok(paths.includes("offer.strongestOffers"));
-    assert.ok(paths.includes("goals.sixToTwelveMonthGoal"));
+    assert.ok(paths.some((path) => path === "goals.primaryGoal" || path === "goals.sixToTwelveMonthGoal"));
   }
 });
 test("8c saved provider question sequence resumes without an invalid website question or new analysis", () => {
@@ -59,11 +59,11 @@ test("8e original-vision inferred goal skips the resumed duplicate", () => {
   const currentDna = mergeExplicitDnaWithInferences({}, analysis.extractedDna);
   assert.deepEqual(unansweredSuggestedQuestions(analysis, currentDna), []);
 });
-test("8f absent time-horizon goal remains eligible and distinct from a populated main goal", () => {
+test("8f absent secondary time-horizon goal does not block review when a main goal exists", () => {
   const analysis = { ...validAnalysis, suggestedQuestions: [
     { id: "future-goal", dnaPath: "goals.sixToTwelveMonthGoal", question: "Where should the business be in the next 12 months?", reason: "Goal context", required: true, answerType: "textarea" },
   ] };
-  assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { primaryGoal: "Attract serious business clients" } }).map((question) => question.id), ["future-goal"]);
+  assert.deepEqual(unansweredSuggestedQuestions(analysis, { goals: { primaryGoal: "Attract serious business clients" } }), []);
 });
 test("8g populated main goal skips equivalent generic goal wording but not unrelated questions", () => {
   const analysis = { ...validAnalysis, suggestedQuestions: [
@@ -101,15 +101,16 @@ test("8k resume/render selection contains no provider, Easy Mode or Task 5 execu
   const source = await readFile("app/lib/business-intake-questions.ts", "utf8");
   assert.doesNotMatch(source, /fetch\s*\(|requestBusinessIntakeAnalysis|executeEasyMode|easyModeRuns|Task 5/i);
 });
-test("9 startup and established MSME follow-ups differ", () => {
+test("9 startup and established MSME plans both omit noncritical stage-specific detail", () => {
   const startup = planAdaptiveQuestions({ identity: { businessStage: "startup" } }, "english").map((q) => q.id);
   const msme = planAdaptiveQuestions({ identity: { businessStage: "established MSME" } }, "english").map((q) => q.id);
-  assert.notDeepEqual(startup, msme);
+  assert.deepEqual(startup, msme);
+  assert.ok(!startup.some((id) => ["why-started", "business-age", "current-customers", "website-problem"].includes(id)));
 });
 test("10 question count remains within configured safe maximum", () => assert.ok(planAdaptiveQuestions({}, "english").length <= BUSINESS_INTAKE_MAX_QUESTIONS));
 test("11 English questions are simple", () => assert.ok(planAdaptiveQuestions({}, "english").every((q) => q.question.length < 140)));
-test("12 Hindi question output preserves Unicode", () => assert.match(planAdaptiveQuestions({}, "hindi")[0].question, /[\u0900-\u097F]/));
-test("13 Hinglish output preserves mixed-language text", () => assert.match(planAdaptiveQuestions({}, "hinglish")[0].question, /Aap|customers/));
+test("12 Hindi question output preserves Unicode", () => assert.ok(planAdaptiveQuestions({}, "hindi").some((question) => /[\u0900-\u097F]/.test(question.question))));
+test("13 Hinglish output preserves mixed-language text", () => assert.ok(planAdaptiveQuestions({}, "hinglish").some((question) => /Aap|customers/.test(question.question))));
 test("14 originalVisionText remains unchanged", () => {
   const vision = "  मेरे अपने exact words — unchanged  ";
   analyzeBusinessIntakeDeterministically(baseInput({ originalVisionText: vision }));
@@ -350,4 +351,55 @@ test("51 filtering the duplicate main-goal question preserves seven saved answer
   assert.ok(!eligibleBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, saved).some((question) => question.id === "primary-goal"));
   assert.deepEqual(saved, before);
   assert.equal("confirmed" in (saved.conversation ?? {}), false);
+});
+test("52 sufficiently complete DNA goes directly to review despite optional gaps", () => {
+  const dna = {
+    identity: { industry: "Digital marketing agency", businessStage: "established/existing" },
+    customers: { desiredCustomers: "Serious business clients" }, offer: { services: ["Digital marketing"] },
+    goals: { primaryGoal: "Professional online presence and qualified enquiries" },
+  };
+  assert.equal(isBusinessDnaReadyForReview(dna), true);
+  assert.deepEqual(criticalBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, dna), []);
+  assert.deepEqual(planAdaptiveQuestions(dna, "english"), []);
+});
+test("52a missing market is critical only when the business context makes location execution-relevant", () => {
+  const dna = {
+    identity: { industry: "Local bakery", businessStage: "established/existing" }, customers: { desiredCustomers: "Families" },
+    offer: { products: ["Cakes"] }, goals: { primaryGoal: "More local orders" },
+  };
+  assert.equal(isBusinessDnaReadyForReview(dna), false);
+  assert.deepEqual(planAdaptiveQuestions(dna, "english").map((question) => question.id), ["location"]);
+});
+test("53 genuinely critical missing context is still asked", () => {
+  const dna = {
+    identity: { industry: "Agency", businessStage: "established/existing" }, offer: { services: ["SEO"] },
+    location: { city: "Bangalore" }, goals: { primaryGoal: "Qualified enquiries" },
+  };
+  assert.equal(isBusinessDnaReadyForReview(dna), false);
+  assert.deepEqual(planAdaptiveQuestions(dna, "english").map((question) => question.id), ["desired-customers"]);
+});
+test("54 normal follow-up plan stays within two to four critical questions", () => {
+  const dna = { identity: { industry: "Agency", businessStage: "established/existing" }, location: { city: "Bangalore" } };
+  const questions = planAdaptiveQuestions(dna, "english");
+  assert.ok(questions.length >= 2 && questions.length <= 4);
+  assert.ok(questions.every((question) => ["desired-customers", "strongest-offers", "future-goal", "primary-goal"].includes(question.id)));
+});
+test("55 absolute follow-up maximum is five", () => {
+  assert.equal(BUSINESS_INTAKE_MAX_QUESTIONS, 5);
+  assert.ok(planAdaptiveQuestions({}, "english", 99).length <= 5);
+});
+test("56 current-project-equivalent seven answers survive readiness and refresh without a lead question", () => {
+  const dna = {
+    identity: { businessName: "Agency", businessStage: "established/existing" }, customers: { desiredCustomers: "Serious business clients" },
+    offer: { strongestOffers: ["Digital marketing"] }, location: { city: "Bangalore" }, digitalPresence: { existingWebsite: "no" },
+    goals: { sixToTwelveMonthGoal: "Build a professional online presence and generate qualified enquiries" },
+  };
+  const before = structuredClone(dna);
+  const persistedLeadQuestion = [{ id: "lead-objective", path: "goals.primaryLeadObjective", question: "What would be most valuable right now?", required: true, answerType: "choice-or-text" }];
+  assert.equal(countSavedBusinessIntakeAnswers(dna), 7);
+  assert.equal(isBusinessDnaReadyForReview(dna), true);
+  assert.equal(selectCurrentBusinessIntakeQuestion({ questions: criticalBusinessIntakeQuestions(persistedLeadQuestion, dna), dna, currentQuestionId: "lead-objective" }), null);
+  assert.deepEqual(criticalBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, structuredClone(dna)), []);
+  assert.deepEqual(dna, before);
+  assert.equal("confirmed" in (dna.conversation ?? {}), false);
 });

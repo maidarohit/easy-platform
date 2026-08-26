@@ -16,6 +16,7 @@ import {
   isQuestionComplete,
   businessIntakeQuestionText,
   countSavedBusinessIntakeAnswers,
+  criticalBusinessIntakeQuestions,
   eligibleBusinessIntakeQuestions,
   selectCurrentBusinessIntakeQuestion,
   type BusinessIntakeQuestion,
@@ -142,7 +143,9 @@ export default function OnboardingPage() {
     id: item.id, path: item.dnaPath, question: item.question, required: item.required, answerType: item.answerType, options: item.options,
   })) : [], [analysis, understoodContent]);
   const questionCandidates = useMemo(() => analysis ? adaptiveQuestions : getApplicableQuestions(content), [analysis, adaptiveQuestions, content]);
-  const eligibleQuestions = useMemo(() => eligibleBusinessIntakeQuestions(questionCandidates, understoodContent), [questionCandidates, understoodContent]);
+  const eligibleQuestions = useMemo(() => criticalBusinessIntakeQuestions(
+    eligibleBusinessIntakeQuestions(questionCandidates, understoodContent), understoodContent,
+  ), [questionCandidates, understoodContent]);
   const activeQuestion = useMemo(() => selectCurrentBusinessIntakeQuestion({
     questions: eligibleQuestions, dna: understoodContent, currentQuestionId: activeQuestionId,
   }), [activeQuestionId, eligibleQuestions, understoodContent]);

@@ -41,6 +41,8 @@ export type BusinessIntakeIntent =
   | "website_priority" | "social_presence" | "portfolio_proof" | "main_goal"
   | "six_to_twelve_month_goal" | "lead_goal" | "growth_objective" | "online_challenges" | "brand_personality";
 
+export const BUSINESS_INTAKE_FOLLOW_UP_MAX = 5;
+
 export const BUSINESS_INTAKE_COMPLETION_MATRIX: Readonly<Record<BusinessIntakeIntent, readonly string[]>> = {
   business_name: ["identity.businessName"], industry: ["identity.industry"], business_stage: ["identity.businessStage"],
   business_age: ["founderHistory.businessAge"], business_origin: ["founderHistory.businessGeneration", "founderHistory.whyStarted", "founderHistory.founderStory"],
@@ -310,6 +312,87 @@ export function isBusinessIntakeQuestionSemanticallyEligible(question: { id?: st
   return !intent || (isBusinessIntakeIntentApplicable(intent, dna) && !isBusinessIntakeIntentComplete(intent, dna));
 }
 
+function hasAnyMeaningfulValue(dna: BusinessDnaContent, paths: readonly string[]) {
+  return paths.some((path) => meaningful(valueAtAnyPath(dna, path)));
+}
+
+export const BUSINESS_INTAKE_CRITICAL_CONTEXT = {
+  identity: ["identity.businessName", "identity.industry"],
+  operatingContext: ["identity.businessStage", "founderHistory.businessAge"],
+  customer: ["customers.desiredCustomers", "customers.targetAudience", "customers.currentCustomers"],
+  offer: ["offer.strongestOffers", "offer.products", "offer.services"],
+  market: ["location.city", "location.region", "location.country", "location.serviceAreas"],
+  objective: ["goals.primaryGoal", "goals.vision", "goals.sixToTwelveMonthGoal", "goals.primaryLeadObjective"],
+} as const;
+
+function isMarketContextRequired(dna: BusinessDnaContent) {
+  const context = [
+    dna.identity?.industry, dna.identity?.subIndustry,
+    ...(dna.offer?.products ?? []), ...(dna.offer?.services ?? []), ...(dna.offer?.strongestOffers ?? []),
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /\b(?:local|physical|shop|store|restaurant|cafe|clinic|salon|manufacturer|manufacturing|on-site|onsite|delivery|service area)\b/.test(context);
+}
+
+function isCriticalContextMissing(context: keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT, dna: BusinessDnaContent) {
+  if (context === "market" && !isMarketContextRequired(dna)) return false;
+  return !hasAnyMeaningfulValue(dna, BUSINESS_INTAKE_CRITICAL_CONTEXT[context]);
+}
+
+/** Minimum execution context; optional DNA must never block customer review. */
+export function isBusinessDnaReadyForReview(dna: BusinessDnaContent) {
+  return (Object.keys(BUSINESS_INTAKE_CRITICAL_CONTEXT) as (keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT)[])
+    .every((context) => !isCriticalContextMissing(context, dna));
+}
+
+const CRITICAL_INTENTS_BY_CONTEXT: Readonly<Record<keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT, readonly BusinessIntakeIntent[]>> = {
+  identity: ["business_name", "industry"], operatingContext: ["business_stage", "business_age"],
+  customer: ["target_customer", "current_customer"], offer: ["products_services", "strongest_offer"],
+  market: ["location", "service_area"], objective: ["main_goal", "growth_objective", "six_to_twelve_month_goal", "lead_goal"],
+};
+
+const CRITICAL_INTENT_PRIORITY: readonly BusinessIntakeIntent[] = [
+  "business_name", "industry", "business_stage", "business_age", "target_customer", "current_customer",
+  "products_services", "strongest_offer", "location", "service_area", "main_goal", "growth_objective",
+  "six_to_twelve_month_goal", "lead_goal",
+];
+const CRITICAL_QUESTION_ID_PRIORITY = [
+  "business-name", "business-stage", "desired-customers", "strongest-offers", "location", "primary-goal",
+  "current-customers", "business-age", "service-areas", "future-goal", "lead-objective",
+] as const;
+const CRITICAL_CONTEXT_PRIORITY: readonly (keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT)[] = [
+  "identity", "operatingContext", "customer", "offer", "objective", "market",
+];
+
+function criticalQuestionPriority(question: { id?: string }, intent: BusinessIntakeIntent) {
+  const idPriority = question.id ? CRITICAL_QUESTION_ID_PRIORITY.indexOf(question.id as typeof CRITICAL_QUESTION_ID_PRIORITY[number]) : -1;
+  return (idPriority < 0 ? 100 : idPriority) * 100 + CRITICAL_INTENT_PRIORITY.indexOf(intent);
+}
+
+export function criticalBusinessIntakeQuestions<T extends { id?: string; path?: string; dnaPath?: string; question: string }>(
+  questions: readonly T[], dna: BusinessDnaContent,
+) {
+  if (isBusinessDnaReadyForReview(dna)) return [];
+  const missingIntents = new Set<BusinessIntakeIntent>();
+  for (const context of Object.keys(BUSINESS_INTAKE_CRITICAL_CONTEXT) as (keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT)[]) {
+    if (isCriticalContextMissing(context, dna)) CRITICAL_INTENTS_BY_CONTEXT[context].forEach((intent) => missingIntents.add(intent));
+  }
+  const eligible = questions.map((question, index) => ({ question, index, intent: businessIntakeQuestionIntent(question) }))
+    .filter((item): item is typeof item & { intent: BusinessIntakeIntent } =>
+      item.intent !== null && missingIntents.has(item.intent) && isBusinessIntakeQuestionSemanticallyEligible(item.question, dna));
+  const selected = new Map<keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT, typeof eligible[number]>();
+  for (const item of eligible) {
+    const context = (Object.entries(CRITICAL_INTENTS_BY_CONTEXT) as [keyof typeof BUSINESS_INTAKE_CRITICAL_CONTEXT, readonly BusinessIntakeIntent[]][])
+      .find(([, intents]) => intents.includes(item.intent))?.[0];
+    if (!context) continue;
+    const current = selected.get(context);
+    if (!current || criticalQuestionPriority(item.question, item.intent) < criticalQuestionPriority(current.question, current.intent)) selected.set(context, item);
+  }
+  return CRITICAL_CONTEXT_PRIORITY.flatMap((context) => {
+    const item = selected.get(context);
+    return item ? [item.question] : [];
+  }).slice(0, BUSINESS_INTAKE_FOLLOW_UP_MAX);
+}
+
 export function isQuestionComplete(question: BusinessIntakeQuestion, dna: BusinessDnaContent) {
   const value = pathValue(dna, question.path);
   if (Array.isArray(value)) return question.required ? value.length > 0 : value !== undefined;
@@ -355,7 +438,7 @@ export function getApplicableQuestions(dna: BusinessDnaContent) {
 }
 
 export function getNextBusinessIntakeQuestion(dna: BusinessDnaContent) {
-  return getApplicableQuestions(dna).find((question) => !isQuestionComplete(question, dna)) ?? null;
+  return criticalBusinessIntakeQuestions(eligibleBusinessIntakeQuestions(getApplicableQuestions(dna), dna), dna)[0] ?? null;
 }
 
 const listPaths = new Set<BusinessIntakePath>([
