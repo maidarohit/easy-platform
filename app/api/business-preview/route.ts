@@ -24,7 +24,7 @@ async function ownedProject(userId: string, projectId: string) {
   return project ?? null;
 }
 
-export async function GET(request: Request) {
+async function loadBusinessPreview(request: Request) {
   const userId = await authenticatedUser(request);
   if (!userId) return Response.json({ error: "Authentication is required." }, { status: 401 });
   const projectId = validateEasyModeProjectId(new URL(request.url).searchParams.get("projectId"));
@@ -60,7 +60,22 @@ export async function GET(request: Request) {
   return Response.json({ preview, originalPreview, overrides }, { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function POST(request: Request) {
+function unexpectedJsonError(error: unknown, operation: "load" | "approve") {
+  const code = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+    ? error.code.slice(0, 32) : "UNKNOWN";
+  console.error("Business preview request failed.", { operation, code });
+  return Response.json(
+    { error: operation === "load" ? "Unable to load your business preview." : "Unable to approve your business preview." },
+    { status: 500, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+export async function GET(request: Request) {
+  try { return await loadBusinessPreview(request); }
+  catch (error) { return unexpectedJsonError(error, "load"); }
+}
+
+async function approveBusinessPreview(request: Request) {
   const userId = await authenticatedUser(request);
   if (!userId) return Response.json({ error: "Authentication is required." }, { status: 401 });
   let body: unknown;
@@ -116,4 +131,9 @@ export async function POST(request: Request) {
     approvedAt: result.approvedAt.toISOString(),
     outputCount: result.outputIds.length,
   }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function POST(request: Request) {
+  try { return await approveBusinessPreview(request); }
+  catch (error) { return unexpectedJsonError(error, "approve"); }
 }

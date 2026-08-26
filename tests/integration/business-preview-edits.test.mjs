@@ -88,6 +88,17 @@ test("saved edits reload through the customization layer and current-edit approv
   assert.doesNotMatch(route, /update\(projectOutputs\).*approvedAt: null/s);
 });
 
+test("business preview API converts unexpected database failures into safe JSON responses", async () => {
+  const route = await source("app/api/business-preview/route.ts");
+  assert.match(route, /try \{ return await loadBusinessPreview\(request\); \}/);
+  assert.match(route, /catch \(error\) \{ return unexpectedJsonError\(error, "load"\); \}/);
+  assert.match(route, /Response\.json\(/);
+  assert.match(route, /status: 500/);
+  assert.match(route, /Unable to load your business preview\./);
+  assert.match(route, /code\.slice\(0, 32\)/);
+  assert.doesNotMatch(route, /JSON\.stringify\(error\)|error\.message/);
+});
+
 test("migration creates a separate project-owned customization model", async () => {
   const migration = await source("drizzle/0017_add-project-preview-customizations.sql");
   assert.match(migration, /CREATE TABLE "project_preview_customizations"/);
