@@ -181,7 +181,7 @@ function DashboardPageContent() {
   onSearchChange={setSearchQuery}
 />
 
-        <div className="p-10">
+        <div className="px-5 py-8 sm:px-8 lg:p-10">
   <div className="mb-10 flex items-center gap-4">
     <div
       className="
@@ -216,6 +216,19 @@ function DashboardPageContent() {
     </div>
   </div>
 
+          <section className="mb-10 rounded-[24px] border border-emerald-400/30 bg-gradient-to-br from-emerald-950/80 to-slate-900 p-6 shadow-[0_18px_50px_rgba(16,185,129,0.12)] sm:p-8" aria-labelledby="start-new-business-heading">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">Start something new</p>
+            <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 id="start-new-business-heading" className="text-2xl font-semibold text-white sm:text-3xl">Create a fresh business</h2>
+                <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">Tell us what you do or what you want to build. You don&apos;t need a business plan.</p>
+              </div>
+              <button type="button" onClick={() => router.push("/onboarding")} className="inline-flex min-h-14 w-full shrink-0 items-center justify-center rounded-xl bg-emerald-400 px-6 text-base font-bold text-slate-950 shadow-[0_12px_30px_rgba(52,211,153,0.22)] transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 lg:w-auto">
+                + Start a New Business
+              </button>
+            </div>
+          </section>
+
           <StatsCards
             projectCount={projects.length}
             aiRequests={
@@ -241,11 +254,11 @@ function DashboardPageContent() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-semibold text-white">
-                  Projects
+                  Your Businesses
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-400">
-                  Open your business workspace or use advanced tools when you need them.
+                  Continue an existing business below. Advanced Tools remain available when you need them.
                 </p>
               </div>
 
@@ -429,7 +442,7 @@ function DashboardPageContent() {
     onClick={() => continueBusiness(project)}
     className="relative mt-6 flex w-full items-center justify-between overflow-hidden rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3.5 font-semibold text-white transition-all duration-300 hover:border-cyan-300/60 hover:bg-cyan-400/15"
   >
-    <span>{(projectActions[project.id] ?? customerProjectAction(project)).label}</span>
+    <span>Continue Business</span>
     <span aria-hidden="true">→</span>
   </button>
   <button

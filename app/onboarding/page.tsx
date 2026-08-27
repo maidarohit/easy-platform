@@ -284,7 +284,7 @@ export default function OnboardingPage() {
         const response = await authenticatedFetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, name: `Business Vision ${id.slice(0, 8)}`, originalBrief: vision, brandDescription: vision }),
+          body: JSON.stringify({ id, name: `Business Vision ${id.slice(0, 8)}`, originalBrief: vision, brandDescription: vision, creationIntent: "new-business" }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "We could not create your business project.");

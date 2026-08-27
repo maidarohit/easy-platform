@@ -50,7 +50,8 @@ test("verification supports resend cooldown, reload, token refresh, and pending 
   assert.match(contents, /await reload\(user\)/);
   assert.match(contents, /if \(!user\.emailVerified\)/);
   assert.match(contents, /await user\.getIdToken\(true\)/);
-  assert.match(contents, /router\.replace\("\/dashboard"\)/);
+  assert.match(contents, /authenticatedFetch\("\/api\/projects"\)/);
+  assert.match(contents, /projectsData\.projects\?\.length === 0 \? "\/onboarding" : "\/dashboard"/);
   assert.match(contents, /signOut\(auth\)/);
 });
 

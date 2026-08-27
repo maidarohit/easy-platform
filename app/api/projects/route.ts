@@ -42,6 +42,7 @@ export async function POST(req: Request) {
 
   try {
     const { id, name } = body;
+    const createOnly = body.creationIntent === "new-business";
 
     const asText = (value: unknown) => typeof value === "string" ? value.trim() : "";
     const optionalFields = {
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
       result: asText(body.result),
     };
 
-    const [existingProject] = await db
+    const [existingProject] = createOnly ? [] : await db
       .select()
       .from(projects)
       .where(and(eq(projects.userId, userId), eq(projects.name, name)))

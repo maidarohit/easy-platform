@@ -11,6 +11,7 @@ import {
   type User,
 } from "firebase/auth";
 import auth from "@/app/lib/auth";
+import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import { firebaseAuthErrorMessage } from "@/app/lib/firebase-auth-errors";
 
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -66,7 +67,9 @@ export default function VerifyEmailPage() {
         return;
       }
       await user.getIdToken(true);
-      router.replace("/dashboard");
+      const projectsResponse = await authenticatedFetch("/api/projects");
+      const projectsData = await projectsResponse.json();
+      router.replace(projectsResponse.ok && projectsData.projects?.length === 0 ? "/onboarding" : "/dashboard");
     } catch (verificationError) {
       setError(firebaseAuthErrorMessage(
         verificationError,

@@ -47,6 +47,7 @@ export function validateProjectMutationBody(
     "id",
     "userId",
     "name",
+    "creationIntent",
     ...projectShortFields,
     ...projectLongFields,
   ]);
@@ -59,6 +60,7 @@ export function validateProjectMutationBody(
     return null;
   }
   if (!optionalBoundedString(value.userId, MAX_ID_LENGTH)) return null;
+  if (value.creationIntent !== undefined && value.creationIntent !== "new-business") return null;
   for (const field of projectShortFields) {
     if (!optionalBoundedString(value[field], MAX_SHORT_LENGTH)) return null;
   }
@@ -68,6 +70,7 @@ export function validateProjectMutationBody(
   if (!optionalBoundedString(value.result, MAX_PROJECT_RESULT_LENGTH)) return null;
 
   const validated: Record<string, string> = { id, name };
+  if (value.creationIntent === "new-business") validated.creationIntent = value.creationIntent;
   for (const field of [...projectShortFields, ...projectLongFields]) {
     const item = value[field];
     if (typeof item === "string") validated[field] = item;
