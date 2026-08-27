@@ -7,6 +7,7 @@ import {
   validateWebsitePublicationSnapshot,
   validateWebsiteSlug,
 } from "@/app/lib/website-publication";
+import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function PublishedWebsitePage({
   if (!slug) notFound();
 
   const [row] = await db
-    .select({ snapshot: websitePublicationVersions.snapshot })
+    .select({ snapshot: websitePublicationVersions.snapshot, userId: publishedWebsites.ownerUid })
     .from(publishedWebsites)
     .innerJoin(
       websitePublicationVersions,
@@ -32,7 +33,8 @@ export default async function PublishedWebsitePage({
     .where(and(eq(publishedWebsites.slug, slug), eq(publishedWebsites.status, "active")))
     .limit(1);
 
-  const snapshot = validateWebsitePublicationSnapshot(row?.snapshot);
+  if (!row || !await hasPaidProductAccess(row.userId)) notFound();
+  const snapshot = validateWebsitePublicationSnapshot(row.snapshot);
   if (!snapshot) notFound();
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import jsPDF from "jspdf";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -219,7 +220,7 @@ function PresentationAIPageContent() {
 
   const presentationSlides = parsePresentationSlides(presentation);
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!presentation) return;
 
     const doc = new jsPDF();
@@ -300,7 +301,7 @@ function PresentationAIPageContent() {
       });
     }
 
-    doc.save("Presentation-AI-Deck.pdf");
+    await downloadPaidBlob(doc.output("blob"), "Presentation-AI-Deck.pdf");
   };
 
   return (

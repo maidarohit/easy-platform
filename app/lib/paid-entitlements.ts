@@ -37,6 +37,22 @@ function isPrivateBetaUser(userId: string, category: UsageCategory): boolean {
   ).has(userId);
 }
 
+export async function hasPaidProductAccess(userId: string) {
+  if (isBossAdmin(userId) || isPrivateBetaUser(userId, "standardAiTasks")) return true;
+  const subscription = await getUserSubscription(userId);
+  if (!subscription || subscription.status !== "active") return false;
+  const overrides = await db.select().from(entitlementOverrides).where(and(
+    eq(entitlementOverrides.userId, userId), eq(entitlementOverrides.category, ACCESS_CATEGORY),
+  ));
+  return !overrides.some((item) => item.paidAccessDisabled);
+}
+
+export async function requirePaidProductAccess(userId: string) {
+  return await hasPaidProductAccess(userId)
+    ? { ok: true as const }
+    : { ok: false as const, response: Response.json({ error: "An active subscription is required for this feature.", code: "PAID_SUBSCRIPTION_REQUIRED" }, { status: 403 }) };
+}
+
 export function isTestProjectLimitBypassUser(userId: string): boolean {
   return new Set(
     (process.env.PRIVATE_BETA_UIDS_TEST ?? "").split(",").map((item) => item.trim()).filter(Boolean),
@@ -53,7 +69,7 @@ export function projectCountAllowance(input: { userId: string; plan: PaidPlan; u
 }
 
 export async function checkUsageAllowance(userId: string, category: UsageCategory) {
-  const privateBetaUser = isPrivateBetaUser(userId, category);
+  const privateBetaUser = isBossAdmin(userId) || isPrivateBetaUser(userId, category);
   if (!privateBetaUser && !enabled("PAID_AI_GENERATION_ENABLED")) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
   const switchName = categorySwitch(category);
   if (!privateBetaUser && switchName && !enabled(switchName)) return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };

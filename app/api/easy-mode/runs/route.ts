@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
@@ -7,6 +7,7 @@ import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 import { validateEasyModeProjectId, validateEasyModeRunCreateBody } from "@/app/lib/easy-mode-run-validation";
 import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import { preflightFreePreviewBusinessBuild } from "@/app/lib/free-preview-entitlement";
 
 const MAX_BODY_BYTES = 4 * 1024;
 function taskResponse(task: typeof easyModeTasks.$inferSelect) {
@@ -87,10 +88,15 @@ export async function POST(request: Request) {
   )).limit(1);
   if (existingRun) return Response.json(await responseForRun(existingRun));
 
-  const quotaPreflight = await preflightEasyModePlanQuota(userId, plan);
+  const quotaPreflight = body.goalId === "build_everything" ? await preflightFreePreviewBusinessBuild(userId, plan) : await preflightEasyModePlanQuota(userId, plan);
   if (!quotaPreflight.ok) return easyModeQuotaError(quotaPreflight);
 
   const result = await db.transaction(async (transaction) => {
+    if ("freePreviewBuild" in quotaPreflight && quotaPreflight.freePreviewBuild === true) {
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`free-preview-build:${userId}`}))`);
+      const [prior] = await transaction.select({ total: sql<number>`count(*)` }).from(easyModeRuns).where(and(eq(easyModeRuns.userId, userId), eq(easyModeRuns.goalId, "build_everything")));
+      if (Number(prior?.total ?? 0) > 0) return null;
+    }
     const [createdRun] = await transaction.insert(easyModeRuns).values({
       userId,
       projectId: body.projectId,
@@ -114,7 +120,7 @@ export async function POST(request: Request) {
       eq(easyModeRuns.projectId, body.projectId),
       eq(easyModeRuns.idempotencyKey, body.idempotencyKey),
     )).limit(1);
-    if (!run) return Response.json({ error: "Unable to prepare your business build." }, { status: 500 });
+    if (!run) return Response.json({ error: "The free preview build has already been used.", code: "PAID_SUBSCRIPTION_REQUIRED" }, { status: 403 });
     return Response.json(await responseForRun(run));
   }
 

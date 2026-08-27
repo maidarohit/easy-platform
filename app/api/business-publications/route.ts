@@ -11,6 +11,7 @@ import { buildPublishedBusinessSnapshot, businessPreviewRevision, normalizeBusin
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import { hasPaidProductAccess, requirePaidProductAccess } from "@/app/lib/paid-entitlements";
 
 const MAX_BODY_BYTES = 1_024;
 
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
     if (!projectId) return Response.json({ error: "Invalid project." }, { status: 400 });
     const [project] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, uid))).limit(1);
     if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
+    const canPublish = await hasPaidProductAccess(uid);
     const [sites, customizations] = await Promise.all([
       db.select().from(businessPublications).where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, uid))).limit(1),
       db.select().from(projectPreviewCustomizations).where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, uid))).limit(1),
@@ -65,13 +67,15 @@ export async function GET(request: Request) {
     const site = sites[0];
     const customization = customizations[0];
     const changesAwaitingApproval = Boolean(site && customization && Object.keys(customization.overrides).length > 0 && !customization.approvedAt);
-    return Response.json({ publication: { ...metadata(site), changesAwaitingApproval } }, { headers: { "Cache-Control": "no-store" } });
+    const publication = metadata(site);
+    return Response.json({ publication: { ...publication, ...(!canPublish && { publicUrl: undefined }), changesAwaitingApproval, canPublish } }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return failure(error, "load publication status for"); }
 }
 
 export async function POST(request: Request) {
   const uid = await userId(request);
   if (!uid) return Response.json({ error: "Authentication is required." }, { status: 401 });
+  const entitlement = await requirePaidProductAccess(uid); if (!entitlement.ok) return entitlement.response;
   const projectId = await bodyProjectId(request);
   if (!projectId) return Response.json({ error: "Invalid publication request." }, { status: 400 });
   try {

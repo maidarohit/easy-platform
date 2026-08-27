@@ -5,6 +5,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import auth from "../../lib/auth";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 
 function VideoAIPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -142,16 +143,7 @@ setVideoUrl((previousUrl) => {
     try {
       const response = await fetch(videoUrl);
       const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = "buzypeezy-video.mp4";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(downloadUrl);
+      await downloadPaidBlob(blob, "buzypeezy-video.mp4");
     } catch (err) {
       console.error(err);
       alert("Unable to download the video.");

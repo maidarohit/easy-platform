@@ -1,6 +1,7 @@
 "use client";
 
 import jsPDF from "jspdf";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 import { Suspense, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
@@ -131,7 +132,7 @@ function ContentAIPageContent() {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!content) return;
 
     const doc = new jsPDF();
@@ -178,7 +179,7 @@ function ContentAIPageContent() {
     addSection("Keywords", keywords);
     addSection("Generated Content", content);
 
-    doc.save("Content-AI-Result.pdf");
+    await downloadPaidBlob(doc.output("blob"), "Content-AI-Result.pdf");
   };
 
   return (

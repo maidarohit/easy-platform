@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useEffect, useState } from "react";
 import jsPDF from "jspdf";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
@@ -88,7 +89,7 @@ const handleCopyResults = async () => {
   }
 };
 
-const handleDownloadPDF = () => {
+const handleDownloadPDF = async () => {
   try {
     const pdf = new jsPDF();
 
@@ -101,7 +102,7 @@ const handleDownloadPDF = () => {
 
     pdf.text(lines, 20, 35);
 
-    pdf.save("Logo-Concept-AI-Results.pdf");
+    await downloadPaidBlob(pdf.output("blob"), "Logo-Concept-AI-Results.pdf");
   } catch (error) {
     console.error(error);
     alert("Failed to download PDF.");

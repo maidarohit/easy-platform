@@ -1,6 +1,7 @@
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { getUserEntitlements, getUserSubscription } from "@/app/lib/subscriptions";
 import { getSafeBillingDiagnostics } from "@/app/lib/billing-configuration";
+import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 
 export async function GET(request: Request) {
   let token;
@@ -9,9 +10,10 @@ export async function GET(request: Request) {
   } catch {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const [subscription, entitlements] = await Promise.all([
+  const [subscription, entitlements, paidAccess] = await Promise.all([
     getUserSubscription(token.uid),
     getUserEntitlements(token.uid),
+    hasPaidProductAccess(token.uid),
   ]);
   return Response.json({
     subscription: subscription ? {
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
       currentPeriodEnd: subscription.currentPeriodEnd,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     } : null,
-    entitlements,
+    entitlements: { ...entitlements, paidAccess },
     billingConfiguration: getSafeBillingDiagnostics(),
   });
 }

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import WebsitePreview from "../components/WebsitePreview";
@@ -291,7 +292,7 @@ ${brandResult.seoRecommendations}
   navigator.clipboard.writeText(content);
   toast.success("Website Plan copied!");
 };
-const downloadPDF = () => {
+const downloadPDF = async () => {
   if (!brandResult) return;
 
   const doc = new jsPDF();
@@ -332,9 +333,7 @@ const downloadPDF = () => {
   addSection("Recommended Tech Stack", brandResult.recommendedTechStack);
   addSection("SEO Recommendations", brandResult.seoRecommendations);
 
-  doc.save(`${companyName}-Website-Strategy.pdf`);
-
-  toast.success("PDF downloaded!");
+  if (await downloadPaidBlob(doc.output("blob"), `${companyName}-Website-Strategy.pdf`)) toast.success("PDF downloaded!");
 };
 
 const saveProject = async () => {

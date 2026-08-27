@@ -7,7 +7,7 @@ import {
   websitePublicationVersions,
 } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
+import { requirePaidProductAccess } from "@/app/lib/paid-entitlements";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -54,8 +54,6 @@ async function authorizeProject(request: Request, projectId: string) {
   const [project] = await db.select().from(projects)
     .where(and(eq(projects.id, projectId), eq(projects.userId, uid))).limit(1);
   if (!project) return { response: Response.json({ error: "Project not found." }, { status: 404 }) } as const;
-  const entitlement = await checkUsageAllowance(uid, "standardAiTasks");
-  if (!entitlement.ok) return { response: allowanceError(entitlement) } as const;
   return { uid, project } as const;
 }
 
@@ -120,6 +118,7 @@ export async function POST(request: Request) {
   if ("response" in parsed) return parsed.response;
   const authorized = await authorizeProject(request, parsed.body.projectId);
   if ("response" in authorized) return authorized.response;
+  const entitlement = await requirePaidProductAccess(authorized.uid); if (!entitlement.ok) return entitlement.response;
 
   try {
     const site = await db.transaction(async (transaction) => {
@@ -169,6 +168,7 @@ export async function PATCH(request: Request) {
   if ("response" in parsed) return parsed.response;
   const authorized = await authorizeProject(request, parsed.body.projectId);
   if ("response" in authorized) return authorized.response;
+  const entitlement = await requirePaidProductAccess(authorized.uid); if (!entitlement.ok) return entitlement.response;
   try {
     const site = await db.transaction(async (transaction) => {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`website-project:${parsed.body.projectId}`}))`);

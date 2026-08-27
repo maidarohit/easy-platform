@@ -6,6 +6,7 @@ import { isEasyModeGoalId } from "@/app/lib/easy-mode-goal-options";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 import { easyModeQuotaError, preflightEasyModePlanQuota } from "@/app/lib/easy-mode-quota-preflight";
+import { preflightFreePreviewBusinessBuild } from "@/app/lib/free-preview-entitlement";
 
 const MAX_BODY_BYTES = 4 * 1024;
 
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     .where(and(eq(projects.id, body.projectId), eq(projects.userId, userId))).limit(1);
   if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
 
-  const quotaPreflight = await preflightEasyModePlanQuota(userId, plan);
+  const quotaPreflight = body.goalId === "build_everything" ? await preflightFreePreviewBusinessBuild(userId, plan) : await preflightEasyModePlanQuota(userId, plan);
   if (!quotaPreflight.ok) return easyModeQuotaError(quotaPreflight);
 
   await db.update(projects).set({ industry: body.industry, goal: body.goalId, updatedAt: new Date() })

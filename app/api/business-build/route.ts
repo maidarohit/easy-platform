@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, like } from "drizzle-orm";
+import { and, asc, desc, eq, like, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projectBusinessDna, projects } from "@/app/db/schema";
 import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
@@ -7,6 +7,7 @@ import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import { preflightFreePreviewBusinessBuild } from "@/app/lib/free-preview-entitlement";
 
 const MAX_BODY_BYTES = 1024;
 const BUILD_GOAL = "build_everything" as const;
@@ -20,7 +21,7 @@ export type BusinessBuildDependencies = Readonly<{
   loadDna: (userId: string, projectId: string) => Promise<BuildDna | null>;
   findRun: (userId: string, projectId: string, idempotencyKey?: string) => Promise<BuildRun | null>;
   preflight: typeof preflightEasyModePlanQuota;
-  createRun: (input: { userId: string; projectId: string; idempotencyKey: string }) => Promise<BuildRun | null>;
+  createRun: (input: { userId: string; projectId: string; idempotencyKey: string; freePreviewBuild?: boolean }) => Promise<BuildRun | null>;
   responseForRun: (run: BuildRun) => Promise<unknown>;
 }>;
 
@@ -55,10 +56,15 @@ async function responseForBusinessBuild(run: BuildRun) {
   };
 }
 
-async function createBusinessBuildRun(input: { userId: string; projectId: string; idempotencyKey: string }) {
+async function createBusinessBuildRun(input: { userId: string; projectId: string; idempotencyKey: string; freePreviewBuild?: boolean }) {
   const plan = resolveEasyModePlan(BUILD_GOAL);
   if (!plan) return null;
   return db.transaction(async (transaction) => {
+    if (input.freePreviewBuild) {
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`free-preview-build:${input.userId}`}))`);
+      const [prior] = await transaction.select({ total: sql<number>`count(*)` }).from(easyModeRuns).where(and(eq(easyModeRuns.userId, input.userId), eq(easyModeRuns.goalId, BUILD_GOAL)));
+      if (Number(prior?.total ?? 0) > 0) return null;
+    }
     const [run] = await transaction.insert(easyModeRuns).values({
       userId: input.userId, projectId: input.projectId, goalId: BUILD_GOAL,
       status: "queued", idempotencyKey: input.idempotencyKey,
@@ -73,7 +79,7 @@ async function createBusinessBuildRun(input: { userId: string; projectId: string
 
 const defaultDependencies: BusinessBuildDependencies = {
   verify: verifyFirebaseIdToken, loadDna: loadOwnedConfirmedDna, findRun: findBusinessBuildRun,
-  preflight: preflightEasyModePlanQuota, createRun: createBusinessBuildRun, responseForRun: responseForBusinessBuild,
+  preflight: preflightFreePreviewBusinessBuild, createRun: createBusinessBuildRun, responseForRun: responseForBusinessBuild,
 };
 
 function buildKey(revisionCount: number) {
@@ -130,9 +136,11 @@ export async function handleBusinessBuildPost(request: Request, dependencies: Bu
   if (!plan) return Response.json({ error: "Business build is unavailable." }, { status: 503 });
   const allowance = await dependencies.preflight(userId, plan);
   if (!allowance.ok) return easyModeQuotaError(allowance);
-  const created = await dependencies.createRun({ userId, projectId, idempotencyKey });
+  const created = await dependencies.createRun({ userId, projectId, idempotencyKey, freePreviewBuild: "freePreviewBuild" in allowance && allowance.freePreviewBuild === true });
   const run = created ?? await dependencies.findRun(userId, projectId, idempotencyKey);
-  if (!run) return Response.json({ error: "Unable to prepare your business build." }, { status: 500 });
+  if (!run) return "freePreviewBuild" in allowance && allowance.freePreviewBuild === true
+    ? Response.json({ error: "The free preview build has already been used.", code: "PAID_SUBSCRIPTION_REQUIRED" }, { status: 403 })
+    : Response.json({ error: "Unable to prepare your business build." }, { status: 500 });
   return Response.json(await dependencies.responseForRun(run), { status: created ? 201 : 200 });
 }
 

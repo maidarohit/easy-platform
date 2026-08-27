@@ -5,6 +5,7 @@ import { getFirebaseDeliveryIdentity } from "@/app/lib/firebase-admin";
 import { loadWeeklyReport } from "@/app/lib/weekly-report-data";
 import { absoluteWeeklyReportUrl, sendWeeklyEmail, sendWeeklyWhatsapp, weeklyDeliveryConfiguration, weeklyReportMessage } from "@/app/lib/weekly-report-delivery";
 import { weeklyReportWindow } from "@/app/lib/weekly-business-report";
+import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 
 function authorized(request: Request) { const secret = process.env.CRON_SECRET; return Boolean(secret && request.headers.get("authorization") === `Bearer ${secret}`); }
 const failureCode = (error: unknown) => error instanceof Error ? error.message.slice(0, 64).replace(/[^A-Z0-9_]/gi, "_") : "DELIVERY_FAILED";
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
   const allProjects = await db.select({ id: projects.id, userId: projects.userId }).from(projects);
   const results = [];
   for (const project of allProjects) {
+    if (!await hasPaidProductAccess(project.userId)) { results.push({ projectId: project.id, status: "subscription_required" }); continue; }
     const [preference] = await db.select().from(weeklyReportPreferences).where(and(eq(weeklyReportPreferences.projectId, project.id), eq(weeklyReportPreferences.userId, project.userId))).limit(1);
     if (preference?.enabled === false) { results.push({ projectId: project.id, status: "disabled" }); continue; }
     const [report, identity] = await Promise.all([loadWeeklyReport(project.userId, project.id, "previous", now), getFirebaseDeliveryIdentity(project.userId)]);

@@ -7,14 +7,16 @@ import { businessPublications, businessPublicationVersions } from "@/app/db/sche
 import { validateBusinessSlug, validatePublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import { publicAudience, publicBusinessKind, publicCallToAction, publicContact, publicHeroCopy, publicProcess, publicSeoDescription, publicServices, publicServicesSummary, publicStory, publicValuePoints } from "@/app/lib/public-business-presentation";
 import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
+import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 
 export const dynamic = "force-dynamic";
 const loadPublishedBusiness = cache(async (candidate: string) => {
   const slug = validateBusinessSlug(candidate); if (!slug) return null;
-  const [row] = await db.select({ snapshot: businessPublicationVersions.snapshot }).from(businessPublications)
+  const [row] = await db.select({ snapshot: businessPublicationVersions.snapshot, userId: businessPublications.userId }).from(businessPublications)
     .innerJoin(businessPublicationVersions, and(eq(businessPublicationVersions.publicationId, businessPublications.id), eq(businessPublicationVersions.versionNumber, businessPublications.currentVersion)))
     .where(and(eq(businessPublications.publicSlug, slug), eq(businessPublications.status, "active"))).limit(1);
-  return validatePublishedBusinessSnapshot(row?.snapshot);
+  if (!row || !await hasPaidProductAccess(row.userId)) return null;
+  return validatePublishedBusinessSnapshot(row.snapshot);
 });
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ service?: string | string[] }> };
 

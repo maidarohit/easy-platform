@@ -5,6 +5,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import auth from "../../lib/auth";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 
 function ImageAIPageContent() {
   const { project, projectId } = useProjectMemory();
@@ -136,16 +137,7 @@ if (!imageBlob.type.startsWith("image/")) {
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = "buzypeezy-image.png";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(downloadUrl);
+      await downloadPaidBlob(blob, "buzypeezy-image.png");
     } catch (err) {
       console.error(err);
       alert("Unable to download the image.");

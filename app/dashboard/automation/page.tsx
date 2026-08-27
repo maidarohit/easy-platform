@@ -5,6 +5,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import auth from "../../lib/auth";
+import { downloadPaidBlob } from "@/app/lib/paid-download";
 
 type AutomationType =
   | "content"
@@ -160,19 +161,9 @@ const handleCopyContent = async () => {
     alert("Unable to copy the generated content.");
   }
 };
-const handleDownloadContent = () => {
+const handleDownloadContent = async () => {
   if (!result) return;
-
-  const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "buzypeezy-generated-content.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(downloadUrl);
+  await downloadPaidBlob(new Blob([result], { type: "text/plain;charset=utf-8" }), "buzypeezy-generated-content.txt");
 };
 const handleRunEmailAutomation = async () => {
   setLoading(true);
@@ -235,19 +226,9 @@ const handleCopyEmail = async () => {
     alert("Unable to copy the generated email.");
   }
 };
-const handleDownloadEmail = () => {
+const handleDownloadEmail = async () => {
   if (!result) return;
-
-  const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "buzypeezy-email.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(downloadUrl);
+  await downloadPaidBlob(new Blob([result], { type: "text/plain;charset=utf-8" }), "buzypeezy-email.txt");
 };
 
 const handleRunSocialAutomation = async () => {
@@ -313,19 +294,9 @@ const handleCopySocialPost = async () => {
     alert("Unable to copy the social post.");
   }
 };
-const handleDownloadSocialPost = () => {
+const handleDownloadSocialPost = async () => {
   if (!result) return;
-
-  const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "buzypeezy-social-post.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(downloadUrl);
+  await downloadPaidBlob(new Blob([result], { type: "text/plain;charset=utf-8" }), "buzypeezy-social-post.txt");
 };
 const handleRunWorkflowAutomation = async () => {
   if (!automationGoal.trim()) {
@@ -393,19 +364,9 @@ const handleCopyWorkflow = async () => {
     alert("Unable to copy the generated workflow.");
   }
 };
-const handleDownloadWorkflow = () => {
+const handleDownloadWorkflow = async () => {
   if (!workflowResult) return;
-
-  const blob = new Blob([workflowResult], { type: "text/plain;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "buzypeezy-workflow.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(downloadUrl);
+  await downloadPaidBlob(new Blob([workflowResult], { type: "text/plain;charset=utf-8" }), "buzypeezy-workflow.txt");
 };
 const handleRunPipelineAutomation = async () => {
   setLoading(true);
@@ -467,19 +428,9 @@ const handleCopyPipeline = async () => {
     alert("Unable to copy the generated AI pipeline.");
   }
 };
-const handleDownloadPipeline = () => {
+const handleDownloadPipeline = async () => {
   if (!result) return;
-
-  const blob = new Blob([result], { type: "text/plain;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = downloadUrl;
-  link.download = "buzypeezy-ai-pipeline.txt";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(downloadUrl);
+  await downloadPaidBlob(new Blob([result], { type: "text/plain;charset=utf-8" }), "buzypeezy-ai-pipeline.txt");
 };
   const handleSelectAutomation = (type: AutomationType) => {
     if (type === selectedType) return;

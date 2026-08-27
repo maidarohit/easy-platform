@@ -2,11 +2,13 @@ import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import type { ReportWeek } from "@/app/lib/weekly-business-report";
 import { loadWeeklyReport } from "@/app/lib/weekly-report-data";
+import { requirePaidProductAccess } from "@/app/lib/paid-entitlements";
 
 export async function GET(request: Request) {
   let userId: string;
   try { userId = (await verifyFirebaseIdToken(request)).uid; }
   catch { return Response.json({ error: "Authentication is required." }, { status: 401 }); }
+  const entitlement = await requirePaidProductAccess(userId); if (!entitlement.ok) return entitlement.response;
   const url = new URL(request.url);
   const projectId = validateEasyModeProjectId(url.searchParams.get("projectId"));
   const week: ReportWeek = url.searchParams.get("week") === "previous" ? "previous" : "current";
