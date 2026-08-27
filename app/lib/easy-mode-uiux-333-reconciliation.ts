@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, like } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   aiUsage,
@@ -18,6 +18,13 @@ export const UIUX_333_PROJECT_ID = "ad98e057-4fe9-4394-97bc-05391efb85d3";
 export const UIUX_333_PROVIDER_EXECUTION_ID = "333";
 const UIUX_333_DURATION_MS = 41_435;
 const BUILD_KEY_PREFIX = "business-dna-build:%";
+const UIUX_333_RECOVERABLE_ATTEMPT_STATUSES = ["dispatching", "running"] as const;
+
+export function isUiux333RecoverableAttemptStatus(status: string): boolean {
+  return UIUX_333_RECOVERABLE_ATTEMPT_STATUSES.includes(
+    status as (typeof UIUX_333_RECOVERABLE_ATTEMPT_STATUSES)[number],
+  );
+}
 
 export type Uiux333ReconciliationInput = Readonly<{
   projectId: string;
@@ -113,7 +120,8 @@ async function persistUiux333Reconciliation(
       };
     }
 
-    if (task.status !== "running" || task.projectOutputId || attempt.status !== "running" || usage.status !== "started") {
+    if (task.status !== "running" || task.projectOutputId ||
+        !isUiux333RecoverableAttemptStatus(attempt.status) || usage.status !== "started") {
       throw new Error("UIUX execution 333 is not in the recoverable state.");
     }
     const [existingUiuxOutput] = await transaction.select({ id: projectOutputs.id }).from(projectOutputs).where(and(
@@ -159,7 +167,8 @@ async function persistUiux333Reconciliation(
       status: "completed", providerExecutionId: UIUX_333_PROVIDER_EXECUTION_ID,
       finishedAt: now, safeErrorCode: null,
     }).where(and(
-      eq(easyModeTaskAttempts.id, attempt.id), eq(easyModeTaskAttempts.status, "running"),
+      eq(easyModeTaskAttempts.id, attempt.id),
+      inArray(easyModeTaskAttempts.status, [...UIUX_333_RECOVERABLE_ATTEMPT_STATUSES]),
     )).returning({ id: easyModeTaskAttempts.id });
     const [completedTask] = await transaction.update(easyModeTasks).set({
       status: "completed", projectOutputId: created.id, completedAt: now, failedAt: null, safeErrorCode: null,

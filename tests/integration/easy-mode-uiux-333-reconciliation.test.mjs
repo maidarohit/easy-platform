@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  isUiux333RecoverableAttemptStatus,
   reconcileEasyModeUiux333,
   UIUX_333_PROJECT_ID,
   UIUX_333_PROVIDER_EXECUTION_ID,
@@ -18,6 +19,17 @@ const response = [{ output: {
 const input = { projectId: UIUX_333_PROJECT_ID, executionId: UIUX_333_PROVIDER_EXECUTION_ID, response, dryRun: true };
 const request = (body) => new Request("https://example.invalid/api/internal/easy-mode/reconcile-uiux-333", {
   method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+});
+
+test("stale dispatching and running attempts pass the recovery-only status gate", () => {
+  assert.equal(isUiux333RecoverableAttemptStatus("dispatching"), true);
+  assert.equal(isUiux333RecoverableAttemptStatus("running"), true);
+});
+
+test("all unrelated attempt statuses are rejected by the recovery-only status gate", () => {
+  for (const status of ["claimed", "completed", "failed_before_dispatch", "failed_uncertain", "queued", "failed"]) {
+    assert.equal(isUiux333RecoverableAttemptStatus(status), false, status);
+  }
 });
 
 test("correct project, execution and validated UIUX result are accepted", async () => {
@@ -89,6 +101,7 @@ test("production mechanism reuses usage, preserves Sales, and cannot call provid
   assert.match(service, /eq\(easyModeTasks\.moduleId, "uiux"\)/);
   assert.match(service, /run\.status !== "running"/);
   assert.match(service, /task\.status !== "running"/);
+  assert.match(service, /inArray\(easyModeTaskAttempts\.status, \[\.\.\.UIUX_333_RECOVERABLE_ATTEMPT_STATUSES\]\)/);
   assert.match(service, /task\.projectOutputId/);
   assert.match(service, /sales\.status !== "queued"/);
   assert.match(service, /eq\(aiUsage\.id, attempt\.usageId\)/);
@@ -96,6 +109,8 @@ test("production mechanism reuses usage, preserves Sales, and cannot call provid
   assert.doesNotMatch(service, /insert\(aiUsage\)|startAiUsage|claimIdempotentAiUsage/);
   assert.match(service, /already_reconciled/);
   assert.match(service, /if \(dryRun\)/);
+  assert.ok(service.indexOf("if (dryRun)") < service.indexOf("transaction.insert(projectOutputs)"));
+  assert.match(service, /An unlinked UIUX output already exists/);
   assert.match(service, /Customer experience:/);
   assert.match(service, /salesAfter\?\.status !== "queued"/);
   assert.doesNotMatch(`${service}\n${route}`, /\bfetch\s*\(|executeEasyModeRun|executeNextEasyModeTask|executeTextSpecialistService|N8N_|OPENAI|sales-ai/i);
