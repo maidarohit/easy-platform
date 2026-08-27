@@ -15,6 +15,12 @@ test("fails closed for wrong identity, run, project, task or ownership", () => {
   assert.equal(validateClaimedSalesRecovery({ ...evidence, projectOwnerId: "other" }, owner), null);
   assert.equal(validateClaimedSalesRecovery({ ...evidence, attempt: { ...evidence.attempt, taskId: "wrong" } }, owner), null);
 });
+test("exact project owner or configured boss is authorized, nobody else is", () => {
+  assert.ok(validateClaimedSalesRecovery(evidence, owner, false));
+  assert.ok(validateClaimedSalesRecovery(evidence, "configured-boss", true));
+  assert.equal(validateClaimedSalesRecovery(evidence, "unrelated-user", false), null);
+  assert.equal(validateClaimedSalesRecovery({ ...evidence, projectOwnerId: "different-owner" }, "configured-boss", true), null);
+});
 test("rejects any dispatched, charged, output-bearing or non-claimed attempt", () => {
   for (const change of [{ providerExecutionId: "123" }, { usageId: "usage" }, { status: "dispatching" }, { status: "running" }]) assert.equal(validateClaimedSalesRecovery({ ...evidence, attempt: { ...evidence.attempt, ...change } }, owner), null);
   assert.equal(validateClaimedSalesRecovery({ ...evidence, salesOutputsSinceRun: 1 }, owner), null);

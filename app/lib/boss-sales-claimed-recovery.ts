@@ -15,14 +15,16 @@ export type RecoveryEvidence = Readonly<{
   salesOutputsSinceRun: number;
 }>;
 
-export function validateClaimedSalesRecovery(evidence: RecoveryEvidence, userId: string) {
+export function validateClaimedSalesRecovery(evidence: RecoveryEvidence, userId: string, bossAdmin = false) {
   const { run, tasks, attempt } = evidence;
-  if (!run || run.id !== RECOVERY_RUN_ID || run.projectId !== RECOVERY_PROJECT_ID || run.userId !== userId || evidence.projectOwnerId !== userId || run.status !== "running") return null;
+  const projectAssociationValid = Boolean(run && run.userId === evidence.projectOwnerId);
+  const authorized = projectAssociationValid && (bossAdmin || evidence.projectOwnerId === userId);
+  if (!run || run.id !== RECOVERY_RUN_ID || run.projectId !== RECOVERY_PROJECT_ID || !authorized || run.status !== "running") return null;
   const sales = tasks.filter((task) => task.id === RECOVERY_SALES_TASK_ID && task.moduleId === "sales");
   const completed = tasks.filter((task) => task.status === "completed");
   if (tasks.length !== 7 || completed.length !== 6 || sales.length !== 1 || sales[0].position !== 6 || sales[0].status !== "running" || sales[0].projectOutputId !== null ||
       tasks.some((task) => task.id !== RECOVERY_SALES_TASK_ID && task.status !== "completed") || evidence.salesOutputsSinceRun !== 0 ||
-      !attempt || attempt.taskId !== RECOVERY_SALES_TASK_ID || attempt.runId !== RECOVERY_RUN_ID || attempt.projectId !== RECOVERY_PROJECT_ID || attempt.userId !== userId ||
+      !attempt || attempt.taskId !== RECOVERY_SALES_TASK_ID || attempt.runId !== RECOVERY_RUN_ID || attempt.projectId !== RECOVERY_PROJECT_ID || attempt.userId !== run.userId ||
       attempt.status !== "claimed" || attempt.providerExecutionId !== null || attempt.usageId !== null) return null;
   return { valid: true as const, runStatus: "running" as const, salesStatus: "running" as const, attemptStatus: "claimed" as const, completedTasks: 6 as const, preDispatch: true as const };
 }
@@ -40,17 +42,17 @@ async function readEvidence(transaction: Parameters<Parameters<typeof db.transac
   return { run: runs[0] ?? null, projectOwnerId: project?.userId ?? null, tasks, attempt: attempts[0] ?? null, salesOutputsSinceRun: Number(outputCount?.total ?? 0) };
 }
 
-export async function validateCurrentClaimedSales(userId: string) { return db.transaction(async (transaction) => validateClaimedSalesRecovery(await readEvidence(transaction, false), userId)); }
+export async function validateCurrentClaimedSales(userId: string, bossAdmin = false) { return db.transaction(async (transaction) => validateClaimedSalesRecovery(await readEvidence(transaction, false), userId, bossAdmin)); }
 
-export async function releaseClaimedSalesForOneRetry(userId: string) {
+export async function releaseClaimedSalesForOneRetry(userId: string, bossAdmin = false) {
   return db.transaction(async (transaction) => {
     await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`boss-sales-recovery:${RECOVERY_RUN_ID}`}))`);
-    const evidence = await readEvidence(transaction, true); const valid = validateClaimedSalesRecovery(evidence, userId); if (!valid) return null;
+    const evidence = await readEvidence(transaction, true); const valid = validateClaimedSalesRecovery(evidence, userId, bossAdmin); if (!valid) return null;
     const now = new Date();
     const [failedAttempt] = await transaction.update(easyModeTaskAttempts).set({ status: "failed_before_dispatch", finishedAt: now, safeErrorCode: "TASK_FAILED" }).where(and(eq(easyModeTaskAttempts.id, evidence.attempt!.id), eq(easyModeTaskAttempts.status, "claimed"), sql`${easyModeTaskAttempts.providerExecutionId} is null`, sql`${easyModeTaskAttempts.usageId} is null`)).returning({ id: easyModeTaskAttempts.id });
     if (!failedAttempt) return null;
     const [released] = await transaction.update(easyModeTasks).set({ status: "queued", startedAt: null, completedAt: null, failedAt: null, safeErrorCode: null }).where(and(eq(easyModeTasks.id, RECOVERY_SALES_TASK_ID), eq(easyModeTasks.status, "running"), sql`${easyModeTasks.projectOutputId} is null`)).returning({ id: easyModeTasks.id });
     if (!released) throw new Error("RECOVERY_STATE_CHANGED");
-    return { released: true as const, previousAttemptId: failedAttempt.id };
+    return { released: true as const, previousAttemptId: failedAttempt.id, runOwnerId: evidence.run!.userId };
   });
 }
