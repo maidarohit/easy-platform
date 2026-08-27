@@ -98,10 +98,13 @@ export function analyzeBusinessIntakeDeterministically(input: BusinessIntakeAnal
     suggestedQuestions: questions,
     understandingSummary: `I understand the vision for ${name} and will use your story, customers, offer, location and goals as the source of truth.`,
     buildPlanSummary: [
-      "A brand direction grounded in your business story and differentiators",
-      "A website plan shaped around your target customers and strongest offers",
-      "SEO foundations for your services and operating area",
-      "Marketing and lead actions aligned with your growth goal",
+      "Brand identity and positioning",
+      "Services and offer structure",
+      "Website and customer-facing copy",
+      "Marketing starter content",
+      "Search and local visibility foundations",
+      "Customer journey and lead path",
+      "A practical launch plan",
     ],
   };
 }

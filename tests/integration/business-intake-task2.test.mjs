@@ -159,9 +159,9 @@ test("17. intake persistence does not clear existing Project Memory", async () =
 
 test("18. Task 4 confirms Business DNA only after explicit review action", async () => {
   const page = await readFile(new URL("../../app/onboarding/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /Yes, this looks right/);
+  assert.match(page, /Looks Good — Continue/);
   assert.match(page, /confirmUnderstanding/);
-  assert.match(page, /Here&apos;s what I understood about your business/);
+  assert.match(page, /Here&apos;s what I understood/);
 });
 
 test("19. confirmed onboarding exposes only the Task 5 business-build entrypoint", async () => {

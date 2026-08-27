@@ -2,6 +2,54 @@ import type { BusinessDnaContent } from "@/app/lib/business-dna";
 
 export type BusinessReviewSection = Readonly<{ id: string; label: string; items: readonly Readonly<{ path: string; label: string; value: string }>[] }>;
 
+export const BUSINESS_BUILD_DELIVERABLES = [
+  "Brand identity and positioning",
+  "Services and offer structure",
+  "Website and customer-facing copy",
+  "Marketing starter content",
+  "Search and local visibility foundations",
+  "Customer journey and lead path",
+  "A practical launch plan",
+] as const;
+
+const uncertaintyPattern = /\b(?:don['’]?t know|do not know|not sure|unsure|no idea|haven['’]?t decided|have not decided|help me (?:choose|decide)|need (?:a )?recommendation|recommend (?:it|this|for me)|you (?:decide|suggest))\b/i;
+
+export function isBusinessIntakeUncertainty(value: unknown): boolean {
+  const values = Array.isArray(value) ? value : [value];
+  return values.some((item) => typeof item === "string" && uncertaintyPattern.test(item));
+}
+
+function recommendationContext(dna: BusinessDnaContent) {
+  return [dna.identity?.industry, dna.identity?.subIndustry, dna.conversation?.originalVisionText,
+    ...(dna.offer?.products ?? []), ...(dna.offer?.services ?? []), ...(dna.offer?.strongestOffers ?? [])]
+    .filter(Boolean).join(" ");
+}
+
+/** Converts explicit uncertainty into conservative recommendations supported by saved facts. */
+export function synthesizeBusinessReviewRecommendations(dna: BusinessDnaContent): BusinessDnaContent {
+  const result = structuredClone(dna);
+  const context = recommendationContext(dna);
+  const location = dna.location?.city?.trim();
+  const isVisualArtist = /\b(?:paint(?:er|ing)?|artist|portrait|canvas|mural)\b/i.test(context);
+
+  if (isBusinessIntakeUncertainty(dna.customers?.desiredCustomers) || isBusinessIntakeUncertainty(dna.customers?.targetAudience)) {
+    const recommendation = isVisualArtist
+      ? `People commissioning custom portraits and personalized art; homeowners seeking canvas artwork; interior designers, cafes, restaurants, offices and other spaces seeking murals or commissioned artwork${location ? ` in ${location}` : ""}`
+      : `People and organizations actively looking for ${dna.identity?.industry?.trim() || "the services described"}${location ? ` in ${location}` : ""}`;
+    result.customers = { ...result.customers, desiredCustomers: recommendation };
+    if (isBusinessIntakeUncertainty(result.customers.targetAudience)) delete result.customers.targetAudience;
+  }
+
+  if (isBusinessIntakeUncertainty(dna.offer?.strongestOffers)) {
+    const explicitOffers = [...(dna.offer?.services ?? []), ...(dna.offer?.products ?? [])]
+      .filter((item) => !isBusinessIntakeUncertainty(item));
+    result.offer = { ...result.offer, strongestOffers: isVisualArtist
+      ? ["Custom portrait commissions", "Canvas artwork", "Wall murals", "Commercial and interior art commissions"]
+      : explicitOffers.length ? explicitOffers : [`A focused starter ${dna.identity?.industry?.trim() || "service"} offer based on your business description`] };
+  }
+  return result;
+}
+
 const sections = [
   ["business", "Your business", [["identity.businessName", "Name"], ["identity.industry", "Industry"], ["identity.businessStage", "Stage"]]],
   ["story", "Your story", [["founderHistory.founderStory", "Story"], ["founderHistory.whyStarted", "Why it began"], ["founderHistory.businessAge", "Business history"]]],

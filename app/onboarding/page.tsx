@@ -26,7 +26,7 @@ import {
   unansweredSuggestedQuestions,
   type BusinessIntakeAnalysis,
 } from "../lib/business-intake-analysis";
-import { buildBusinessReviewSections } from "../lib/business-intake-review";
+import { BUSINESS_BUILD_DELIVERABLES, buildBusinessReviewSections, synthesizeBusinessReviewRecommendations } from "../lib/business-intake-review";
 import { analyzeBusinessIntakeDeterministically } from "../lib/business-intake-planner";
 import ProductTutorial from "../components/ProductTutorial";
 
@@ -143,7 +143,9 @@ export default function OnboardingPage() {
   const [tutorialComplete, setTutorialComplete] = useState(false);
 
   const content = useMemo(() => contentFromBusinessDna(dna), [dna]);
-  const understoodContent = useMemo(() => mergeExplicitDnaWithInferences(content, analysis?.extractedDna ?? {}), [content, analysis]);
+  const understoodContent = useMemo(() => synthesizeBusinessReviewRecommendations(
+    mergeExplicitDnaWithInferences(content, analysis?.extractedDna ?? {}),
+  ), [content, analysis]);
   const adaptiveQuestions = useMemo<BusinessIntakeQuestion[]>(() => analysis ? unansweredSuggestedQuestions(analysis, understoodContent).map((item): BusinessIntakeQuestion => ({
     id: item.id, path: item.dnaPath, question: item.question, required: item.required, answerType: item.answerType, options: item.options,
   })) : [], [analysis, understoodContent]);
@@ -434,11 +436,11 @@ export default function OnboardingPage() {
             ) : complete ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Please review</p>
-                <h1 className="mt-4 text-[clamp(2.4rem,6vw,4.2rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Here&apos;s what I understood about your business</h1>
+                <h1 className="mt-4 text-[clamp(2.4rem,6vw,4.2rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Here&apos;s what I understood</h1>
                 {analysis?.understandingSummary && <p className="mt-5 text-lg leading-8 text-[#606A64]">{analysis.understandingSummary}</p>}
                 <div className="mt-8 grid gap-4 sm:grid-cols-2">{reviewSections.map((section) => <section key={section.id} className="rounded-[22px] border border-[#D8DCCF] bg-[#FCFBF7] p-5"><h2 className="text-lg font-semibold text-[#173D32]">{section.label}</h2><div className="mt-4 space-y-4">{section.items.map((item) => <div key={item.path}><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#7B847E]">{item.label}</p><p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#303934]">{item.value}</p></div><button type="button" onClick={() => { setEditingPath(item.path); setEditValue(item.value); }} className="text-xs font-semibold text-[#173D32] underline underline-offset-4">Edit</button></div>{editingPath === item.path && <div className="mt-3"><textarea value={editValue} onChange={(event) => setEditValue(event.target.value)} rows={3} className="w-full rounded-xl border border-[#D8DCCF] bg-white p-3 text-sm" /><div className="mt-2 flex gap-3"><button type="button" disabled={isSaving || !editValue.trim()} onClick={() => void saveCorrection(item.path)} className="text-sm font-semibold text-[#173D32]">Save correction</button><button type="button" onClick={() => setEditingPath(null)} className="text-sm text-[#606A64]">Cancel</button></div></div>}</div>)}</div></section>)}</div>
-                <section className="mt-8 rounded-[26px] border border-[#A8B8A7] bg-[#EEE9DC] p-6 sm:p-8"><h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#173D32]">Here&apos;s what I&apos;m going to build for you</h2><ul className="mt-5 space-y-3 text-base leading-7 text-[#303934]">{(analysis?.buildPlanSummary ?? ["A brand direction grounded in your business story", "A website plan shaped around your customers and offers", "SEO and marketing foundations aligned with your goals"]).map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true">✓</span><span>{item}</span></li>)}</ul><p className="mt-5 text-sm text-[#606A64]">This is a plan only. No build or specialist workflow starts here.</p></section>
-                <div className="mt-7 flex flex-wrap gap-3"><button type="button" disabled={isSaving} onClick={() => void confirmUnderstanding()} className={primaryButtonClass}>{isSaving ? "Saving…" : "Yes, this looks right"}</button><button type="button" onClick={() => { const first = reviewSections[0]?.items[0]; if (first) { setEditingPath(first.path); setEditValue(first.value); } }} className="min-h-13 rounded-[14px] border border-[#D8DCCF] bg-[#FCFBF7] px-5 text-sm font-semibold text-[#173D32]">Edit</button></div>
+                <section className="mt-8 rounded-[26px] border border-[#A8B8A7] bg-[#EEE9DC] p-6 sm:p-8"><h2 className="text-2xl font-semibold tracking-[-0.03em] text-[#173D32]">Here&apos;s what Buzypeezy will build for you</h2><ul className="mt-5 space-y-3 text-base leading-7 text-[#303934]">{BUSINESS_BUILD_DELIVERABLES.map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true">✓</span><span>{item}</span></li>)}</ul></section>
+                <div className="mt-7 flex flex-wrap gap-3"><button type="button" disabled={isSaving} onClick={() => void confirmUnderstanding()} className={primaryButtonClass}>{isSaving ? "Saving…" : "Looks Good — Continue"}</button><button type="button" onClick={() => { const first = reviewSections[0]?.items[0]; if (first) { setEditingPath(first.path); setEditValue(first.value); } }} className="min-h-13 rounded-[14px] border border-[#D8DCCF] bg-[#FCFBF7] px-5 text-sm font-semibold text-[#173D32]">Edit</button></div>
               </div>
             ) : isAnalyzing ? (
               <div className="text-center"><p role="status" className="text-lg text-[#606A64]">Understanding your business and choosing the most useful follow-up questions…</p></div>

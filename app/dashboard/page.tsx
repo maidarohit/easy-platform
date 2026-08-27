@@ -223,7 +223,7 @@ function DashboardPageContent() {
                 <h2 id="start-new-business-heading" className="text-2xl font-semibold text-white sm:text-3xl">Create a fresh business</h2>
                 <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">Tell us what you do or what you want to build. You don&apos;t need a business plan.</p>
               </div>
-              <button type="button" onClick={() => router.push("/onboarding")} className="inline-flex min-h-14 w-full shrink-0 items-center justify-center rounded-xl bg-emerald-400 px-6 text-base font-bold text-slate-950 shadow-[0_12px_30px_rgba(52,211,153,0.22)] transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 lg:w-auto">
+              <button type="button" onClick={() => { sessionStorage.removeItem("easy-selected-business-idea"); router.push("/onboarding"); }} className="inline-flex min-h-14 w-full shrink-0 items-center justify-center rounded-xl bg-emerald-400 px-6 text-base font-bold text-slate-950 shadow-[0_12px_30px_rgba(52,211,153,0.22)] transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 lg:w-auto">
                 + Start a New Business
               </button>
             </div>
