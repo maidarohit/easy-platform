@@ -56,6 +56,39 @@ test("3 double click returns the same revision-bound run without duplication", a
   assert.equal(mock.creates(), 1);
 });
 
+test("3b simultaneous requests converge on one database-authoritative run", async () => {
+  let run = null;
+  let createCalls = 0;
+  let arrivals = 0;
+  let releaseCreates;
+  const createBarrier = new Promise((resolve) => { releaseCreates = resolve; });
+  const deps = {
+    verify: async () => ({ uid: "owner" }),
+    loadDna: async () => ({ confirmed: true, revisionCount: 7, dna: {} }),
+    findRun: async (_userId, _projectId, key) => !key || run?.idempotencyKey === key ? run : null,
+    preflight: async () => ({ ok: true, requirements: [] }),
+    createRun: async ({ userId, projectId: ownedProjectId, idempotencyKey }) => {
+      createCalls += 1;
+      arrivals += 1;
+      if (arrivals === 2) releaseCreates();
+      await createBarrier;
+      if (run) return null;
+      run = { id: "22222222-2222-4222-8222-222222222222", userId, projectId: ownedProjectId, goalId: "build_everything", status: "queued", idempotencyKey, createdAt: new Date(0), startedAt: null, completedAt: null, failedAt: null };
+      return run;
+    },
+    responseForRun: async (value) => ({ run: { id: value.id, status: value.status }, tasks: [], progress: { total: 7, queued: 7, completed: 0, failed: 0 } }),
+  };
+
+  const [first, second] = await Promise.all([
+    handleBusinessBuildPost(request(), deps),
+    handleBusinessBuildPost(request(), deps),
+  ]);
+  const [firstBody, secondBody] = await Promise.all([first.json(), second.json()]);
+  assert.equal(createCalls, 2);
+  assert.deepEqual([first.status, second.status].sort(), [200, 201]);
+  assert.equal(firstBody.run.id, secondBody.run.id);
+});
+
 test("4 refresh restores the same run and never creates one", async () => {
   const mock = harness();
   await handleBusinessBuildPost(request(), mock.deps);
@@ -91,6 +124,9 @@ test("7 UI exposes one build action, friendly phases, and the real workspace", a
     readFile("app/onboarding/page.tsx", "utf8"), readFile("app/business-build/page.tsx", "utf8"),
   ]);
   assert.match(onboarding, /"Build My Business"/);
+  assert.match(onboarding, /buildStartInFlight\.current/);
+  assert.match(onboarding, /disabled=\{isStartingBuild\}/);
+  assert.match(onboarding, /Starting your build/);
   assert.doesNotMatch(onboarding, /coming in Task 5/);
   for (const label of ["Understanding your direction", "Creating your brand", "Building your online presence", "Preparing your marketing", "Setting up growth foundations", "Finalizing your business workspace"]) assert.match(progress, new RegExp(label));
   assert.match(progress, /\/master-workspace\?projectId=/);
@@ -119,6 +155,9 @@ test("10 Task 5 reuses the locked specialist order and scoped entitlement system
   ]);
   assert.match(plans, /build_everything:\s*\["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"\]/);
   assert.match(route, /preflightEasyModePlanQuota/);
+  assert.match(route, /buildKey\(dna\.revisionCount\)/);
+  assert.match(route, /onConflictDoNothing/);
+  assert.match(route, /transaction\.insert\(easyModeTasks\)/);
   assert.match(entitlements, /PRIVATE_BETA_UIDS_TEST/);
   assert.doesNotMatch(entitlements, /NEXT_PUBLIC_PRIVATE_BETA/);
 });

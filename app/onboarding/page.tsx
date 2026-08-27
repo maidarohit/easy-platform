@@ -135,6 +135,7 @@ export default function OnboardingPage() {
   const [analysis, setAnalysis] = useState<BusinessIntakeAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const analyzingRef = useRef(false);
+  const buildStartInFlight = useRef(false);
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [isStartingBuild, setIsStartingBuild] = useState(false);
@@ -352,7 +353,8 @@ export default function OnboardingPage() {
   }
 
   async function startBusinessBuild() {
-    if (!projectId || isStartingBuild || !dna?.conversation?.confirmed) return;
+    if (!projectId || buildStartInFlight.current || !dna?.conversation?.confirmed) return;
+    buildStartInFlight.current = true;
     setIsStartingBuild(true); setError("");
     try {
       const response = await authenticatedFetch("/api/business-build", {
@@ -363,6 +365,7 @@ export default function OnboardingPage() {
       router.push(`/business-build?projectId=${encodeURIComponent(projectId)}`);
     } catch (buildError) {
       setError(buildError instanceof Error ? buildError.message : "We could not start your business build.");
+      buildStartInFlight.current = false;
       setIsStartingBuild(false);
     }
   }
