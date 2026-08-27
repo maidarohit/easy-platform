@@ -1,13 +1,15 @@
 import type { BusinessPreview } from "@/app/lib/business-preview";
+import { validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
 
 export type PublishedBusinessSnapshot = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   business: BusinessPreview["business"];
   brand: BusinessPreview["brand"];
   website: BusinessPreview["website"];
   marketing: BusinessPreview["marketing"];
   search: BusinessPreview["search"];
   journey: BusinessPreview["journey"];
+  contact?: PublicContactSettings;
 }>;
 
 const RESERVED = new Set(["admin", "api", "business", "dashboard", "help", "login", "onboarding", "signup", "www", "_next"]);
@@ -23,15 +25,16 @@ export function validateBusinessSlug(value: unknown) {
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && !RESERVED.has(value) ? value : null;
 }
 
-export function buildPublishedBusinessSnapshot(preview: BusinessPreview): PublishedBusinessSnapshot {
+export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact: PublicContactSettings = {}): PublishedBusinessSnapshot {
   return structuredClone({
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     business: preview.business,
     brand: preview.brand,
     website: preview.website,
     marketing: preview.marketing,
     search: preview.search,
     journey: preview.journey,
+    contact,
   });
 }
 
@@ -58,8 +61,10 @@ function safeTree(value: unknown, depth = 0): boolean {
 export function validatePublishedBusinessSnapshot(value: unknown): PublishedBusinessSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const keys = ["schemaVersion", "business", "brand", "website", "marketing", "search", "journey"];
-  if (record.schemaVersion !== 1 || Object.keys(record).some((key) => !keys.includes(key)) || !safeTree(value)) return null;
+  const keys = ["schemaVersion", "business", "brand", "website", "marketing", "search", "journey", "contact"];
+  if ((record.schemaVersion !== 1 && record.schemaVersion !== 2) || Object.keys(record).some((key) => !keys.includes(key)) || !safeTree(value)) return null;
+  if (record.schemaVersion === 1 && Object.hasOwn(record, "contact")) return null;
+  if (record.schemaVersion === 2 && (!Object.hasOwn(record, "contact") || !validatePublicContactSettings(record.contact).valid)) return null;
   const business = record.business as Record<string, unknown> | undefined;
   return business && typeof business.name === "string" && business.name.trim()
     ? value as PublishedBusinessSnapshot : null;

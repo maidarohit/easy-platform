@@ -43,7 +43,7 @@ test("publication API gates on current approval, owner scopes every mutation, sn
   assert.match(route, /customRows\[0\]\?\.approvedAt/);
   assert.match(route, /existing\?\.status === "active" && existing\.publishedPreviewRevision === revision/);
   assert.match(route, /insert\(businessPublicationVersions\)/);
-  assert.match(route, /buildPublishedBusinessSnapshot\(preview\)/);
+  assert.match(route, /buildPublishedBusinessSnapshot\(preview, contactRows\[0\]\?\.settings \?\? \{\}\)/);
   assert.match(route, /status: "inactive"/);
   assert.doesNotMatch(route, /update\(projectOutputs\)|update\(projectBusinessDna\)|fetch\(|OpenAI|N8N_|startAiUsage|Build My Business/i);
 });

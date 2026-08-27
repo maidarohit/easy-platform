@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import type { BusinessPreview } from "@/app/lib/business-preview";
 import { renderedBusinessPreviewSections } from "@/app/lib/business-preview-sections";
+import { PUBLIC_CONTACT_FIELDS, type PublicContactSettings } from "@/app/lib/public-contact";
 import {
   applyPreviewOverrides, PREVIEW_EDIT_RULES, previewFieldValue, validatePreviewOverrides,
   type PreviewEditableField, type PreviewOverrides,
@@ -43,6 +44,9 @@ function BusinessPreviewContent() {
   const [publication, setPublication] = useState<Publication>({ status: "unpublished" });
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
+  const [contact, setContact] = useState<PublicContactSettings>({});
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactStatus, setContactStatus] = useState("");
 
   useEffect(() => {
     if (!projectId) return;
@@ -62,6 +66,25 @@ function BusinessPreviewContent() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    void authenticatedFetch(`/api/public-contact-settings?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" })
+      .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error); if (active) setContact(data.settings as PublicContactSettings); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [projectId]);
+
+  async function saveContactSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (savingContact) return; setSavingContact(true); setContactStatus("");
+    try {
+      const response = await authenticatedFetch("/api/public-contact-settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, settings: contact }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Unable to save contact settings.");
+      setContact(data.settings as PublicContactSettings); setContactStatus("Saved. These approved details will appear after you publish or republish.");
+    } catch (saveError) { setContactStatus(saveError instanceof Error ? saveError.message : "Unable to save contact settings."); }
+    finally { setSavingContact(false); }
+  }
 
   useEffect(() => {
     if (!projectId) return;
@@ -162,6 +185,7 @@ function BusinessPreviewContent() {
         <header className="rounded-[28px] border border-[#D8DCCF] bg-[#FCFBF7] p-6 shadow-[0_18px_60px_rgba(40,52,45,0.07)] sm:p-8">
           <nav aria-label="Business preview sections" className="flex flex-wrap gap-2 text-sm font-semibold text-[#173D32]">
             {renderedSections.map((section) => <a key={section.id} href={section.href} className="rounded-full border border-[#D8DCCF] bg-white px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">{section.label}</a>)}
+            <a href="#contact-social" className="rounded-full border border-[#D8DCCF] bg-white px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Contact &amp; Social</a>
           </nav>
           <div className="mt-8 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
             <div>
@@ -182,6 +206,8 @@ function BusinessPreviewContent() {
         </header>
 
         {!editing && <section className="mt-5 flex flex-col justify-between gap-5 rounded-[24px] border border-[#D8DCCF] bg-white p-5 sm:flex-row sm:items-center sm:p-6"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Your business page</p><p className="mt-2 text-lg font-semibold text-[#173D32]">{publication.status === "active" ? preview.approval.approved ? "Published" : "Changes awaiting approval" : "Not published"}</p></div><div className="flex flex-wrap gap-3">{publication.status === "active" && publication.publicUrl && <Link href={publication.publicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-xl border border-[#A8B8A7] px-5 font-semibold text-[#173D32]">View Live Business</Link>}{preview.approval.approved && <button type="button" disabled={publishing} onClick={() => void updatePublication("POST")} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60">{publishing ? "Publishing..." : "Publish My Business"}</button>}{publication.status === "active" && <button type="button" disabled={publishing} onClick={() => void updatePublication("DELETE")} className="min-h-11 rounded-xl px-5 font-semibold text-[#8A4B3D] disabled:opacity-60">Unpublish</button>}<Link href={`/master-workspace?projectId=${encodeURIComponent(projectId)}`} className="inline-flex min-h-11 items-center px-3 font-semibold text-[#28705E]">Back to Business Workspace</Link></div></section>}
+
+        {!editing && <section id="contact-social" className="mt-5 rounded-[24px] border border-[#D8DCCF] bg-white p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Contact &amp; Social</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">How can customers contact you?</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#606A64]">Only details you enter and save here are approved for your public page. Your private account email and phone are never published automatically. The secure enquiry form remains available even if you add no direct details.</p><form onSubmit={saveContactSettings} className="mt-6 grid gap-4 sm:grid-cols-2">{PUBLIC_CONTACT_FIELDS.map((field) => <label key={field} className="text-sm font-semibold capitalize text-[#173D32]">{field === "linkedin" ? "LinkedIn URL" : field === "instagram" || field === "facebook" || field === "website" ? `${field} URL` : field === "location" ? "Location / service area" : `Public ${field}`}<input type={field === "email" ? "email" : field === "phone" || field === "whatsapp" ? "tel" : field === "location" ? "text" : "url"} value={contact[field] ?? ""} placeholder={field === "whatsapp" || field === "phone" ? "+919876543210" : undefined} onChange={(event) => setContact((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-xl border border-[#C7CDBF] px-4 py-3 font-normal" /></label>)}<div className="sm:col-span-2"><button type="submit" disabled={savingContact} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60">{savingContact ? "Saving…" : "Save approved contact details"}</button>{contactStatus && <p role="status" className="mt-3 text-sm text-[#606A64]">{contactStatus}</p>}</div></form></section>}
 
         {editing && originalPreview && <section aria-label="Edit Preview" className="sticky top-3 z-20 mt-5 rounded-[26px] border border-[#A8B8A7] bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Edit Preview</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">Make simple text changes</h2><p className="mt-2 text-sm text-[#606A64]">Your generated originals stay unchanged.</p></div><div className="rounded-xl border border-dashed border-[#C7CDBF] bg-[#F7F4EC] px-4 py-3 text-sm text-[#606A64]">Images can be added later.</div></div><div className="mt-6 grid max-h-[48vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2">{(Object.keys(PREVIEW_EDIT_RULES) as PreviewEditableField[]).map((field) => { const baseline = previewFieldValue(originalPreview, field); if (!baseline) return null; const rule = PREVIEW_EDIT_RULES[field]; const edited = Object.hasOwn(draftOverrides, field); return <label key={field} className="block rounded-2xl border border-[#E4E5DD] bg-[#FCFBF7] p-4"><span className="flex items-center justify-between gap-3 text-sm font-semibold text-[#173D32]"><span>{rule.label}</span>{edited && <span className="text-xs font-medium text-[#8A713F]">Edited</span>}</span><textarea value={draftOverrides[field] ?? baseline} maxLength={rule.maximum} rows={field.includes("title") || field.includes("Headline") || field.includes("Cta") || field === "brand.tagline" ? 2 : 4} onChange={(event) => updateDraft(field, event.target.value)} className="mt-3 w-full resize-y rounded-xl border border-[#C7CDBF] bg-white p-3 text-sm leading-6 text-[#1B211E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]" /><span className="mt-1 block text-right text-xs text-[#7B847E]">{(draftOverrides[field] ?? baseline).length}/{rule.maximum}</span></label>; })}</div><div className="mt-5 flex flex-wrap gap-3 border-t border-[#E4E5DD] pt-5"><button type="button" disabled={saving} onClick={() => void saveChanges()} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2">{saving ? "Saving..." : "Save Changes"}</button><button type="button" disabled={saving} onClick={cancelEditing} className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 font-semibold text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Cancel</button><button type="button" disabled={saving} onClick={resetToOriginal} className="min-h-11 rounded-xl px-5 font-semibold text-[#8A4B3D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A4B3D]">Reset to Original</button></div></section>}
 

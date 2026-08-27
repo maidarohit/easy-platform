@@ -56,13 +56,12 @@ test("internal strategies and fabricated proof are excluded", () => {
   assert.doesNotMatch(publicProcess(value).join(" "), /cold email|follow-up/i);
 });
 
-test("contact renders only actually stored email or phone", () => {
-  assert.deepEqual(publicContact(snapshot()), { label: "hello@example.com", href: "mailto:hello@example.com" });
-  assert.deepEqual(publicContact(snapshot({ website: { ...snapshot().website, contact: "+91 98765 43210" } })), { label: "+919876543210", href: "tel:+919876543210" });
+test("legacy generated contact is private until explicitly approved", () => {
+  assert.deepEqual(publicContact(snapshot()), { label: null, href: "#contact", methods: [], location: null });
 });
 
 test("existing schema-version-one publication snapshots remain valid and stable", () => {
-  const value = snapshot(); const before = structuredClone(value);
+  const current = snapshot(); const value = { ...current, schemaVersion: 1 }; delete value.contact; const before = structuredClone(value);
   assert.deepEqual(validatePublishedBusinessSnapshot(value), value);
   publicAudience(value); publicServices(value); publicProcess(value);
   assert.deepEqual(value, before);

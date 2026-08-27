@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   businessPublications, businessPublicationVersions, projectBusinessDna,
-  projectOutputs, projectPreviewCustomizations, projects,
+  projectOutputs, projectPreviewCustomizations, projectPublicContacts, projects,
 } from "@/app/db/schema";
 import { selectLatestWorkspaceOutputs, workspaceProjectPresentation } from "@/app/api/master-workspace/route";
 import { buildBusinessPreview } from "@/app/lib/business-preview";
@@ -79,10 +79,11 @@ export async function POST(request: Request) {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`business-publication:${projectId}`}))`);
       const [project] = await transaction.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, uid))).limit(1).for("update");
       if (!project) throw new Error("NOT_FOUND");
-      const [dnaRows, outputRows, customRows] = await Promise.all([
+      const [dnaRows, outputRows, customRows, contactRows] = await Promise.all([
         transaction.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, uid), eq(projectBusinessDna.confirmed, true))).limit(1),
         transaction.select().from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),
         transaction.select().from(projectPreviewCustomizations).where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, uid))).limit(1),
+        transaction.select().from(projectPublicContacts).where(and(eq(projectPublicContacts.projectId, projectId), eq(projectPublicContacts.userId, uid))).limit(1),
       ]);
       if (!dnaRows[0]) throw new Error("NO_PREVIEW");
       const latest = selectLatestWorkspaceOutputs(outputRows);
@@ -93,9 +94,9 @@ export async function POST(request: Request) {
       const hasOverrides = Object.keys(overrides).length > 0;
       const approved = hasOverrides ? Boolean(customRows[0]?.approvedAt) : original.approval.approved;
       if (!approved) throw new Error("PREVIEW_NOT_APPROVED");
-      const revision = businessPreviewRevision(original.approval.outputIds, customRows[0]?.revisionCount ?? 0, overrides);
+      const revision = businessPreviewRevision(original.approval.outputIds, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
       const preview = applyPreviewOverrides(original, overrides);
-      const snapshot = buildPublishedBusinessSnapshot(preview);
+      const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {});
       const [existing] = await transaction.select().from(businessPublications).where(eq(businessPublications.projectId, projectId)).limit(1);
       if (existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
       const now = new Date();

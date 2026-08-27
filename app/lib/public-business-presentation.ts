@@ -1,4 +1,5 @@
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
+import { publicContactMethods } from "@/app/lib/public-contact";
 
 const INTERNAL_PAGE_LABELS = new Set(["home", "services", "service detail page", "service detail pages", "portfolio", "portfolio case studies", "case studies", "pricing", "pricing packages", "process", "about", "contact", "faq", "blog"]);
 const INTERNAL_PUBLIC_TEXT = /\b(?:day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword strategy|meta titles?|meta descriptions?|kpis?|conversion rate|marketing score|ai agent|prompt|model output)\b/i;
@@ -82,13 +83,12 @@ export function publicBusinessKind(snapshot: PublishedBusinessSnapshot) {
   return { workLabel: "What we do", audienceLabel: "Who we serve", b2b: /business|company|commercial/.test(context) };
 }
 export function publicContact(snapshot: PublishedBusinessSnapshot) {
-  const value = snapshot.website?.contact?.trim() || ""; const email = value.includes("@") ? value : null;
-  const digits = value.replace(/[^+\d]/g, ""); const phone = !email && digits.length >= 7 ? digits : null;
-  return { label: email || phone, href: email ? `mailto:${email}` : phone ? `tel:${phone}` : "#contact" };
+  const methods = publicContactMethods(snapshot.contact ?? {});
+  if (methods.length) return { label: methods[0].value, href: methods[0].href, methods, location: snapshot.contact?.location ?? null };
+  // Legacy generated website.contact text was never explicit publication consent.
+  return { label: null, href: "#contact", methods: [], location: null };
 }
 export function publicSocialLinks(snapshot: PublishedBusinessSnapshot) {
-  void snapshot;
-  // Schema v1 has no verified social-connection URLs. Strategy mentions are never treated as accounts.
-  return [] as readonly Readonly<{ href: string; label: string }>[];
+  return publicContactMethods(snapshot.contact ?? {}).filter((item) => ["Instagram", "Facebook", "LinkedIn"].includes(item.label));
 }
 export function publicStory(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.about, 900) || clean(snapshot.brand?.story, 900) || clean(snapshot.business.description, 650); }

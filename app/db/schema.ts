@@ -16,6 +16,7 @@ import { sql } from "drizzle-orm";
 import type { BusinessDnaContent } from "@/app/lib/business-dna";
 import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
+import type { PublicContactSettings } from "@/app/lib/public-contact";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -243,6 +244,15 @@ export const projectPreviewCustomizations = pgTable(
   ],
 );
 
+export const projectPublicContacts = pgTable("project_public_contacts", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  settings: jsonb("settings").$type<PublicContactSettings>().notNull().default({}),
+  revisionCount: integer("revision_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("project_public_contacts_owner_idx").on(table.userId)]);
+
 export type BusinessPublicationStatus = "active" | "inactive";
 export const businessPublications = pgTable(
   "business_publications",
@@ -282,6 +292,22 @@ export const businessPublicationVersions = pgTable(
     index("business_publication_versions_publication_idx").on(table.publicationId),
   ],
 );
+
+export const publicBusinessInquiries = pgTable("public_business_inquiries", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  publicationId: uuid("publication_id").notNull().references(() => businessPublications.id, { onDelete: "restrict" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 254 }).notNull(),
+  phone: varchar("phone", { length: 32 }),
+  service: varchar("service", { length: 160 }),
+  message: text("message").notNull(),
+  sourceIpHash: varchar("source_ip_hash", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("public_business_inquiries_publication_idx").on(table.publicationId, table.createdAt),
+  index("public_business_inquiries_rate_idx").on(table.publicationId, table.sourceIpHash, table.createdAt),
+]);
 
 export type EasyModeRunStatus = "queued" | "running" | "partially_completed" | "completed" | "failed" | "cancelled";
 export type EasyModeTaskStatus = "queued" | "running" | "completed" | "failed" | "skipped";
