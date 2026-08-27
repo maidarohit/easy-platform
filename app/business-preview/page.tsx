@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import type { BusinessPreview } from "@/app/lib/business-preview";
+import { renderedBusinessPreviewSections } from "@/app/lib/business-preview-sections";
 import {
   applyPreviewOverrides, PREVIEW_EDIT_RULES, previewFieldValue, validatePreviewOverrides,
   type PreviewEditableField, type PreviewOverrides,
@@ -154,12 +155,13 @@ function BusinessPreviewContent() {
 
   const brand = preview.brand;
   const website = preview.website;
+  const renderedSections = renderedBusinessPreviewSections(preview);
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-4 py-6 text-[#1B211E] sm:px-7 lg:px-10">
       <div className="mx-auto max-w-7xl">
         <header className="rounded-[28px] border border-[#D8DCCF] bg-[#FCFBF7] p-6 shadow-[0_18px_60px_rgba(40,52,45,0.07)] sm:p-8">
           <nav aria-label="Business preview sections" className="flex flex-wrap gap-2 text-sm font-semibold text-[#173D32]">
-            {["Brand", "Website", "Marketing", "Search", "Customer Journey"].map((label) => <a key={label} href={`#${label.toLowerCase().replace(" ", "-")}`} className="rounded-full border border-[#D8DCCF] bg-white px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">{label}</a>)}
+            {renderedSections.map((section) => <a key={section.id} href={section.href} className="rounded-full border border-[#D8DCCF] bg-white px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">{section.label}</a>)}
           </nav>
           <div className="mt-8 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
             <div>
