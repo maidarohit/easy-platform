@@ -211,10 +211,18 @@ export async function executeNextEasyModeTask(
   }
 
   if (!claim) {
+    const progress = await safeProgress(dependencies, input.runId, input.userId);
+    if (progress?.runStatus === "Needs attention") {
+      return {
+        state: "needs_attention",
+        message: "This business build needs attention before it can continue.",
+        progress,
+      };
+    }
     return {
       state: "in_progress",
       message: "This business build is already in progress or has no waiting steps.",
-      progress: await safeProgress(dependencies, input.runId, input.userId),
+      progress,
     };
   }
 

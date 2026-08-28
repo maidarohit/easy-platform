@@ -49,7 +49,9 @@ test("claim is tenant-scoped, run-locked, plan-revalidated, and transactional", 
 
 test("second claims and completed tasks have no eligible claim path", async () => {
   const claim = await source("app/lib/easy-mode-task-attempts.ts");
-  assert.match(claim, /if \(activeAttempt\) return null/);
+  assert.match(claim, /if \(activeAttempt\)/);
+  assert.match(claim, /isRecoverablePreDispatchClaim/);
+  assert.match(claim, /if \(!recoverable\)/);
   assert.match(claim, /\["completed", "failed", "cancelled"\]\.includes\(run\.status\)/);
   assert.doesNotMatch(claim, /candidate\.status === "completed"/);
 });

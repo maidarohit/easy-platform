@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, gt, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   aiUsage,
@@ -115,6 +115,36 @@ export function deriveEasyModeRunStatus(statuses: readonly string[]): EasyModeRu
   return "running";
 }
 
+export type PreDispatchRecoveryEvidence = Readonly<{
+  attemptStatus: string;
+  providerExecutionId: string | null;
+  usageId: string | null;
+  leaseExpiresAt: Date;
+  taskStatus: string;
+  projectOutputId: string | null;
+  matchingOutputExists: boolean;
+}>;
+
+export function isRecoverablePreDispatchClaim(
+  evidence: PreDispatchRecoveryEvidence,
+  now = new Date(),
+): boolean {
+  return evidence.attemptStatus === "claimed" &&
+    evidence.providerExecutionId === null && evidence.usageId === null &&
+    evidence.leaseExpiresAt.getTime() <= now.getTime() &&
+    evidence.taskStatus === "running" && evidence.projectOutputId === null &&
+    !evidence.matchingOutputExists;
+}
+
+export function derivePersistedEasyModeRunStatus(
+  tasks: readonly Readonly<{ status: string; projectOutputId: string | null }>[],
+): EasyModeRunStatus {
+  if (tasks.some((task) => task.status === "completed" && !task.projectOutputId)) {
+    return tasks.some((task) => task.status === "completed") ? "partially_completed" : "failed";
+  }
+  return deriveEasyModeRunStatus(tasks.map((task) => task.status));
+}
+
 export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedEasyModeTask | null> {
   const runId = validateUuid(input.runId);
   if (!runId || !input.userId || input.userId.length > 128) throw new EasyModeAttemptError("INVALID_REQUEST");
@@ -142,12 +172,77 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
       throw new EasyModeAttemptError("PLAN_MISMATCH");
     }
 
-    const [activeAttempt] = await transaction.select({ id: easyModeTaskAttempts.id })
+    const [activeAttempt] = await transaction.select({
+      id: easyModeTaskAttempts.id,
+      taskId: easyModeTaskAttempts.taskId,
+      status: easyModeTaskAttempts.status,
+      providerExecutionId: easyModeTaskAttempts.providerExecutionId,
+      usageId: easyModeTaskAttempts.usageId,
+      leaseExpiresAt: easyModeTaskAttempts.leaseExpiresAt,
+      startedAt: easyModeTaskAttempts.startedAt,
+    })
       .from(easyModeTaskAttempts).where(and(
         eq(easyModeTaskAttempts.runId, run.id),
         inArray(easyModeTaskAttempts.status, [...ACTIVE_ATTEMPT_STATUSES]),
       )).limit(1);
-    if (activeAttempt) return null;
+    if (activeAttempt) {
+      const activeTask = tasks.find((task) => task.id === activeAttempt.taskId);
+      if (!activeTask) throw new EasyModeAttemptError("PLAN_MISMATCH");
+      const [matchingOutput] = await transaction.select({ id: projectOutputs.id }).from(projectOutputs).where(and(
+        eq(projectOutputs.projectId, run.projectId),
+        eq(projectOutputs.userId, input.userId),
+        eq(projectOutputs.module, activeTask.moduleId),
+        gte(projectOutputs.createdAt, activeAttempt.startedAt),
+      )).limit(1);
+      const now = new Date();
+      const recoverable = isRecoverablePreDispatchClaim({
+        attemptStatus: activeAttempt.status,
+        providerExecutionId: activeAttempt.providerExecutionId,
+        usageId: activeAttempt.usageId,
+        leaseExpiresAt: activeAttempt.leaseExpiresAt,
+        taskStatus: activeTask.status,
+        projectOutputId: activeTask.projectOutputId,
+        matchingOutputExists: Boolean(matchingOutput),
+      }, now);
+      if (!recoverable) {
+        if (activeAttempt.leaseExpiresAt.getTime() > now.getTime()) return null;
+        const [uncertainAttempt] = await transaction.update(easyModeTaskAttempts).set({
+          status: "failed_uncertain", finishedAt: now, safeErrorCode: "DELIVERY_UNCERTAIN",
+        }).where(and(
+          eq(easyModeTaskAttempts.id, activeAttempt.id),
+          inArray(easyModeTaskAttempts.status, [...ACTIVE_ATTEMPT_STATUSES]),
+          lte(easyModeTaskAttempts.leaseExpiresAt, now),
+        )).returning({ id: easyModeTaskAttempts.id });
+        if (uncertainAttempt) {
+          await transaction.update(easyModeTasks).set({
+            status: "failed", failedAt: now, completedAt: null, safeErrorCode: "DELIVERY_UNCERTAIN",
+          }).where(and(eq(easyModeTasks.id, activeTask.id), eq(easyModeTasks.status, "running")));
+          activeTask.status = "failed";
+          await refreshRunStatus(transaction, run.id);
+        }
+        return null;
+      }
+      const [releasedAttempt] = await transaction.update(easyModeTaskAttempts).set({
+        status: "failed_before_dispatch", finishedAt: now, safeErrorCode: "TASK_FAILED",
+      }).where(and(
+        eq(easyModeTaskAttempts.id, activeAttempt.id),
+        eq(easyModeTaskAttempts.status, "claimed"),
+        isNull(easyModeTaskAttempts.providerExecutionId),
+        isNull(easyModeTaskAttempts.usageId),
+        lte(easyModeTaskAttempts.leaseExpiresAt, now),
+      )).returning({ id: easyModeTaskAttempts.id });
+      if (!releasedAttempt) return null;
+      const [releasedTask] = await transaction.update(easyModeTasks).set({
+        status: "queued", startedAt: null, completedAt: null, failedAt: null, safeErrorCode: null,
+      }).where(and(
+        eq(easyModeTasks.id, activeTask.id),
+        eq(easyModeTasks.status, "running"),
+        isNull(easyModeTasks.projectOutputId),
+      )).returning({ id: easyModeTasks.id });
+      if (!releasedTask) throw new EasyModeAttemptError("INVALID_TRANSITION");
+      activeTask.status = "queued";
+      activeTask.startedAt = null;
+    }
 
     const task = tasks.find((candidate) => candidate.status === "queued");
     if (!task) return null;
@@ -285,9 +380,12 @@ async function refreshRunStatus(
   transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
   runId: string,
 ) {
-  const tasks = await transaction.select({ status: easyModeTasks.status }).from(easyModeTasks)
+  const tasks = await transaction.select({
+    status: easyModeTasks.status,
+    projectOutputId: easyModeTasks.projectOutputId,
+  }).from(easyModeTasks)
     .where(eq(easyModeTasks.runId, runId));
-  const status = deriveEasyModeRunStatus(tasks.map((task) => task.status));
+  const status = derivePersistedEasyModeRunStatus(tasks);
   const now = new Date();
   await transaction.update(easyModeRuns).set({
     status,
@@ -297,30 +395,35 @@ async function refreshRunStatus(
   return status;
 }
 
-export async function completeEasyModeAttempt(input: LeasedAttemptInput & Readonly<{ projectOutputId?: string }>) {
+export async function completeEasyModeAttempt(input: LeasedAttemptInput & Readonly<{ projectOutputId: string }>) {
   return db.transaction(async (transaction) => {
     const attempt = await loadLeasedAttempt(transaction, input, ["running"]);
-    let projectOutputId: string | null = null;
-    if (input.projectOutputId !== undefined) {
-      const outputId = validateUuid(input.projectOutputId);
-      if (!outputId) throw new EasyModeAttemptError("INVALID_REQUEST");
-      const [ownedOutput] = await transaction.select({ id: projectOutputs.id }).from(projectOutputs).where(and(
-        eq(projectOutputs.id, outputId),
-        eq(projectOutputs.userId, attempt.userId),
-        eq(projectOutputs.projectId, attempt.projectId),
-      )).limit(1);
-      if (!ownedOutput) throw new EasyModeAttemptError("INVALID_TRANSITION");
-      projectOutputId = ownedOutput.id;
+    const outputId = validateUuid(input.projectOutputId);
+    if (!outputId) throw new EasyModeAttemptError("INVALID_REQUEST");
+    const [ownedOutput] = await transaction.select({
+      id: projectOutputs.id,
+      outputModule: projectOutputs.module,
+      taskModule: easyModeTasks.moduleId,
+    }).from(projectOutputs).innerJoin(easyModeTasks, eq(easyModeTasks.id, attempt.taskId)).where(and(
+      eq(projectOutputs.id, outputId),
+      eq(projectOutputs.userId, attempt.userId),
+      eq(projectOutputs.projectId, attempt.projectId),
+    )).limit(1);
+    if (!ownedOutput || ownedOutput.outputModule !== ownedOutput.taskModule) {
+      throw new EasyModeAttemptError("INVALID_TRANSITION");
     }
+    const projectOutputId = ownedOutput.id;
     const now = new Date();
     const [updated] = await transaction.update(easyModeTaskAttempts).set({
       status: "completed", finishedAt: now, safeErrorCode: null,
     }).where(and(eq(easyModeTaskAttempts.id, attempt.id), eq(easyModeTaskAttempts.status, "running")))
       .returning({ id: easyModeTaskAttempts.id });
     if (!updated) throw new EasyModeAttemptError("INVALID_TRANSITION");
-    await transaction.update(easyModeTasks).set({
+    const [completedTask] = await transaction.update(easyModeTasks).set({
       status: "completed", completedAt: now, failedAt: null, safeErrorCode: null, projectOutputId,
-    }).where(and(eq(easyModeTasks.id, attempt.taskId), eq(easyModeTasks.status, "running")));
+    }).where(and(eq(easyModeTasks.id, attempt.taskId), eq(easyModeTasks.status, "running")))
+      .returning({ id: easyModeTasks.id });
+    if (!completedTask) throw new EasyModeAttemptError("INVALID_TRANSITION");
     const runStatus = await refreshRunStatus(transaction, attempt.runId);
     return Object.freeze({ attemptId: attempt.id, taskId: attempt.taskId, runStatus });
   });

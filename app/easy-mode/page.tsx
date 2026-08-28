@@ -101,7 +101,16 @@ function EasyModeContent() {
           { cache: "no-store" },
         );
         const data = await response.json();
-        if (active && response.ok) setRunView(data as EasyModeRunView);
+        if (active && response.ok) {
+          setRunView(data as EasyModeRunView);
+          if (data.run?.status === "running") {
+            await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runId)}/execute-next`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({}),
+            });
+          }
+        }
       } catch {
         // Keep the last known state and try again while the run remains active.
       } finally {
