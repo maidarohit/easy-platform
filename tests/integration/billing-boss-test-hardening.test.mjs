@@ -4,6 +4,7 @@ import test from "node:test";
 import { BILLING_PLANS } from "../../app/lib/billing-plans.ts";
 import { getBillingConfiguration } from "../../app/lib/billing-configuration.ts";
 import { safeLoginReturn } from "../../app/lib/safe-login-return.ts";
+import { isDefinitiveRazorpayCreationRejection } from "../../app/lib/subscriptions.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -56,6 +57,45 @@ test("checkout reserves before Razorpay and rejects pending or active duplicates
   assert.match(route, /billing-checkout:/); assert.match(route, /current\?\.status === "pending"/);
   assert.match(route, /current\?\.status === "active"/); assert.match(route, /Plan changes are not available yet/);
   assert.match(route, /checkout_intent_/);
+});
+
+test("definitive Razorpay rejection releases only the exact pending checkout reservation", async () => {
+  const route = await source("app/api/billing/checkout/route.ts");
+  assert.equal(isDefinitiveRazorpayCreationRejection(400), true);
+  assert.match(route, /instanceof RazorpaySubscriptionCreationRejectedError/);
+  assert.match(route, /db\.delete\(subscriptions\)/);
+  assert.match(route, /eq\(subscriptions\.userId, token\.uid\)/);
+  assert.match(route, /eq\(subscriptions\.providerSubscriptionId, reservationId\)/);
+  assert.match(route, /eq\(subscriptions\.status, "pending"\)/);
+});
+
+test("delivery-uncertain failures retain the checkout reservation", () => {
+  assert.equal(isDefinitiveRazorpayCreationRejection(500), false);
+  assert.equal(isDefinitiveRazorpayCreationRejection(503), false);
+  assert.equal(isDefinitiveRazorpayCreationRejection(408), false);
+  assert.equal(isDefinitiveRazorpayCreationRejection(429), false);
+});
+
+test("provider call remains single-shot and real subscriptions cannot match cleanup", async () => {
+  const [route, service] = await Promise.all([
+    source("app/api/billing/checkout/route.ts"),
+    source("app/lib/subscriptions.ts"),
+  ]);
+  assert.equal(route.match(/createRazorpaySubscription\(/g)?.length, 1);
+  assert.match(route, /pg_advisory_xact_lock/);
+  assert.match(service, /entity\.id\.startsWith\("sub_"\)/);
+  assert.match(route, /providerSubscriptionId, reservationId/);
+  const cleanup = route.slice(route.indexOf("db.delete(subscriptions)"), route.indexOf("throw error;"));
+  assert.doesNotMatch(cleanup, /created\.id|sub_/);
+  assert.match(route, /providerSubscriptionId: created\.id/);
+  assert.match(route, /reconciliation required/);
+});
+
+test("successful checkout still persists the provider id and returns its checkout URL", async () => {
+  const route = await source("app/api/billing/checkout/route.ts");
+  assert.match(route, /providerSubscriptionId: created\.id/);
+  assert.match(route, /checkoutUrl: created\.checkoutUrl/);
+  assert.match(route, /persisted\[0\]\?\.userId !== token\.uid/);
 });
 
 test("return UI is webhook-authoritative and customer friendly", async () => {

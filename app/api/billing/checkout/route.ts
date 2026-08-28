@@ -12,6 +12,7 @@ import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscriptio
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
+  RazorpaySubscriptionCreationRejectedError,
 } from "@/app/lib/subscriptions";
 
 const MAX_CHECKOUT_BODY_BYTES = 2 * 1024;
@@ -66,15 +67,44 @@ export async function POST(request: Request) {
     });
     if ("error" in reservation) return Response.json({ error: reservation.error }, { status: 409 });
 
-    const created = await createRazorpaySubscription(getRazorpayPlanId(plan), token.uid, plan);
-    await db.update(subscriptions).set({ providerSubscriptionId: created.id, updatedAt: new Date() })
-      .where(and(eq(subscriptions.userId, token.uid), eq(subscriptions.providerSubscriptionId, reservationId)));
+    let created: Awaited<ReturnType<typeof createRazorpaySubscription>>;
+    try {
+      created = await createRazorpaySubscription(getRazorpayPlanId(plan), token.uid, plan);
+    } catch (error) {
+      if (error instanceof RazorpaySubscriptionCreationRejectedError) {
+        const released = await db.delete(subscriptions).where(and(
+          eq(subscriptions.userId, token.uid),
+          eq(subscriptions.providerSubscriptionId, reservationId),
+          eq(subscriptions.status, "pending"),
+        )).returning({ id: subscriptions.id });
+        console.error("Razorpay definitively rejected subscription creation:", {
+          userId: token.uid,
+          reservationId,
+          status: error.status,
+          description: error.description,
+          reservationReleased: released.length === 1,
+        });
+      }
+      throw error;
+    }
+    try {
+      await db.update(subscriptions).set({ providerSubscriptionId: created.id, updatedAt: new Date() })
+        .where(and(eq(subscriptions.userId, token.uid), eq(subscriptions.providerSubscriptionId, reservationId)));
 
-    const persisted = await db.select({ userId: subscriptions.userId })
-      .from(subscriptions)
-      .where(eq(subscriptions.providerSubscriptionId, created.id))
-      .limit(1);
-    if (persisted[0]?.userId !== token.uid) throw new Error("Subscription ownership could not be established.");
+      const persisted = await db.select({ userId: subscriptions.userId })
+        .from(subscriptions)
+        .where(eq(subscriptions.providerSubscriptionId, created.id))
+        .limit(1);
+      if (persisted[0]?.userId !== token.uid) throw new Error("Subscription ownership could not be established.");
+    } catch (error) {
+      console.error("Razorpay subscription created but persistence failed; reconciliation required:", {
+        userId: token.uid,
+        reservationId,
+        providerSubscriptionId: created.id,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    }
     return Response.json({ checkoutUrl: created.checkoutUrl, returnUrl: "/billing?checkout=return" });
   } catch (error) {
     console.error("Subscription checkout failed:", error instanceof Error ? error.message : "Unknown error");
