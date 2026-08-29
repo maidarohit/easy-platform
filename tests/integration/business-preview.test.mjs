@@ -63,6 +63,23 @@ test("missing optional saved fields stay absent and invalid colours are not fabr
   assert.deepEqual(extractBrandColours("#123456, #123456, broken #123"), ["#123456"]);
 });
 
+test("saved branding name replaces generic project name and resolves SEO placeholders", () => {
+  const preview = buildBusinessPreview({
+    project: { id: "project-brand", name: "interior designer", companyName: null, industry: "Interiors", goal: null, businessDescription: "Design by [Company Name] for [Ideal Customer]." },
+    outputs: new Map([
+      ["branding", output("brand", { brandName: "Strongest Interiors", tagline: "Spaces by [Business Name]" })],
+      ["website", output("website", { websiteOverview: "Welcome to [Brand Name].", recommendedPages: "Services", websiteFeatures: "Planning" })],
+      ["seo", output("seo", { metaTitles: "Modern Interior Designer | [Brand Name]", metaDescriptions: "Discover [Company Name] [Unresolved Placeholder]", keywords: "interior design" })],
+    ]),
+  });
+  assert.equal(preview.business.name, "Strongest Interiors");
+  assert.equal(preview.brand?.name, "Strongest Interiors");
+  assert.equal(preview.brand?.tagline, "Spaces by Strongest Interiors");
+  assert.equal(preview.search?.title, "Modern Interior Designer | Strongest Interiors");
+  assert.equal(preview.search?.description, "Discover Strongest Interiors");
+  assert.doesNotMatch(JSON.stringify(preview), /\[(?:brand|company|business|unresolved|ideal)/i);
+});
+
 test("saved website section lists become visual cards only when deterministic parsing is safe", () => {
   assert.deepEqual(parsePreviewCards(
     "Home — Main introduction; Services — What customers can buy; Work — Existing customer proof; Contact — Enquiry options",
@@ -93,8 +110,26 @@ test("presentation mapping retains complete saved text and does not mutate sourc
     outputs,
   });
   assert.equal(preview.marketing?.positioning, longPositioning);
-  assert.deepEqual(preview.marketing?.campaignCards, ["Proof post", "Local case study"]);
+  assert.deepEqual(preview.marketing?.campaignCards, []);
+  assert.deepEqual(preview.marketing?.sections, [{ key: "contentIdeas", label: "Content ideas", value: "1. Proof post; 2. Local case study" }]);
   assert.equal(JSON.stringify(marketing), before);
+});
+
+test("structured marketing fields keep semantic headings without campaign fragmentation", () => {
+  const preview = buildBusinessPreview({
+    project: { id: "project-marketing", name: "Business", companyName: null, industry: null, goal: null, businessDescription: null },
+    outputs: new Map([["marketing", output("marketing", {
+      marketingStrategy: "Lead with trusted expertise.",
+      socialMediaStrategy: "Platform priorities:\nInstagram: project reveals\nLinkedIn: commercial case studies",
+      contentCalendar: "Month 1: portfolio; Month 2: process; Month 3: testimonials",
+      emailMarketing: "A monthly design note.", growthRecommendations: "Build referral partnerships.",
+    })]]),
+  });
+  assert.deepEqual(preview.marketing?.sections.map(({ label }) => label), [
+    "Social media strategy", "Content calendar", "Email marketing", "Growth recommendations",
+  ]);
+  assert.equal(preview.marketing?.sections[0].value, "Platform priorities:\nInstagram: project reveals\nLinkedIn: commercial case studies");
+  assert.deepEqual(preview.marketing?.campaignCards, []);
 });
 
 test("preview route reads validated saved outputs and approval only timestamps those outputs", async () => {
@@ -120,7 +155,8 @@ test("customer preview provides all viewports and never exposes specialist AI na
   assert.match(page, /method: "POST"/);
   assert.match(page, /View more/);
   assert.match(page, /website\.serviceCards\.map/);
-  assert.match(page, /marketing\.campaignCards\.map/);
+  assert.match(page, /marketing\.sections\.map/);
+  assert.doesNotMatch(page, /Campaign idea/);
   assert.match(page, /search\.keywordTags\.map/);
   assert.match(page, /\/api\/business-preview/);
   assert.doesNotMatch(page, /regenerate|\/api\/easy-mode|\/api\/business-dna\/analyze/i);

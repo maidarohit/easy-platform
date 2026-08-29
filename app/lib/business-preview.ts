@@ -21,8 +21,19 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function excerpt(value: unknown, maximum = 420) {
-  const valueText = text(value);
+const BUSINESS_NAME_PLACEHOLDER = /\[(?:brand|company|business)\s+name\]/gi;
+const BRACKET_PLACEHOLDER = /\[[^\]\r\n]{1,80}\]/g;
+
+export function resolveCustomerText(value: unknown, businessName: string) {
+  const source = text(value);
+  if (!source) return null;
+  const resolved = source.replace(BUSINESS_NAME_PLACEHOLDER, businessName).replace(BRACKET_PLACEHOLDER, "")
+    .replace(/\s{2,}/g, " ").replace(/\s+([,.;:—–-])/g, "$1").trim();
+  return resolved || null;
+}
+
+function excerpt(value: unknown, businessName: string, maximum = 420) {
+  const valueText = resolveCustomerText(value, businessName);
   if (!valueText) return null;
   return valueText.length <= maximum ? valueText : `${valueText.slice(0, maximum).trimEnd()}…`;
 }
@@ -85,6 +96,12 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
   const seo = source.outputs.get("seo")?.output;
   const uiux = source.outputs.get("uiux")?.output;
   const sales = source.outputs.get("sales")?.output;
+  const projectName = text(source.project.companyName) || text(source.project.name) || "Business";
+  const brandingName = text(branding?.brandName);
+  const businessName = brandingName && !BRACKET_PLACEHOLDER.test(brandingName) ? brandingName : projectName;
+  BRACKET_PLACEHOLDER.lastIndex = 0;
+  const displayText = (value: unknown) => resolveCustomerText(value, businessName);
+  const displayExcerpt = (value: unknown, maximum = 420) => excerpt(value, businessName, maximum);
   const websiteEdits = nested(website, "websiteEdits");
   const outputIds = BUSINESS_PREVIEW_MODULES
     .map((module) => source.outputs.get(module)?.id)
@@ -96,56 +113,64 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
   return {
     projectId: source.project.id,
     business: {
-      name: source.project.companyName || source.project.name,
-      industry: source.project.industry,
-      goal: source.project.goal,
-      description: excerpt(source.project.businessDescription, 650),
+      name: businessName,
+      industry: displayText(source.project.industry),
+      goal: displayText(source.project.goal),
+      description: displayExcerpt(source.project.businessDescription, 650),
     },
     brand: branding ? {
-      name: text(branding.brandName) || source.project.companyName || source.project.name,
-      tagline: text(branding.tagline),
+      name: businessName,
+      tagline: displayText(branding.tagline),
       colours: extractBrandColours(branding.colorPalette),
-      colourDirection: excerpt(branding.colorPalette, 500),
-      typography: excerpt(branding.typography, 500),
-      voice: excerpt(branding.brandVoice, 650),
-      logoConcept: excerpt(branding.logoConcept, 650),
-      story: excerpt(branding.story, 800),
+      colourDirection: displayExcerpt(branding.colorPalette, 500),
+      typography: displayExcerpt(branding.typography, 500),
+      voice: displayExcerpt(branding.brandVoice, 650),
+      logoConcept: displayExcerpt(branding.logoConcept, 650),
+      story: displayExcerpt(branding.story, 800),
     } : null,
     website: website ? {
-      heroHeadline: text(websiteEdits?.heroHeadline) || text(branding?.tagline),
-      supportingText: excerpt(websiteEdits?.heroDescription || website.websiteOverview, 650),
-      primaryCta: text(websiteEdits?.primaryCtaLabel),
-      services: text(websiteEdits?.servicesText || website.recommendedPages),
-      serviceCards: parsePreviewCards(websiteEdits?.servicesText || website.recommendedPages),
-      trust: excerpt(branding?.marketingSuggestions, 650),
-      about: excerpt(websiteEdits?.aboutText || branding?.story, 900),
-      features: excerpt(website.websiteFeatures, 800),
-      contact: text(websiteEdits?.email) || text(websiteEdits?.phone) || text(websiteEdits?.whatsapp),
+      heroHeadline: displayText(websiteEdits?.heroHeadline) || displayText(branding?.tagline),
+      supportingText: displayExcerpt(websiteEdits?.heroDescription || website.websiteOverview, 650),
+      primaryCta: displayText(websiteEdits?.primaryCtaLabel),
+      services: displayText(websiteEdits?.servicesText || website.recommendedPages),
+      serviceCards: parsePreviewCards(displayText(websiteEdits?.servicesText || website.recommendedPages)),
+      trust: displayExcerpt(branding?.marketingSuggestions, 650),
+      about: displayExcerpt(websiteEdits?.aboutText || branding?.story, 900),
+      features: displayExcerpt(website.websiteFeatures, 800),
+      contact: displayText(websiteEdits?.email) || displayText(websiteEdits?.phone) || displayText(websiteEdits?.whatsapp),
     } : null,
     marketing: marketing ? {
-      positioning: text(marketing.marketingStrategy),
-      campaign: text(marketing.campaignTimeline || marketing.paidAdsStrategy),
-      audience: text(marketing.targetAudienceAnalysis),
+      positioning: displayText(marketing.marketingStrategy),
+      campaign: displayText(marketing.campaignTimeline || marketing.paidAdsStrategy),
+      audience: displayText(marketing.targetAudienceAnalysis),
       socialCards: [marketing.contentIdeas, marketing.socialMediaStrategy, marketing.adCopy]
-        .map((item) => text(item)).filter((item): item is string => Boolean(item)),
-      campaignCards: [marketing.campaignTimeline || marketing.paidAdsStrategy,
-        marketing.contentIdeas, marketing.socialMediaStrategy, marketing.adCopy]
-        .flatMap((item) => parseDisplayItems(item)).slice(0, 6),
+        .map(displayText).filter((item): item is string => Boolean(item)),
+      campaignCards: [],
+      sections: [
+        ["contentIdeas", "Content ideas"], ["socialMediaStrategy", "Social media strategy"],
+        ["contentCalendar", "Content calendar"], ["emailMarketing", "Email marketing"],
+        ["paidAdsStrategy", "Paid advertising"], ["seoRecommendations", "Search recommendations"],
+        ["kpis", "Success measures"], ["growthRecommendations", "Growth recommendations"],
+        ["adCopy", "Advertising message"], ["bestChannels", "Priority channels"],
+        ["campaignTimeline", "Campaign timeline"], ["customerJourney", "Customer journey"],
+        ["contentMix", "Content mix"], ["funnelSuggestions", "Funnel recommendations"],
+      ].map(([key, label]) => ({ key, label, value: displayText(marketing[key]) }))
+        .filter((section): section is { key: string; label: string; value: string } => Boolean(section.value)),
     } : null,
     search: seo ? {
-      positioning: excerpt(seo.seoStrategy || seo.seoAudit, 850),
-      keywords: text(seo.keywords || seo.keywordResearch),
-      keywordTags: parseKeywordTags(seo.keywords || seo.keywordResearch),
-      localFocus: excerpt(seo.growthRecommendations, 650),
-      title: cleanFirstListCandidate(seo.metaTitles),
-      description: cleanFirstListCandidate(seo.metaDescriptions),
+      positioning: displayExcerpt(seo.seoStrategy || seo.seoAudit, 850),
+      keywords: displayText(seo.keywords || seo.keywordResearch),
+      keywordTags: parseKeywordTags(displayText(seo.keywords || seo.keywordResearch)),
+      localFocus: displayExcerpt(seo.growthRecommendations, 650),
+      title: displayText(cleanFirstListCandidate(seo.metaTitles)),
+      description: displayText(cleanFirstListCandidate(seo.metaDescriptions)),
     } : null,
     journey: sales || uiux ? {
-      leadAction: excerpt(sales?.leadGenerationStrategy, 750),
-      enquiryPath: excerpt(sales?.salesFunnel || uiux?.userFlow, 900),
-      primaryCta: excerpt(sales?.outreachStrategy, 500),
-      customerJourney: excerpt(uiux?.userFlow || sales?.actionPlan, 900),
-      audience: excerpt(sales?.targetCustomerProfile || uiux?.userPersonas, 750),
+      leadAction: displayExcerpt(sales?.leadGenerationStrategy, 750),
+      enquiryPath: displayExcerpt(sales?.salesFunnel || uiux?.userFlow, 900),
+      primaryCta: displayExcerpt(sales?.outreachStrategy, 500),
+      customerJourney: displayExcerpt(uiux?.userFlow || sales?.actionPlan, 900),
+      audience: displayExcerpt(sales?.targetCustomerProfile || uiux?.userPersonas, 750),
     } : null,
     approval: { approved, outputIds },
   };

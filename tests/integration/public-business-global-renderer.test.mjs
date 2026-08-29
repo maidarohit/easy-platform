@@ -67,6 +67,17 @@ test("existing schema-version-one publication snapshots remain valid and stable"
   assert.deepEqual(value, before);
 });
 
+test("legacy public snapshots prefer saved brand names and cannot expose bracket placeholders", () => {
+  const value = snapshot({
+    business: { name: "interior designer", industry: "Interiors", goal: null, description: "Design by [Company Name]." },
+    brand: { ...snapshot().brand, name: "Strongest Interiors", tagline: "Welcome to [Brand Name]" },
+    search: { ...snapshot().search, title: "Interior Design | [Brand Name]", description: "Meet [Business Name] [Draft Text]" },
+  });
+  assert.equal(value.business.name, "Strongest Interiors");
+  assert.equal(value.search?.title, "Interior Design | Strongest Interiors");
+  assert.doesNotMatch(JSON.stringify(value), /\[(?:brand|company|business|draft)/i);
+});
+
 test("renderer is responsive, semantic, snapshot-only and provider-free", async () => {
   const page = await readFile("app/business/[slug]/page.tsx", "utf8");
   assert.match(page, /sticky top-0/); assert.match(page, /sm:grid-cols-2|md:grid-cols-2/); assert.match(page, /lg:grid-cols/);

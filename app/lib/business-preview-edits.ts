@@ -45,6 +45,9 @@ export function validatePreviewOverrides(value: unknown, baseline: BusinessPrevi
     if (/[<>]|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(normalized)) {
       return { valid: false, error: `${PREVIEW_EDIT_RULES[field].label} must contain plain text only.` };
     }
+    if (/\[[^\]\r\n]{1,80}\]/.test(normalized)) {
+      return { valid: false, error: `${PREVIEW_EDIT_RULES[field].label} cannot contain unresolved placeholders.` };
+    }
     overrides[field] = normalized;
   }
   return { valid: true, overrides };

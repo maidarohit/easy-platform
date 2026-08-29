@@ -1,4 +1,4 @@
-import type { BusinessPreview } from "@/app/lib/business-preview";
+import { resolveCustomerText, type BusinessPreview } from "@/app/lib/business-preview";
 import { validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
 
 export type PublishedBusinessSnapshot = Readonly<{
@@ -26,7 +26,7 @@ export function validateBusinessSlug(value: unknown) {
 }
 
 export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact: PublicContactSettings = {}): PublishedBusinessSnapshot {
-  return structuredClone({
+  const snapshot = structuredClone({
     schemaVersion: 2 as const,
     business: preview.business,
     brand: preview.brand,
@@ -36,6 +36,9 @@ export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact
     journey: preview.journey,
     contact,
   });
+  const validated = validatePublishedBusinessSnapshot(snapshot);
+  if (!validated) throw new Error("Invalid business publication snapshot.");
+  return validated;
 }
 
 export function businessPreviewRevision(outputIds: readonly string[], customizationRevision: number, overrides: object) {
@@ -66,6 +69,18 @@ export function validatePublishedBusinessSnapshot(value: unknown): PublishedBusi
   if (record.schemaVersion === 1 && Object.hasOwn(record, "contact")) return null;
   if (record.schemaVersion === 2 && (!Object.hasOwn(record, "contact") || !validatePublicContactSettings(record.contact).valid)) return null;
   const business = record.business as Record<string, unknown> | undefined;
-  return business && typeof business.name === "string" && business.name.trim()
-    ? value as PublishedBusinessSnapshot : null;
+  if (!business || typeof business.name !== "string" || !business.name.trim()) return null;
+  const brand = record.brand && typeof record.brand === "object" && !Array.isArray(record.brand)
+    ? record.brand as Record<string, unknown> : null;
+  const brandName = typeof brand?.name === "string" && brand.name.trim() && !/\[[^\]\r\n]{1,80}\]/.test(brand.name)
+    ? brand.name.trim() : null;
+  const businessName = brandName || resolveCustomerText(business.name, "Business") || "Business";
+  const sanitize = (item: unknown): unknown => {
+    if (typeof item === "string") return resolveCustomerText(item, businessName) ?? "";
+    if (Array.isArray(item)) return item.map(sanitize);
+    if (!item || typeof item !== "object") return item;
+    return Object.fromEntries(Object.entries(item).map(([key, nested]) => [key, sanitize(nested)]));
+  };
+  const sanitized = sanitize(value) as PublishedBusinessSnapshot;
+  return { ...sanitized, business: { ...sanitized.business, name: businessName } };
 }
