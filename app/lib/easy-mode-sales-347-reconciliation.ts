@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
 import { aiUsage, easyModeRuns, easyModeTaskAttempts, easyModeTasks, projectMemory, projectOutputs, projects } from "@/app/db/schema";
 import { validateSalesOutput } from "@/app/lib/easy-mode-execution-contracts";
@@ -95,15 +95,25 @@ async function reconcileSales347(execution: Sales347Execution, dryRun: boolean):
     const tasks = await transaction.select({
       id: easyModeTasks.id, moduleId: easyModeTasks.moduleId, position: easyModeTasks.position,
       status: easyModeTasks.status, projectOutputId: easyModeTasks.projectOutputId,
-      outputModule: projectOutputs.module, outputProjectId: projectOutputs.projectId, outputUserId: projectOutputs.userId,
-    }).from(easyModeTasks).leftJoin(projectOutputs, eq(projectOutputs.id, easyModeTasks.projectOutputId))
-      .where(eq(easyModeTasks.runId, SALES_347_RUN_ID)).orderBy(asc(easyModeTasks.position)).for("update");
+    }).from(easyModeTasks).where(eq(easyModeTasks.runId, SALES_347_RUN_ID))
+      .orderBy(asc(easyModeTasks.position)).for("update");
     if (tasks.length !== 7 || tasks.some((task, index) => task.position !== index || task.moduleId !== NORMAL_MODULES[index])) {
       throw new Error("Fixed run is not the normal seven-task build.");
     }
+    const referencedOutputIds = tasks.flatMap((task) => task.projectOutputId ? [task.projectOutputId] : []);
+    const referencedOutputs = referencedOutputIds.length > 0
+      ? await transaction.select({
+        id: projectOutputs.id, module: projectOutputs.module,
+        projectId: projectOutputs.projectId, userId: projectOutputs.userId,
+      }).from(projectOutputs).where(inArray(projectOutputs.id, referencedOutputIds)).for("update")
+      : [];
+    const outputsById = new Map(referencedOutputs.map((output) => [output.id, output]));
     const sales = tasks[6];
-    const earlierValid = tasks.slice(0, 6).every((task) => task.status === "completed" && task.projectOutputId &&
-      task.outputModule === task.moduleId && task.outputProjectId === SALES_347_PROJECT_ID && task.outputUserId === run.userId);
+    const earlierValid = tasks.slice(0, 6).every((task) => {
+      const output = task.projectOutputId ? outputsById.get(task.projectOutputId) : null;
+      return task.status === "completed" && output?.module === task.moduleId &&
+        output.projectId === SALES_347_PROJECT_ID && output.userId === run.userId;
+    });
     if (!earlierValid) throw new Error("The first six persisted outputs are not complete and module-matched.");
     const [attempt] = await transaction.select().from(easyModeTaskAttempts).where(and(
       eq(easyModeTaskAttempts.runId, SALES_347_RUN_ID), eq(easyModeTaskAttempts.taskId, SALES_347_TASK_ID),

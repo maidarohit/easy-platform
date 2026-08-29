@@ -166,6 +166,9 @@ test("implementation is fixed-ID, row-locked, idempotent, and trigger-free", asy
     readFile(new URL("../../app/boss/reconcile-sales-347/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(service, /for\("update"\)/);
+  assert.doesNotMatch(service, /leftJoin\(projectOutputs/);
+  assert.match(service, /from\(easyModeTasks\)[\s\S]*?for\("update"\)/);
+  assert.match(service, /inArray\(projectOutputs\.id, referencedOutputIds\)[\s\S]*?for\("update"\)/);
   assert.match(service, /already_reconciled/);
   assert.match(service, /insert\(projectOutputs\)/);
   assert.match(service, /derivePersistedEasyModeRunStatus/);
