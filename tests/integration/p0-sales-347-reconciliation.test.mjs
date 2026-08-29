@@ -23,6 +23,14 @@ const execution = {
     usageId: SALES_347_USAGE_ID, output: salesOutput,
   } }]] } }] } } },
 };
+const withRespondJson = (json, overrides = {}) => ({
+  ...execution,
+  ...overrides,
+  data: { resultData: { runData: {
+    ...(overrides.runData ?? {}),
+    "Respond to Webhook": [{ data: { main: [[{ json }]] } }],
+  } } },
+});
 const fixedBody = {
   projectId: SALES_347_PROJECT_ID, runId: SALES_347_RUN_ID, taskId: SALES_347_TASK_ID,
   usageId: SALES_347_USAGE_ID, executionId: SALES_347_EXECUTION_ID,
@@ -33,14 +41,54 @@ const request = (body) => new Request("https://example.invalid/internal", {
 });
 const boss = { verify: async () => ({ uid: "boss" }), isBoss: () => true };
 
-test("execution 347 is accepted only as the exact successful Sales result", () => {
+test("valid Sales output directly in Respond to Webhook JSON is accepted", () => {
   const validated = validateSales347Execution(execution, workflowId);
   assert.deepEqual(validated?.output, salesOutput);
   assert.equal(validated?.durationMs, 12_000);
+});
+
+test("valid Sales output nested in Respond to Webhook JSON is accepted", () => {
+  const validated = validateSales347Execution(withRespondJson({ response: { body: { output: salesOutput } } }), workflowId);
+  assert.deepEqual(validated?.output, salesOutput);
+});
+
+test("identical duplicate Sales output wrappers are accepted as one unique output", () => {
+  const validated = validateSales347Execution(withRespondJson({
+    response: { output: salesOutput },
+    body: { nested: { output: { ...salesOutput } } },
+  }), workflowId);
+  assert.deepEqual(validated?.output, salesOutput);
+});
+
+test("two different Sales outputs in Respond to Webhook JSON are rejected", () => {
+  const differentOutput = { ...salesOutput, executiveSummary: "Different Sales plan" };
+  assert.equal(validateSales347Execution(withRespondJson({
+    response: { output: salesOutput }, body: { output: differentOutput },
+  }), workflowId), null);
+});
+
+test("Sales output only in AI Agent data is rejected", () => {
+  const onlyAgentOutput = withRespondJson({ response: { ok: true } }, {
+    runData: { "AI Agent": [{ data: { main: [[{ json: { output: salesOutput } }]] } }] },
+  });
+  assert.equal(validateSales347Execution(onlyAgentOutput, workflowId), null);
+});
+
+test("wrong execution ID, workflow ID, and unsuccessful status are rejected", () => {
   assert.equal(validateSales347Execution({ ...execution, id: "348" }, workflowId), null);
   assert.equal(validateSales347Execution({ ...execution, status: "running" }, workflowId), null);
   assert.equal(validateSales347Execution({ ...execution, workflowId: "other" }, workflowId), null);
-  assert.equal(validateSales347Execution({ ...execution, data: { usageId: "wrong", output: salesOutput } }, workflowId), null);
+});
+
+test("conflicting project, run, task, or usage metadata is rejected", () => {
+  for (const [key, value] of [
+    ["projectId", "wrong-project"], ["runId", "wrong-run"],
+    ["taskId", "wrong-task"], ["usageId", "wrong-usage"],
+  ]) {
+    assert.equal(validateSales347Execution(withRespondJson({
+      [key]: value, output: salesOutput,
+    }), workflowId), null, key);
+  }
 });
 
 test("boss validation is read-only and uses only the fetched saved execution", async () => {

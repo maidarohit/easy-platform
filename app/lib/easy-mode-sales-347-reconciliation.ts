@@ -46,7 +46,12 @@ function metadataMatchesWhenPresent(value: unknown, key: string, expected: strin
 
 function collectSalesOutputs(value: unknown, found = new Map<string, Readonly<Record<string, string>>>()) {
   const output = validateSalesOutput(value);
-  if (output) found.set(JSON.stringify(output), output);
+  if (output) {
+    const canonicalOutput = JSON.stringify(
+      Object.fromEntries(Object.entries(output).sort(([left], [right]) => left.localeCompare(right))),
+    );
+    found.set(canonicalOutput, output);
+  }
   if (Array.isArray(value)) {
     for (const item of value) collectSalesOutputs(item, found);
   } else if (isRecord(value)) {
@@ -63,39 +68,19 @@ export function validateSales347Execution(execution: unknown, expectedWorkflowId
       !metadataMatchesWhenPresent(execution, "taskid", SALES_347_TASK_ID) ||
       !metadataMatchesWhenPresent(execution, "usageid", SALES_347_USAGE_ID)) return null;
   const data = isRecord(execution.data) ? execution.data : null;
-const resultData = data && isRecord(data.resultData) ? data.resultData : null;
-const runData = resultData && isRecord(resultData.runData) ? resultData.runData : null;
-
-const respondRuns =
-  runData && Array.isArray(runData["Respond to Webhook"])
-    ? runData["Respond to Webhook"]
-    : [];
-
-const lastRespondRun = respondRuns.at(-1);
-
-const respondData =
-  isRecord(lastRespondRun) && isRecord(lastRespondRun.data)
-    ? lastRespondRun.data
-    : null;
-
-const main =
-  respondData && Array.isArray(respondData.main)
-    ? respondData.main
-    : [];
-
-const firstBranch = Array.isArray(main[0]) ? main[0] : [];
-
-const finalItem =
-  firstBranch.length === 1 && isRecord(firstBranch[0])
-    ? firstBranch[0]
-    : null;
-
-const output =
-  finalItem && "json" in finalItem
-    ? validateSalesOutput(finalItem.json)
-    : null;
-
-if (!output) return null;
+  const resultData = data && isRecord(data.resultData) ? data.resultData : null;
+  const runData = resultData && isRecord(resultData.runData) ? resultData.runData : null;
+  const respondRuns = runData && Array.isArray(runData["Respond to Webhook"])
+    ? runData["Respond to Webhook"] : [];
+  const lastRespondRun = respondRuns.at(-1);
+  const respondData = isRecord(lastRespondRun) && isRecord(lastRespondRun.data) ? lastRespondRun.data : null;
+  const main = respondData && Array.isArray(respondData.main) ? respondData.main : [];
+  const firstBranch = Array.isArray(main[0]) ? main[0] : [];
+  const finalItem = firstBranch.length === 1 && isRecord(firstBranch[0]) ? firstBranch[0] : null;
+  const outputs = finalItem && "json" in finalItem ? collectSalesOutputs(finalItem.json) : new Map();
+  if (outputs.size !== 1) return null;
+  const output = outputs.values().next().value;
+  if (!output) return null;
   const startedAt = typeof execution.startedAt === "string" ? Date.parse(execution.startedAt) : Number.NaN;
   const stoppedAt = typeof execution.stoppedAt === "string" ? Date.parse(execution.stoppedAt) : Number.NaN;
   const durationMs = Number.isFinite(startedAt) && Number.isFinite(stoppedAt) && stoppedAt >= startedAt
