@@ -62,13 +62,45 @@ export function validateSales347Execution(execution: unknown, expectedWorkflowId
       !metadataMatchesWhenPresent(execution, "runid", SALES_347_RUN_ID) ||
       !metadataMatchesWhenPresent(execution, "taskid", SALES_347_TASK_ID) ||
       !metadataMatchesWhenPresent(execution, "usageid", SALES_347_USAGE_ID)) return null;
-  const outputs = collectSalesOutputs(execution);
-  if (outputs.size !== 1) return null;
+  const data = isRecord(execution.data) ? execution.data : null;
+const resultData = data && isRecord(data.resultData) ? data.resultData : null;
+const runData = resultData && isRecord(resultData.runData) ? resultData.runData : null;
+
+const respondRuns =
+  runData && Array.isArray(runData["Respond to Webhook"])
+    ? runData["Respond to Webhook"]
+    : [];
+
+const lastRespondRun = respondRuns.at(-1);
+
+const respondData =
+  isRecord(lastRespondRun) && isRecord(lastRespondRun.data)
+    ? lastRespondRun.data
+    : null;
+
+const main =
+  respondData && Array.isArray(respondData.main)
+    ? respondData.main
+    : [];
+
+const firstBranch = Array.isArray(main[0]) ? main[0] : [];
+
+const finalItem =
+  firstBranch.length === 1 && isRecord(firstBranch[0])
+    ? firstBranch[0]
+    : null;
+
+const output =
+  finalItem && "json" in finalItem
+    ? validateSalesOutput(finalItem.json)
+    : null;
+
+if (!output) return null;
   const startedAt = typeof execution.startedAt === "string" ? Date.parse(execution.startedAt) : Number.NaN;
   const stoppedAt = typeof execution.stoppedAt === "string" ? Date.parse(execution.stoppedAt) : Number.NaN;
   const durationMs = Number.isFinite(startedAt) && Number.isFinite(stoppedAt) && stoppedAt >= startedAt
     ? stoppedAt - startedAt : null;
-  return { output: [...outputs.values()][0], durationMs };
+  return { output, durationMs };
 }
 
 async function readBoundedJson(response: Response): Promise<unknown> {
