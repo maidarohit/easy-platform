@@ -4,7 +4,8 @@ import test from "node:test";
 import { handleSales347Reconciliation } from "../../app/api/internal/easy-mode/reconcile-sales-347/route.ts";
 import {
   SALES_347_EXECUTION_ID, SALES_347_PROJECT_ID, SALES_347_RUN_ID, SALES_347_TASK_ID, SALES_347_USAGE_ID,
-  SALES_347_WORKFLOW_ID, validateSales347Execution,
+  SALES_347_WORKFLOW_ID, validateSales347ExecutionMetadata, validateSales347Output,
+  verifySales347ExecutionMetadata,
 } from "../../app/lib/easy-mode-sales-347-reconciliation.ts";
 import { derivePersistedEasyModeRunStatus } from "../../app/lib/easy-mode-task-attempts.ts";
 
@@ -14,25 +15,7 @@ const salesOutput = {
   pricingRecommendations: "Value based", salesKPIs: "Conversion", actionPlan: "Launch",
   salesScript: "Opening", proposal: "Proposal", closingStrategy: "Follow up",
 };
-const execution = {
-  id: SALES_347_EXECUTION_ID, status: "success", workflowId: SALES_347_WORKFLOW_ID,
-  startedAt: "2026-08-28T10:00:00.000Z", stoppedAt: "2026-08-28T10:00:12.000Z",
-  data: { resultData: { runData: { "Respond to Webhook": [{ data: { main: [[{ json: {
-    projectId: SALES_347_PROJECT_ID, runId: SALES_347_RUN_ID, taskId: SALES_347_TASK_ID,
-    usageId: SALES_347_USAGE_ID, output: salesOutput,
-  } }]] } }] } } },
-};
-const withRespondJson = (json, overrides = {}) => ({
-  ...execution,
-  ...overrides,
-  data: { resultData: { runData: {
-    ...(overrides.runData ?? {}),
-    "Respond to Webhook": [{ data: { main: [[{ json: {
-      projectId: SALES_347_PROJECT_ID, runId: SALES_347_RUN_ID, taskId: SALES_347_TASK_ID,
-      usageId: SALES_347_USAGE_ID, ...json,
-    } }]] } }],
-  } } },
-});
+const executionMetadata = { id: SALES_347_EXECUTION_ID, status: "success", workflowId: SALES_347_WORKFLOW_ID };
 const fixedBody = {
   projectId: SALES_347_PROJECT_ID, runId: SALES_347_RUN_ID, taskId: SALES_347_TASK_ID,
   usageId: SALES_347_USAGE_ID, executionId: SALES_347_EXECUTION_ID,
@@ -46,93 +29,95 @@ const boss = { verify: async () => ({ uid: "boss" }), isBoss: () => true };
 test("saved JSON reconciliation requires boss-admin authentication", async () => {
   const never = {
     verify: async () => { throw new Error("invalid token"); }, isBoss: () => false,
-    parse: () => assert.fail("unexpected"), validate: async () => assert.fail("unexpected"),
+    parse: () => assert.fail("unexpected"), verifyExecution: async () => assert.fail("unexpected"),
+    validate: async () => assert.fail("unexpected"),
     apply: async () => assert.fail("unexpected"),
   };
   const response = await handleSales347Reconciliation(
-    request({ ...fixedBody, action: "validate", response: execution }), never,
+    request({ ...fixedBody, action: "validate", response: salesOutput }), never,
   );
   assert.equal(response.status, 404);
 });
 
-test("valid Sales output directly in Respond to Webhook JSON is accepted", () => {
-  const validated = validateSales347Execution(execution);
-  assert.deepEqual(validated?.output, salesOutput);
-  assert.equal(validated?.durationMs, 12_000);
+test("direct Sales result is accepted", () => {
+  assert.deepEqual(validateSales347Output(salesOutput)?.output, salesOutput);
 });
 
-test("valid Sales output nested in Respond to Webhook JSON is accepted", () => {
-  const validated = validateSales347Execution(withRespondJson({ response: { body: { output: salesOutput } } }));
-  assert.deepEqual(validated?.output, salesOutput);
+test("one-element Sales result array is accepted", () => {
+  assert.deepEqual(validateSales347Output([salesOutput])?.output, salesOutput);
 });
 
-test("identical duplicate Sales output wrappers are accepted as one unique output", () => {
-  const validated = validateSales347Execution(withRespondJson({
-    response: { output: salesOutput },
-    body: { nested: { output: { ...salesOutput } } },
-  }));
-  assert.deepEqual(validated?.output, salesOutput);
+test("json-wrapped Sales result is accepted", () => {
+  assert.deepEqual(validateSales347Output({ json: salesOutput })?.output, salesOutput);
 });
 
-test("two different Sales outputs in Respond to Webhook JSON are rejected", () => {
-  const differentOutput = { ...salesOutput, executiveSummary: "Different Sales plan" };
-  assert.equal(validateSales347Execution(withRespondJson({
-    response: { output: salesOutput }, body: { output: differentOutput },
-  })), null);
+test("harmless Respond-to-Webhook wrappers are accepted", () => {
+  assert.deepEqual(validateSales347Output({ response: { body: [{ json: { output: salesOutput } }] } })?.output, salesOutput);
 });
 
-test("Sales output only in AI Agent data is rejected", () => {
-  const onlyAgentOutput = withRespondJson({ response: { ok: true } }, {
-    runData: { "AI Agent": [{ data: { main: [[{ json: { output: salesOutput } }]] } }] },
-  });
-  assert.equal(validateSales347Execution(onlyAgentOutput), null);
+test("invalid Sales object is rejected", () => {
+  assert.equal(validateSales347Output({ executiveSummary: "incomplete" }), null);
 });
 
-test("wrong execution ID, workflow ID, and unsuccessful status are rejected", () => {
-  assert.equal(validateSales347Execution({ ...execution, id: "348" }), null);
-  assert.equal(validateSales347Execution({ ...execution, status: "running" }), null);
-  assert.equal(validateSales347Execution({ ...execution, workflowId: "other" }), null);
+test("execution metadata must report successful execution 347 for the fixed Sales workflow", () => {
+  assert.equal(validateSales347ExecutionMetadata(executionMetadata), true);
+  assert.equal(validateSales347ExecutionMetadata({ ...executionMetadata, id: "348" }), false);
+  assert.equal(validateSales347ExecutionMetadata({ ...executionMetadata, status: "running" }), false);
+  assert.equal(validateSales347ExecutionMetadata({ ...executionMetadata, workflowId: "other" }), false);
 });
 
-test("conflicting project, run, task, or usage metadata is rejected", () => {
-  for (const [key, value] of [
-    ["projectId", "wrong-project"], ["runId", "wrong-run"],
-    ["taskId", "wrong-task"], ["usageId", "wrong-usage"],
-  ]) {
-    assert.equal(validateSales347Execution(withRespondJson({
-      [key]: value, output: salesOutput,
-    })), null, key);
+test("execution verification performs a metadata-only read and rejects unsuccessful metadata", async () => {
+  const priorBaseUrl = process.env.N8N_API_BASE_URL;
+  const priorApiKey = process.env.N8N_API_KEY;
+  process.env.N8N_API_BASE_URL = "https://n8n.example.invalid";
+  process.env.N8N_API_KEY = "test-key";
+  try {
+    let requestedUrl = "";
+    await verifySales347ExecutionMetadata(async (url, init) => {
+      requestedUrl = String(url);
+      assert.equal(init?.method, "GET");
+      return new Response(JSON.stringify(executionMetadata), { status: 200 });
+    });
+    assert.match(requestedUrl, /\/api\/v1\/executions\/347$/);
+    assert.doesNotMatch(requestedUrl, /includeData/);
+    await assert.rejects(() => verifySales347ExecutionMetadata(async () =>
+      new Response(JSON.stringify({ ...executionMetadata, status: "running" }), { status: 200 })));
+  } finally {
+    if (priorBaseUrl === undefined) delete process.env.N8N_API_BASE_URL;
+    else process.env.N8N_API_BASE_URL = priorBaseUrl;
+    if (priorApiKey === undefined) delete process.env.N8N_API_KEY;
+    else process.env.N8N_API_KEY = priorApiKey;
   }
-  assert.equal(validateSales347Execution({
-    ...execution,
-    data: { resultData: { runData: { "Respond to Webhook": [{ data: { main: [[{ json: { output: salesOutput } }]] } }] } } },
-  }), null, "missing fixed metadata");
 });
 
 test("boss validation is read-only and uses only the supplied saved execution", async () => {
   let validations = 0;
   let applies = 0;
+  let metadataChecks = 0;
   let parsedResponse;
-  const response = await handleSales347Reconciliation(request({ ...fixedBody, action: "validate", response: execution }), {
+  const response = await handleSales347Reconciliation(request({ ...fixedBody, action: "validate", response: salesOutput }), {
     ...boss,
-    parse: (value) => { parsedResponse = value; return { output: salesOutput, durationMs: 12_000 }; },
+    parse: (value) => { parsedResponse = value; return { output: salesOutput, durationMs: null }; },
+    verifyExecution: async () => { metadataChecks += 1; },
     validate: async () => { validations += 1; return { state: "validated", outputId: null, salesTaskStatus: "running", runStatus: "running" }; },
     apply: async () => { applies += 1; throw new Error("must not apply"); },
   });
   assert.equal(response.status, 200);
   assert.equal(validations, 1);
   assert.equal(applies, 0);
-  assert.deepEqual(parsedResponse, execution);
+  assert.equal(metadataChecks, 1);
+  assert.deepEqual(parsedResponse, salesOutput);
 });
 
 test("wrong fixed execution or usage identifiers are blocked before saved JSON parsing", async () => {
   let parses = 0;
   const dependencies = {
     ...boss, parse: () => { parses += 1; throw new Error("unexpected"); },
+    verifyExecution: async () => assert.fail("unexpected"),
     validate: async () => assert.fail("unexpected"), apply: async () => assert.fail("unexpected"),
   };
-  assert.equal((await handleSales347Reconciliation(request({ ...fixedBody, executionId: "348", action: "validate", response: execution }), dependencies)).status, 400);
-  assert.equal((await handleSales347Reconciliation(request({ ...fixedBody, usageId: "wrong", action: "validate", response: execution }), dependencies)).status, 400);
+  assert.equal((await handleSales347Reconciliation(request({ ...fixedBody, executionId: "348", action: "validate", response: salesOutput }), dependencies)).status, 400);
+  assert.equal((await handleSales347Reconciliation(request({ ...fixedBody, usageId: "wrong", action: "validate", response: salesOutput }), dependencies)).status, 400);
   assert.equal(parses, 0);
 });
 
@@ -142,6 +127,7 @@ test("malformed request JSON is rejected before reconciliation", async () => {
   });
   const dependencies = {
     ...boss, parse: () => assert.fail("unexpected"),
+    verifyExecution: async () => assert.fail("unexpected"),
     validate: async () => assert.fail("unexpected"), apply: async () => assert.fail("unexpected"),
   };
   assert.equal((await handleSales347Reconciliation(malformed, dependencies)).status, 400);
@@ -156,12 +142,12 @@ test("double reconcile invocation persists at most one output and then reports a
     return { state: "reconciled", outputId: "output-1", salesTaskStatus: "completed", runStatus: "completed" };
   };
   const dependencies = {
-    ...boss, parse: () => ({ output: salesOutput, durationMs: 12_000 }),
+    ...boss, parse: () => ({ output: salesOutput, durationMs: null }), verifyExecution: async () => {},
     validate: async () => assert.fail("unexpected"), apply,
   };
   const [first, second] = await Promise.all([
-    handleSales347Reconciliation(request({ ...fixedBody, action: "reconcile", response: execution }), dependencies),
-    handleSales347Reconciliation(request({ ...fixedBody, action: "reconcile", response: execution }), dependencies),
+    handleSales347Reconciliation(request({ ...fixedBody, action: "reconcile", response: salesOutput }), dependencies),
+    handleSales347Reconciliation(request({ ...fixedBody, action: "reconcile", response: salesOutput }), dependencies),
   ]);
   assert.equal(first.status, 200); assert.equal(second.status, 200); assert.equal(inserts, 1);
 });
@@ -189,5 +175,7 @@ test("implementation is fixed-ID, row-locked, idempotent, and trigger-free", asy
   assert.match(page, /type="file"/);
   assert.match(page, /<textarea/);
   assert.match(page, /validatedJson !== savedJson/);
-  assert.doesNotMatch(`${service}\n${route}`, /fetch\s*\(|N8N_API_BASE_URL|N8N_API_KEY|executeTextSpecialistService|startAiUsage|claimNextEasyModeTask|api\.openai\.com/i);
+  assert.match(service, /method: "GET"/);
+  assert.doesNotMatch(service, /includeData|runData/);
+  assert.doesNotMatch(`${service}\n${route}`, /executeTextSpecialistService|startAiUsage|claimNextEasyModeTask|api\.openai\.com/i);
 });

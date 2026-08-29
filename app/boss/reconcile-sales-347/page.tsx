@@ -43,14 +43,14 @@ export default function ReconcileSales347Page() {
   }
   return <main className="mx-auto max-w-xl p-8 text-white">
     <h1 className="text-2xl font-semibold">Sales execution 347 reconciliation</h1>
-    <p className="mt-3 text-sm text-slate-300">Boss-admin authentication is required. Supply only the saved JSON for successful n8n execution 347.</p>
+    <p className="mt-3 text-sm text-slate-300">Boss-admin authentication is required. Supply only the JSON copied from the final Respond to Webhook node.</p>
     <input className="mt-6 block text-sm" type="file" accept="application/json,.json"
       onChange={(event) => void loadFile(event.target.files?.[0] ?? null)} />
     <textarea className="mt-4 min-h-64 w-full rounded-lg border border-slate-600 bg-slate-900 p-3 font-mono text-xs"
-      aria-label="Saved execution 347 JSON" placeholder="Paste saved execution 347 JSON"
+      aria-label="Final Sales output JSON" placeholder="Paste final Respond to Webhook JSON"
       value={savedJson} onChange={(event) => { setSavedJson(event.target.value); setValidatedJson(null); setMessage(""); }} />
     <div className="mt-6 flex gap-3">
-      <button type="button" disabled={submitting || !savedJson.trim()} onClick={() => void submit("validate")} className="rounded-lg border border-cyan-400 px-4 py-2 font-semibold text-cyan-200 disabled:opacity-50">Validate saved JSON</button>
+      <button type="button" disabled={submitting || !savedJson.trim()} onClick={() => void submit("validate")} className="rounded-lg border border-cyan-400 px-4 py-2 font-semibold text-cyan-200 disabled:opacity-50">Validate final Sales output</button>
       <button type="button" disabled={submitting || validatedJson !== savedJson} onClick={() => void submit("reconcile")} className="rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">Reconcile validated Sales 347</button>
     </div>
     {message ? <p className="mt-5 text-sm text-slate-200">{message}</p> : null}

@@ -13,6 +13,8 @@ export const SALES_347_USAGE_ID = "e7c2080d-fc06-4924-a116-d458c7bcd221";
 export const SALES_347_EXECUTION_ID = "347";
 export const SALES_347_WORKFLOW_ID = "kmkx0KNO0HFvPpdU";
 const NORMAL_MODULES = ["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"] as const;
+const MAX_METADATA_BYTES = 64 * 1024;
+const SALES_WRAPPER_KEYS = new Set(["body", "data", "json", "output", "response", "result"]);
 
 type RecordValue = Record<string, unknown>;
 export type Sales347Execution = Readonly<{ output: Readonly<Record<string, string>>; durationMs: number | null }>;
@@ -27,32 +29,20 @@ function isRecord(value: unknown): value is RecordValue {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function metadataValues(value: unknown, normalizedKey: string, found = new Set<string>()): Set<string> {
+function collectSalesOutputs(
+  value: unknown,
+  found = new Map<string, Readonly<Record<string, string>>>(),
+  depth = 0,
+) {
+  if (depth > 8) return found;
+  const output = validateSalesOutput(value);
+  if (output) found.set(canonicalSalesOutput(output), output);
   if (Array.isArray(value)) {
-    for (const item of value) metadataValues(item, normalizedKey, found);
+    if (value.length === 1) collectSalesOutputs(value[0], found, depth + 1);
   } else if (isRecord(value)) {
     for (const [key, item] of Object.entries(value)) {
-      if (key.replace(/[^a-z0-9]/gi, "").toLowerCase() === normalizedKey && typeof item === "string") found.add(item);
-      metadataValues(item, normalizedKey, found);
+      if (SALES_WRAPPER_KEYS.has(key)) collectSalesOutputs(item, found, depth + 1);
     }
-  }
-  return found;
-}
-
-function metadataMatches(value: unknown, key: string, expected: string) {
-  const values = metadataValues(value, key);
-  return values.size === 1 && values.has(expected);
-}
-
-function collectSalesOutputs(value: unknown, found = new Map<string, Readonly<Record<string, string>>>()) {
-  const output = validateSalesOutput(value);
-  if (output) {
-    found.set(canonicalSalesOutput(output), output);
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectSalesOutputs(item, found);
-  } else if (isRecord(value)) {
-    for (const item of Object.values(value)) collectSalesOutputs(item, found);
   }
   return found;
 }
@@ -63,32 +53,53 @@ function canonicalSalesOutput(output: Readonly<Record<string, string>>) {
   ));
 }
 
-export function validateSales347Execution(execution: unknown): Sales347Execution | null {
-  if (!isRecord(execution) || String(execution.id) !== SALES_347_EXECUTION_ID || execution.status !== "success" ||
-      String(execution.workflowId) !== SALES_347_WORKFLOW_ID) return null;
-  if (!metadataMatches(execution, "projectid", SALES_347_PROJECT_ID) ||
-      !metadataMatches(execution, "runid", SALES_347_RUN_ID) ||
-      !metadataMatches(execution, "taskid", SALES_347_TASK_ID) ||
-      !metadataMatches(execution, "usageid", SALES_347_USAGE_ID)) return null;
-  const data = isRecord(execution.data) ? execution.data : null;
-  const resultData = data && isRecord(data.resultData) ? data.resultData : null;
-  const runData = resultData && isRecord(resultData.runData) ? resultData.runData : null;
-  const respondRuns = runData && Array.isArray(runData["Respond to Webhook"])
-    ? runData["Respond to Webhook"] : [];
-  const lastRespondRun = respondRuns.at(-1);
-  const respondData = isRecord(lastRespondRun) && isRecord(lastRespondRun.data) ? lastRespondRun.data : null;
-  const main = respondData && Array.isArray(respondData.main) ? respondData.main : [];
-  const firstBranch = Array.isArray(main[0]) ? main[0] : [];
-  const finalItem = firstBranch.length === 1 && isRecord(firstBranch[0]) ? firstBranch[0] : null;
-  const outputs = finalItem && "json" in finalItem ? collectSalesOutputs(finalItem.json) : new Map();
+export function validateSales347Output(value: unknown): Sales347Execution | null {
+  const outputs = collectSalesOutputs(value);
   if (outputs.size !== 1) return null;
   const output = outputs.values().next().value;
-  if (!output) return null;
-  const startedAt = typeof execution.startedAt === "string" ? Date.parse(execution.startedAt) : Number.NaN;
-  const stoppedAt = typeof execution.stoppedAt === "string" ? Date.parse(execution.stoppedAt) : Number.NaN;
-  const durationMs = Number.isFinite(startedAt) && Number.isFinite(stoppedAt) && stoppedAt >= startedAt
-    ? stoppedAt - startedAt : null;
-  return { output, durationMs };
+  return output ? { output, durationMs: null } : null;
+}
+
+export function validateSales347ExecutionMetadata(value: unknown): boolean {
+  return isRecord(value) && String(value.id) === SALES_347_EXECUTION_ID && value.status === "success" &&
+    String(value.workflowId) === SALES_347_WORKFLOW_ID;
+}
+
+async function readBoundedMetadata(response: Response): Promise<unknown> {
+  if (!response.ok || !response.body) throw new Error("Execution 347 metadata could not be verified.");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_METADATA_BYTES) {
+      await reader.cancel();
+      throw new Error("Execution 347 metadata response is too large.");
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+}
+
+export async function verifySales347ExecutionMetadata(fetcher: typeof fetch = fetch): Promise<void> {
+  const baseUrl = process.env.N8N_API_BASE_URL?.trim().replace(/\/$/, "");
+  const apiKey = process.env.N8N_API_KEY?.trim();
+  if (!baseUrl || !apiKey) throw new Error("Sales execution verification is not configured.");
+  const base = new URL(baseUrl);
+  if (base.protocol !== "https:") throw new Error("Sales execution verification requires HTTPS.");
+  const url = new URL(`/api/v1/executions/${SALES_347_EXECUTION_ID}`, `${base.toString().replace(/\/$/, "")}/`);
+  const response = await fetcher(url, {
+    method: "GET", cache: "no-store", headers: { "X-N8N-API-KEY": apiKey, Accept: "application/json" },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!validateSales347ExecutionMetadata(await readBoundedMetadata(response))) {
+    throw new Error("Execution 347 metadata is not a successful Sales execution.");
+  }
 }
 
 async function reconcileSales347(execution: Sales347Execution, dryRun: boolean): Promise<Sales347Result> {

@@ -4,18 +4,19 @@ import { readLimitedJson, MalformedJsonBodyError, RequestBodyTooLargeError } fro
 import {
   applySales347Reconciliation,
   SALES_347_EXECUTION_ID, SALES_347_PROJECT_ID, SALES_347_RUN_ID, SALES_347_TASK_ID, SALES_347_USAGE_ID,
-  validateCurrentSales347, validateSales347Execution,
+  validateCurrentSales347, validateSales347Output, verifySales347ExecutionMetadata,
 } from "@/app/lib/easy-mode-sales-347-reconciliation";
 
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 type Dependencies = Readonly<{
   verify: typeof verifyFirebaseIdToken; isBoss: typeof isBossAdmin;
-  parse: typeof validateSales347Execution;
+  parse: typeof validateSales347Output; verifyExecution: typeof verifySales347ExecutionMetadata;
   validate: typeof validateCurrentSales347; apply: typeof applySales347Reconciliation;
 }>;
 const defaults: Dependencies = {
-  verify: verifyFirebaseIdToken, isBoss: isBossAdmin, parse: validateSales347Execution,
+  verify: verifyFirebaseIdToken, isBoss: isBossAdmin, parse: validateSales347Output,
+  verifyExecution: verifySales347ExecutionMetadata,
   validate: validateCurrentSales347, apply: applySales347Reconciliation,
 };
 
@@ -41,7 +42,8 @@ export async function handleSales347Reconciliation(request: Request, dependencie
   }
   try {
     const execution = dependencies.parse(body.response);
-    if (!execution) throw new Error("Saved execution does not satisfy the fixed Sales 347 contract.");
+    if (!execution) throw new Error("Supplied final Sales output does not satisfy the production contract.");
+    await dependencies.verifyExecution();
     const result = body.action === "validate" ? await dependencies.validate(execution) : await dependencies.apply(execution);
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
