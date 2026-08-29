@@ -40,10 +40,17 @@ export async function handleSales347Reconciliation(request: Request, dependencie
     const execution = await dependencies.fetchExecution();
     const result = body.action === "validate" ? await dependencies.validate(execution) : await dependencies.apply(execution);
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    console.error("Easy Mode Sales execution 347 reconciliation failed safely.");
-    return Response.json({ error: "Sales reconciliation could not be completed safely." }, { status: 409 });
-  }
+  } catch (error) {
+  console.error(
+    "Easy Mode Sales execution 347 reconciliation failed safely:",
+    error instanceof Error ? error.message : error
+  );
+
+  return Response.json(
+    { error: "Sales reconciliation could not be completed safely." },
+    { status: 409 }
+  );
+}
 }
 
 export const POST = (request: Request) => handleSales347Reconciliation(request);
