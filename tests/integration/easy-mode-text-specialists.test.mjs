@@ -16,6 +16,7 @@ const fields = {
 const brandInput = { companyName: "Example", industry: "Services", targetAudience: "Owners", brandStyle: "Clear", brandDescription: "Helpful services." };
 const salesInput = { companyName: "Example", industry: "Services", salesGoal: "Grow sales", targetAudience: "Owners", businessDescription: "Helpful services." };
 const analyticsInput = { companyName: "Example", industry: "Services", monthlyVisitors: "Unknown", monthlyLeads: "Unknown", monthlySales: "Unknown", monthlyRevenue: "Unknown", marketingBudget: "Unknown", businessGoal: "Grow", businessDescription: "Helpful services." };
+const canonicalSales = Object.fromEntries(fields.sales.map((field) => [field, `sales ${field} result`]));
 
 const canonicalMarketing = Object.fromEntries(fields.marketing.map((field) => [field, `marketing ${field} result`]));
 const legacyMarketing320 = {
@@ -46,6 +47,33 @@ test("all six text specialists normalize a single-item n8n envelope through stri
     });
     assert.deepEqual(result.output, getModuleAdapter(specialistModule).validateOutput(output), specialistModule);
   }
+});
+
+test("normal Sales execution accepts direct and harmless Respond-to-Webhook envelopes", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const responses = [
+    canonicalSales,
+    { output: canonicalSales },
+    [{ output: canonicalSales }],
+    { response: { body: [{ json: { output: canonicalSales } }] } },
+  ];
+  for (const response of responses) {
+    const result = await executeTextSpecialistService({
+      module: "sales", context, input: salesInput,
+      fetcher: async () => new Response(JSON.stringify(response), { status: 200 }),
+      webhookConfig: { url: "https://example.invalid/sales", headers: {} },
+    });
+    assert.deepEqual(result.output, canonicalSales);
+  }
+});
+
+test("normal Sales execution rejects an invalid production contract", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "sales", context, input: salesInput,
+    fetcher: async () => new Response(JSON.stringify({ output: { executiveSummary: "incomplete" } }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/sales", headers: {} },
+  }));
 });
 
 test("canonical Marketing output remains valid and legacy n8n #320 output normalizes to canonical fields", () => {

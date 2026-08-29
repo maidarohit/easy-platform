@@ -25,6 +25,30 @@ export type SpecialistExecutionResult = Readonly<{
   providerExecutionId?: string;
 }>;
 
+const WEBHOOK_WRAPPER_KEYS = new Set(["body", "data", "json", "output", "response", "result"]);
+
+export function validateWrappedWebhookOutput<T extends NormalizedModuleOutput>(
+  value: unknown,
+  validate: (candidate: unknown) => T | null,
+): T | null {
+  const found = new Map<string, T>();
+  const visit = (candidate: unknown, depth: number) => {
+    if (depth > 8) return;
+    const output = validate(candidate);
+    if (output) found.set(JSON.stringify(output), output);
+    if (Array.isArray(candidate)) {
+      if (candidate.length === 1) visit(candidate[0], depth + 1);
+      return;
+    }
+    if (!candidate || typeof candidate !== "object") return;
+    for (const [key, nested] of Object.entries(candidate)) {
+      if (WEBHOOK_WRAPPER_KEYS.has(key)) visit(nested, depth + 1);
+    }
+  };
+  visit(value, 0);
+  return found.size === 1 ? found.values().next().value ?? null : null;
+}
+
 export async function executeValidatedJsonWebhook(options: Readonly<{
   input: Readonly<Record<string, unknown>>;
   webhook: Readonly<{ url: string; headers: Readonly<Record<string, string>> }> | null;

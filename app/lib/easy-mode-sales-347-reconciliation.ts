@@ -5,6 +5,7 @@ import { db } from "@/app/db";
 import { aiUsage, easyModeRuns, easyModeTaskAttempts, easyModeTasks, projectMemory, projectOutputs, projects } from "@/app/db/schema";
 import { validateSalesOutput } from "@/app/lib/easy-mode-execution-contracts";
 import { derivePersistedEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
+import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 
 export const SALES_347_PROJECT_ID = "c704e98b-4b6d-41d6-9ffe-fe7fb926f598";
 export const SALES_347_RUN_ID = "a44f1366-6785-40b2-8aba-bd878b68b36e";
@@ -14,7 +15,6 @@ export const SALES_347_EXECUTION_ID = "347";
 export const SALES_347_WORKFLOW_ID = "kmkx0KNO0HFvPpdU";
 const NORMAL_MODULES = ["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"] as const;
 const MAX_METADATA_BYTES = 64 * 1024;
-const SALES_WRAPPER_KEYS = new Set(["body", "data", "json", "output", "response", "result"]);
 
 type RecordValue = Record<string, unknown>;
 export type Sales347Execution = Readonly<{ output: Readonly<Record<string, string>>; durationMs: number | null }>;
@@ -29,24 +29,6 @@ function isRecord(value: unknown): value is RecordValue {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function collectSalesOutputs(
-  value: unknown,
-  found = new Map<string, Readonly<Record<string, string>>>(),
-  depth = 0,
-) {
-  if (depth > 8) return found;
-  const output = validateSalesOutput(value);
-  if (output) found.set(canonicalSalesOutput(output), output);
-  if (Array.isArray(value)) {
-    if (value.length === 1) collectSalesOutputs(value[0], found, depth + 1);
-  } else if (isRecord(value)) {
-    for (const [key, item] of Object.entries(value)) {
-      if (SALES_WRAPPER_KEYS.has(key)) collectSalesOutputs(item, found, depth + 1);
-    }
-  }
-  return found;
-}
-
 function canonicalSalesOutput(output: Readonly<Record<string, string>>) {
   return JSON.stringify(Object.fromEntries(
     Object.entries(output).sort(([left], [right]) => left.localeCompare(right)),
@@ -54,9 +36,7 @@ function canonicalSalesOutput(output: Readonly<Record<string, string>>) {
 }
 
 export function validateSales347Output(value: unknown): Sales347Execution | null {
-  const outputs = collectSalesOutputs(value);
-  if (outputs.size !== 1) return null;
-  const output = outputs.values().next().value;
+  const output = validateWrappedWebhookOutput(value, validateSalesOutput);
   return output ? { output, durationMs: null } : null;
 }
 

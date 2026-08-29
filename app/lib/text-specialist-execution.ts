@@ -2,7 +2,7 @@ import "server-only";
 
 import { getModuleAdapter, type EasyModeModuleId, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
-import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import { executeValidatedJsonWebhook, SpecialistExecutionError, validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
@@ -74,10 +74,7 @@ export async function executeTextSpecialistService(options: Readonly<{
     timeoutMs: 120_000,
     fetcher: options.fetcher,
     validateResponse(value) {
-      const item = Array.isArray(value) && value.length === 1 ? value[0] : value;
-      const wrapped = item !== null && typeof item === "object" && !Array.isArray(item) && Object.hasOwn(item, "output")
-        ? { output: (item as Record<string, unknown>).output } : item;
-      return validator?.(item) ?? validator?.(wrapped) ?? null;
+      return validator ? validateWrappedWebhookOutput(value, validator) : null;
     },
   });
 }
