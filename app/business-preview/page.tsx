@@ -37,6 +37,55 @@ function BusinessPreviewContent() {
   const [savedOverrides, setSavedOverrides] = useState<PreviewOverrides>({});
   const [draftOverrides, setDraftOverrides] = useState<PreviewOverrides>({});
   const [viewport, setViewport] = useState<Viewport>("desktop");
+  const [websiteStyle, setWebsiteStyle] = useState<"minimal" | "modern" | "luxury" | "bold">("modern");
+const [colorTheme, setColorTheme] = useState<"modern-green" | "luxury-dark" | "minimal-light" | "warm-earth" | "bold-business">("modern-green");
+const [backgroundStyle, setBackgroundStyle] = useState<"clean" | "industry" | "gradient" | "pattern">("industry");
+const [visualIntensity, setVisualIntensity] = useState<"none" | "subtle" | "medium">("subtle");
+
+const siteTheme = {
+  "modern-green": {
+    background: "#F7F4EC",
+    surface: "#FFFFFF",
+    primary: "#173D32",
+    accent: "#D8C8A7",
+    text: "#173D32",
+  },
+  "luxury-dark": {
+    background: "#111111",
+    surface: "#1C1C1C",
+    primary: "#0B0B0B",
+    accent: "#C7A86B",
+    text: "#F7F2E8",
+  },
+  "minimal-light": {
+    background: "#F7F7F5",
+    surface: "#FFFFFF",
+    primary: "#202020",
+    accent: "#D9D9D4",
+    text: "#202020",
+  },
+  "warm-earth": {
+    background: "#F3E9DC",
+    surface: "#FFFDFC",
+    primary: "#6B4435",
+    accent: "#C98763",
+    text: "#49352D",
+  },
+  "bold-business": {
+    background: "#EEF3F8",
+    surface: "#FFFFFF",
+    primary: "#102A43",
+    accent: "#2F80ED",
+    text: "#102A43",
+  },
+}[colorTheme];
+
+const visualOpacity =
+  visualIntensity === "none"
+    ? 0
+    : visualIntensity === "medium"
+      ? 0.24
+      : 0.12;
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -230,12 +279,150 @@ function BusinessPreviewContent() {
 
         {website && <section id="website" className="scroll-mt-6 py-14">
           <div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Website</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">Homepage direction</h2></div><div className="flex rounded-xl border border-[#D8DCCF] bg-white p-1" aria-label="Preview viewport">{(["desktop", "tablet", "mobile"] as Viewport[]).map((mode) => <button key={mode} type="button" aria-pressed={viewport === mode} onClick={() => setViewport(mode)} className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] ${viewport === mode ? "bg-[#173D32] text-white" : "text-[#606A64]"}`}>{mode}</button>)}</div></div>
+          <div className="mt-6 rounded-[24px] border border-[#D8DCCF] bg-white p-5 sm:p-6">
+  <div>
+    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
+      Customize Website
+    </p>
+    <h3 className="mt-2 text-xl font-semibold text-[#173D32]">
+      Choose how your website should look
+    </h3>
+    <p className="mt-1 text-sm text-[#606A64]">
+      Change the style, colours and background without regenerating your business.
+    </p>
+  </div>
+
+  <div className="mt-6 grid gap-6 lg:grid-cols-2">
+    <div>
+      <p className="text-sm font-semibold text-[#173D32]">Website Style</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(["minimal", "modern", "luxury", "bold"] as const).map((style) => (
+          <button
+            key={style}
+            type="button"
+            onClick={() => setWebsiteStyle(style)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold capitalize ${
+              websiteStyle === style
+                ? "border-[#173D32] bg-[#173D32] text-white"
+                : "border-[#D8DCCF] bg-white text-[#173D32]"
+            }`}
+          >
+            {style}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <p className="text-sm font-semibold text-[#173D32]">Colour Palette</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(
+          [
+            "modern-green",
+            "luxury-dark",
+            "minimal-light",
+            "warm-earth",
+            "bold-business",
+          ] as const
+        ).map((theme) => (
+          <button
+            key={theme}
+            type="button"
+            onClick={() => setColorTheme(theme)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold capitalize ${
+              colorTheme === theme
+                ? "border-[#173D32] bg-[#173D32] text-white"
+                : "border-[#D8DCCF] bg-white text-[#173D32]"
+            }`}
+          >
+            {theme.replace(/-/g, " ")}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <p className="text-sm font-semibold text-[#173D32]">Background Style</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(["clean", "industry", "gradient", "pattern"] as const).map((style) => (
+          <button
+            key={style}
+            type="button"
+            onClick={() => setBackgroundStyle(style)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold capitalize ${
+              backgroundStyle === style
+                ? "border-[#173D32] bg-[#173D32] text-white"
+                : "border-[#D8DCCF] bg-white text-[#173D32]"
+            }`}
+          >
+            {style}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    <div>
+      <p className="text-sm font-semibold text-[#173D32]">Visual Intensity</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {(["none", "subtle", "medium"] as const).map((level) => (
+          <button
+            key={level}
+            type="button"
+            onClick={() => setVisualIntensity(level)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold capitalize ${
+              visualIntensity === level
+                ? "border-[#173D32] bg-[#173D32] text-white"
+                : "border-[#D8DCCF] bg-white text-[#173D32]"
+            }`}
+          >
+            {level}
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
           <div className="mt-7 overflow-x-auto rounded-[28px] bg-[#D8DCCF]/55 p-3 sm:p-6">
             {publication.canPublish === false && <div className="mx-auto mb-4 rounded-xl border border-[#D8C28F] bg-[#FFF8E7] px-4 py-3 text-center text-sm font-semibold text-[#6F5725]">Buzypeezy Preview — Subscribe to Publish</div>}
-            <div className={`mx-auto overflow-hidden rounded-[22px] bg-white shadow-xl transition-all ${VIEWPORT_WIDTH[viewport]}`}>
+            <div
+  className={`mx-auto overflow-hidden shadow-xl transition-all duration-300 ${VIEWPORT_WIDTH[viewport]}`}
+  style={{
+    backgroundColor: siteTheme.surface,
+    color: siteTheme.text,
+    borderRadius:
+      websiteStyle === "minimal"
+        ? "10px"
+        : websiteStyle === "luxury"
+          ? "30px"
+          : websiteStyle === "bold"
+            ? "18px"
+            : "22px",
+    backgroundImage:
+      backgroundStyle === "clean" || visualOpacity === 0
+        ? "none"
+        : backgroundStyle === "gradient"
+          ? `linear-gradient(135deg, ${siteTheme.background}, ${siteTheme.surface})`
+          : backgroundStyle === "pattern"
+            ? `repeating-linear-gradient(45deg, transparent 0 22px, color-mix(in srgb, ${siteTheme.accent} ${Math.round(
+                visualOpacity * 100,
+              )}%, transparent) 22px 23px)`
+            : `repeating-linear-gradient(0deg, color-mix(in srgb, ${siteTheme.accent} ${Math.round(
+                visualOpacity * 100,
+              )}%, transparent) 0 1px, transparent 1px 32px),
+               repeating-linear-gradient(90deg, color-mix(in srgb, ${siteTheme.accent} ${Math.round(
+                 visualOpacity * 100,
+               )}%, transparent) 0 1px, transparent 1px 32px)`,
+  }}
+>
               <div className="flex items-center justify-between border-b border-[#E8E5DC] px-5 py-4"><strong className="text-[#173D32]">{preview.business.name}</strong><span className="text-xs text-[#606A64]">Home&nbsp;&nbsp; About&nbsp;&nbsp; Contact</span></div>
               <div className="grid overflow-hidden lg:grid-cols-[1.08fr_0.92fr]">
-  <div className="bg-[#173D32] px-6 py-14 text-white sm:px-10 sm:py-20">
+  <div
+  className="px-6 py-14 sm:px-10 sm:py-20"
+  style={{
+    backgroundColor: siteTheme.primary,
+    color: colorTheme === "minimal-light" ? "#FFFFFF" : "#FFFFFF",
+  }}
+>
     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
       Designed around your business
     </p>
