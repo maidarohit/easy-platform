@@ -245,8 +245,8 @@ function BusinessPreviewContent() {
     </h3>
 
     <ExpandableText
-      value={website.supportingText}
-      previewLength={220}
+      value={website.about || website.supportingText}
+previewLength={170}
       inverse
       className="mt-5 max-w-2xl text-sm leading-7 text-white/75 sm:text-base"
     />
@@ -337,33 +337,23 @@ function BusinessPreviewContent() {
   </div>
 )}
 
-{(website.trust || website.about) && (
-  <div className="grid gap-5 bg-[#F7F4EC] px-6 py-12 sm:px-10 lg:grid-cols-2">
-    {website.trust && (
-      <div className="rounded-[24px] bg-white p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
-          Why choose us
-        </p>
-        <ExpandableText
-          value={website.trust}
-          previewLength={200}
-          className="mt-4 text-sm leading-7 text-[#606A64]"
-        />
-      </div>
-    )}
+{website.about && (
+  <div className="bg-[#F7F4EC] px-6 py-12 sm:px-10">
+    <div className="mx-auto max-w-3xl rounded-[24px] bg-white p-6 sm:p-8">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
+        Our approach
+      </p>
 
-    {website.about && (
-      <div className="rounded-[24px] bg-white p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
-          Our approach
-        </p>
-        <ExpandableText
-          value={website.about}
-          previewLength={200}
-          className="mt-4 text-sm leading-7 text-[#606A64]"
-        />
-      </div>
-    )}
+      <h4 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-[#173D32]">
+        Thoughtful work, clear process, better results
+      </h4>
+
+      <ExpandableText
+        value={website.about}
+        previewLength={220}
+        className="mt-4 text-sm leading-7 text-[#606A64]"
+      />
+    </div>
   </div>
 )}
 
