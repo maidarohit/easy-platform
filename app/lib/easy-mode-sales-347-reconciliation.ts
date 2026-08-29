@@ -11,8 +11,8 @@ export const SALES_347_RUN_ID = "a44f1366-6785-40b2-8aba-bd878b68b36e";
 export const SALES_347_TASK_ID = "39813208-563c-4007-800b-003c8084f920";
 export const SALES_347_USAGE_ID = "e7c2080d-fc06-4924-a116-d458c7bcd221";
 export const SALES_347_EXECUTION_ID = "347";
+export const SALES_347_WORKFLOW_ID = "kmkx0KNO0HFvPpdU";
 const NORMAL_MODULES = ["ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales"] as const;
-const MAX_EXECUTION_BYTES = 2 * 1024 * 1024;
 
 type RecordValue = Record<string, unknown>;
 export type Sales347Execution = Readonly<{ output: Readonly<Record<string, string>>; durationMs: number | null }>;
@@ -39,18 +39,15 @@ function metadataValues(value: unknown, normalizedKey: string, found = new Set<s
   return found;
 }
 
-function metadataMatchesWhenPresent(value: unknown, key: string, expected: string) {
+function metadataMatches(value: unknown, key: string, expected: string) {
   const values = metadataValues(value, key);
-  return values.size === 0 || (values.size === 1 && values.has(expected));
+  return values.size === 1 && values.has(expected);
 }
 
 function collectSalesOutputs(value: unknown, found = new Map<string, Readonly<Record<string, string>>>()) {
   const output = validateSalesOutput(value);
   if (output) {
-    const canonicalOutput = JSON.stringify(
-      Object.fromEntries(Object.entries(output).sort(([left], [right]) => left.localeCompare(right))),
-    );
-    found.set(canonicalOutput, output);
+    found.set(canonicalSalesOutput(output), output);
   }
   if (Array.isArray(value)) {
     for (const item of value) collectSalesOutputs(item, found);
@@ -60,13 +57,19 @@ function collectSalesOutputs(value: unknown, found = new Map<string, Readonly<Re
   return found;
 }
 
-export function validateSales347Execution(execution: unknown, expectedWorkflowId: string): Sales347Execution | null {
+function canonicalSalesOutput(output: Readonly<Record<string, string>>) {
+  return JSON.stringify(Object.fromEntries(
+    Object.entries(output).sort(([left], [right]) => left.localeCompare(right)),
+  ));
+}
+
+export function validateSales347Execution(execution: unknown): Sales347Execution | null {
   if (!isRecord(execution) || String(execution.id) !== SALES_347_EXECUTION_ID || execution.status !== "success" ||
-      String(execution.workflowId) !== expectedWorkflowId) return null;
-  if (!metadataMatchesWhenPresent(execution, "projectid", SALES_347_PROJECT_ID) ||
-      !metadataMatchesWhenPresent(execution, "runid", SALES_347_RUN_ID) ||
-      !metadataMatchesWhenPresent(execution, "taskid", SALES_347_TASK_ID) ||
-      !metadataMatchesWhenPresent(execution, "usageid", SALES_347_USAGE_ID)) return null;
+      String(execution.workflowId) !== SALES_347_WORKFLOW_ID) return null;
+  if (!metadataMatches(execution, "projectid", SALES_347_PROJECT_ID) ||
+      !metadataMatches(execution, "runid", SALES_347_RUN_ID) ||
+      !metadataMatches(execution, "taskid", SALES_347_TASK_ID) ||
+      !metadataMatches(execution, "usageid", SALES_347_USAGE_ID)) return null;
   const data = isRecord(execution.data) ? execution.data : null;
   const resultData = data && isRecord(data.resultData) ? data.resultData : null;
   const runData = resultData && isRecord(resultData.runData) ? resultData.runData : null;
@@ -86,43 +89,6 @@ export function validateSales347Execution(execution: unknown, expectedWorkflowId
   const durationMs = Number.isFinite(startedAt) && Number.isFinite(stoppedAt) && stoppedAt >= startedAt
     ? stoppedAt - startedAt : null;
   return { output, durationMs };
-}
-
-async function readBoundedJson(response: Response): Promise<unknown> {
-  if (!response.ok || !response.body) throw new Error("Execution 347 could not be verified.");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_EXECUTION_BYTES) { await reader.cancel(); throw new Error("Execution 347 response is too large."); }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-}
-
-export async function fetchAndValidateSales347Execution(fetcher: typeof fetch = fetch): Promise<Sales347Execution> {
-  const baseUrl = process.env.N8N_API_BASE_URL?.trim().replace(/\/$/, "");
-  const apiKey = process.env.N8N_API_KEY?.trim();
-  const workflowId = process.env.N8N_SALES_AI_WORKFLOW_ID?.trim();
-  if (!baseUrl || !apiKey || !workflowId) throw new Error("Sales execution verification is not configured.");
-  const base = new URL(baseUrl);
-  if (base.protocol !== "https:") throw new Error("Sales execution verification requires HTTPS.");
-  const url = new URL(`/api/v1/executions/${SALES_347_EXECUTION_ID}`, `${base.toString().replace(/\/$/, "")}/`);
-  url.searchParams.set("includeData", "true");
-  const response = await fetcher(url, {
-    method: "GET", cache: "no-store",
-    headers: { "X-N8N-API-KEY": apiKey, Accept: "application/json" },
-    signal: AbortSignal.timeout(10_000),
-  });
-  const execution = validateSales347Execution(await readBoundedJson(response), workflowId);
-  if (!execution) throw new Error("Execution 347 is not a valid successful Sales execution.");
-  return execution;
 }
 
 async function reconcileSales347(execution: Sales347Execution, dryRun: boolean): Promise<Sales347Result> {
@@ -167,7 +133,10 @@ async function reconcileSales347(execution: Sales347Execution, dryRun: boolean):
       )).limit(1);
       let parsed: unknown = null;
       try { parsed = JSON.parse(existing?.result ?? ""); } catch {}
-      if (!existing || !validateSalesOutput(parsed)) throw new Error("Existing Sales reconciliation is inconsistent.");
+      const existingOutput = validateSalesOutput(parsed);
+      if (!existing || !existingOutput || canonicalSalesOutput(existingOutput) !== canonicalSalesOutput(execution.output)) {
+        throw new Error("Existing Sales reconciliation is inconsistent.");
+      }
       return { state: "already_reconciled", outputId: existing.id, salesTaskStatus: "completed", runStatus: "completed" };
     }
 

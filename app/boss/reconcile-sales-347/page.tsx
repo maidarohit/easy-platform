@@ -12,27 +12,46 @@ const fixed = {
 } as const;
 
 export default function ReconcileSales347Page() {
+  const [savedJson, setSavedJson] = useState("");
+  const [validatedJson, setValidatedJson] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  async function loadFile(file: File | null) {
+    if (!file) return;
+    const text = await file.text();
+    setSavedJson(text);
+    setValidatedJson(null);
+    setMessage("");
+  }
+
   async function submit(action: "validate" | "reconcile") {
-    if (submitting) return;
+    if (submitting || !savedJson.trim() || (action === "reconcile" && validatedJson !== savedJson)) return;
     setSubmitting(true); setMessage("");
     try {
+      const responsePayload = JSON.parse(savedJson) as unknown;
       const response = await authenticatedFetch("/api/internal/easy-mode/reconcile-sales-347", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...fixed, action }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...fixed, action, response: responsePayload }),
       });
       const result = await response.json() as { state?: string; runStatus?: string; error?: string };
       if (!response.ok) throw new Error(result.error || "Sales reconciliation failed safely.");
+      if (action === "validate") setValidatedJson(savedJson);
       setMessage(`Result: ${result.state}. Run: ${result.runStatus}.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Sales reconciliation failed safely."); }
     finally { setSubmitting(false); }
   }
   return <main className="mx-auto max-w-xl p-8 text-white">
     <h1 className="text-2xl font-semibold">Sales execution 347 reconciliation</h1>
-    <p className="mt-3 text-sm text-slate-300">Boss-admin authentication is required. This reuses only saved execution 347 and never starts Sales again.</p>
+    <p className="mt-3 text-sm text-slate-300">Boss-admin authentication is required. Supply only the saved JSON for successful n8n execution 347.</p>
+    <input className="mt-6 block text-sm" type="file" accept="application/json,.json"
+      onChange={(event) => void loadFile(event.target.files?.[0] ?? null)} />
+    <textarea className="mt-4 min-h-64 w-full rounded-lg border border-slate-600 bg-slate-900 p-3 font-mono text-xs"
+      aria-label="Saved execution 347 JSON" placeholder="Paste saved execution 347 JSON"
+      value={savedJson} onChange={(event) => { setSavedJson(event.target.value); setValidatedJson(null); setMessage(""); }} />
     <div className="mt-6 flex gap-3">
-      <button type="button" disabled={submitting} onClick={() => void submit("validate")} className="rounded-lg border border-cyan-400 px-4 py-2 font-semibold text-cyan-200 disabled:opacity-50">Validate Sales reconciliation</button>
-      <button type="button" disabled={submitting} onClick={() => void submit("reconcile")} className="rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">Reconcile Sales 347</button>
+      <button type="button" disabled={submitting || !savedJson.trim()} onClick={() => void submit("validate")} className="rounded-lg border border-cyan-400 px-4 py-2 font-semibold text-cyan-200 disabled:opacity-50">Validate saved JSON</button>
+      <button type="button" disabled={submitting || validatedJson !== savedJson} onClick={() => void submit("reconcile")} className="rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950 disabled:opacity-50">Reconcile validated Sales 347</button>
     </div>
     {message ? <p className="mt-5 text-sm text-slate-200">{message}</p> : null}
   </main>;
