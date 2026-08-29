@@ -234,10 +234,158 @@ function BusinessPreviewContent() {
             {publication.canPublish === false && <div className="mx-auto mb-4 rounded-xl border border-[#D8C28F] bg-[#FFF8E7] px-4 py-3 text-center text-sm font-semibold text-[#6F5725]">Buzypeezy Preview — Subscribe to Publish</div>}
             <div className={`mx-auto overflow-hidden rounded-[22px] bg-white shadow-xl transition-all ${VIEWPORT_WIDTH[viewport]}`}>
               <div className="flex items-center justify-between border-b border-[#E8E5DC] px-5 py-4"><strong className="text-[#173D32]">{preview.business.name}</strong><span className="text-xs text-[#606A64]">Home&nbsp;&nbsp; About&nbsp;&nbsp; Contact</span></div>
-              <div className="bg-[#173D32] px-6 py-14 text-center text-white sm:px-10 sm:py-20"><h3 className="mx-auto max-w-4xl text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">{website.heroHeadline || preview.business.name}</h3><OptionalText value={website.supportingText} className="mx-auto mt-5 max-w-2xl text-sm leading-7 text-white/75 sm:text-base" />{website.primaryCta && <span className="mt-7 inline-flex rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#173D32]">{website.primaryCta}</span>}</div>
-              {website.services && <div className="px-6 py-10 sm:px-10"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">What we offer</p>{website.serviceCards.length >= 3 ? <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{website.serviceCards.map((card) => <article key={`${card.title}-${card.description}`} className="rounded-2xl border border-[#E8E5DC] bg-[#FCFBF7] p-5"><h4 className="font-semibold text-[#173D32]">{card.title}</h4><ExpandableText value={card.description} previewLength={150} className="mt-2 text-sm leading-6 text-[#606A64]" /></article>)}</div> : <ExpandableText value={website.services} className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[#606A64]" />}</div>}
-              {(website.trust || website.about) && <div className="grid gap-6 bg-[#F7F4EC] px-6 py-10 sm:grid-cols-2 sm:px-10">{website.trust && <div><h4 className="font-semibold text-[#173D32]">Why customers choose us</h4><OptionalText value={website.trust} className="mt-3 text-sm leading-6 text-[#606A64]" /></div>}{website.about && <div><h4 className="font-semibold text-[#173D32]">Our value</h4><OptionalText value={website.about} className="mt-3 text-sm leading-6 text-[#606A64]" /></div>}</div>}
-              <div className="bg-[#102A23] px-6 py-8 text-center text-white"><h4 className="text-xl font-semibold">Ready to take the next step?</h4>{website.contact && <p className="mt-2 text-sm text-white/70">{website.contact}</p>}</div>
+              <div className="grid overflow-hidden lg:grid-cols-[1.08fr_0.92fr]">
+  <div className="bg-[#173D32] px-6 py-14 text-white sm:px-10 sm:py-20">
+    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
+      Designed around your business
+    </p>
+
+    <h3 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
+      {website.heroHeadline || preview.business.name}
+    </h3>
+
+    <ExpandableText
+      value={website.supportingText}
+      previewLength={220}
+      inverse
+      className="mt-5 max-w-2xl text-sm leading-7 text-white/75 sm:text-base"
+    />
+
+    {website.primaryCta && (
+      <span className="mt-7 inline-flex rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#173D32] shadow-sm">
+        {website.primaryCta}
+      </span>
+    )}
+  </div>
+
+  <div className="bg-[#E9DCC9] p-6 sm:p-10">
+    <div className="flex min-h-[300px] flex-col justify-between rounded-[28px] border border-black/10 bg-white/75 p-6 shadow-sm">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">
+          Visual showcase
+        </p>
+
+        <h4 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-[#173D32]">
+          Your work should be seen, not just described.
+        </h4>
+
+        <p className="mt-3 max-w-md text-sm leading-6 text-[#606A64]">
+          Add real project photos, product images, portfolio work or video when available.
+        </p>
+      </div>
+
+      {website.serviceCards.length > 0 && (
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          {website.serviceCards.slice(0, 4).map((card) => (
+            <div
+              key={`visual-${card.title}`}
+              className="rounded-2xl border border-[#D8C8B7] bg-[#FCFBF7] p-4"
+            >
+              <div className="mb-4 h-16 rounded-xl bg-[#173D32]/10" />
+              <p className="text-sm font-semibold text-[#173D32]">
+                {card.title}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</div>
+
+{website.services && (
+  <div className="px-6 py-12 sm:px-10">
+    <div className="max-w-2xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
+        What we offer
+      </p>
+      <h4 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#173D32]">
+        Services built around what customers actually need
+      </h4>
+    </div>
+
+    {website.serviceCards.length > 0 ? (
+      <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {website.serviceCards.slice(0, 6).map((card, index) => (
+          <article
+            key={`${card.title}-${card.description}`}
+            className="rounded-[24px] border border-[#E8E5DC] bg-[#FCFBF7] p-6"
+          >
+            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#173D32] text-sm font-semibold text-white">
+              {String(index + 1).padStart(2, "0")}
+            </div>
+
+            <h5 className="font-semibold text-[#173D32]">
+              {card.title}
+            </h5>
+
+            <ExpandableText
+              value={card.description}
+              previewLength={100}
+              className="mt-2 text-sm leading-6 text-[#606A64]"
+            />
+          </article>
+        ))}
+      </div>
+    ) : (
+      <ExpandableText
+        value={website.services}
+        previewLength={260}
+        className="mt-6 max-w-3xl text-sm leading-7 text-[#606A64]"
+      />
+    )}
+  </div>
+)}
+
+{(website.trust || website.about) && (
+  <div className="grid gap-5 bg-[#F7F4EC] px-6 py-12 sm:px-10 lg:grid-cols-2">
+    {website.trust && (
+      <div className="rounded-[24px] bg-white p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
+          Why choose us
+        </p>
+        <ExpandableText
+          value={website.trust}
+          previewLength={200}
+          className="mt-4 text-sm leading-7 text-[#606A64]"
+        />
+      </div>
+    )}
+
+    {website.about && (
+      <div className="rounded-[24px] bg-white p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
+          Our approach
+        </p>
+        <ExpandableText
+          value={website.about}
+          previewLength={200}
+          className="mt-4 text-sm leading-7 text-[#606A64]"
+        />
+      </div>
+    )}
+  </div>
+)}
+
+<div className="bg-[#102A23] px-6 py-12 text-center text-white sm:px-10">
+  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">
+    Start your project
+  </p>
+
+  <h4 className="mx-auto mt-3 max-w-xl text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
+    Ready to turn the idea into something real?
+  </h4>
+
+  <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/70">
+    Tell us what you need and take the next step with the business.
+  </p>
+
+  {website.primaryCta && (
+    <span className="mt-6 inline-flex rounded-full bg-white px-6 py-3 text-sm font-semibold text-[#173D32]">
+      {website.primaryCta}
+    </span>
+  )}
+</div>
               <div className="px-6 py-4 text-center text-xs text-[#7B847E]">{preview.business.name} · Business preview</div>
             </div>
           </div>
