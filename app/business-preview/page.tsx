@@ -466,10 +466,20 @@ previewLength={170}
           {website.serviceCards.slice(0, 4).map((card) => (
             <div
               key={`visual-${card.title}`}
-              className="rounded-2xl border border-[#D8C8B7] bg-[#FCFBF7] p-4"
+              className="rounded-2xl border p-4"
+style={{
+  backgroundColor: siteTheme.surface,
+  borderColor: siteTheme.accent,
+}}
             >
-              <div className="mb-4 h-16 rounded-xl bg-[#173D32]/10" />
-              <p className="text-sm font-semibold text-[#173D32]">
+              <div
+  className="mb-4 h-16 rounded-xl"
+  style={{ backgroundColor: siteTheme.background }}
+/>
+              <p
+  className="text-sm font-semibold"
+  style={{ color: siteTheme.text }}
+>
                 {card.title}
               </p>
             </div>
@@ -496,20 +506,30 @@ previewLength={170}
         {website.serviceCards.slice(0, 6).map((card, index) => (
           <article
             key={`${card.title}-${card.description}`}
-            className="rounded-[24px] border border-[#E8E5DC] bg-[#FCFBF7] p-6"
+            className="rounded-[24px] border p-6"
+style={{
+  backgroundColor: siteTheme.surface,
+  borderColor: siteTheme.accent,
+}}
           >
-            <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-full bg-[#173D32] text-sm font-semibold text-white">
+            <div
+  className="mb-5 flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
+  style={{ backgroundColor: siteTheme.primary }}
+>
               {String(index + 1).padStart(2, "0")}
             </div>
 
-            <h5 className="font-semibold text-[#173D32]">
+            <h5
+  className="font-semibold"
+  style={{ color: siteTheme.text }}
+>
               {card.title}
             </h5>
 
             <ExpandableText
               value={card.description}
               previewLength={100}
-              className="mt-2 text-sm leading-6 text-[#606A64]"
+              className="mt-2 text-sm leading-6"
             />
           </article>
         ))}
@@ -568,11 +588,24 @@ previewLength={170}
           </div>
         </section>}
 
-        {preview.marketing && <section id="marketing" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Marketing</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">How you can show up</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><h3 className="text-xl font-semibold text-[#173D32]">Positioning</h3><ExpandableText value={preview.marketing.positioning} className="mt-4 text-sm leading-7 text-[#606A64]" />{preview.marketing.audience && <><h3 className="mt-7 font-semibold text-[#173D32]">Who it speaks to</h3><ExpandableText value={preview.marketing.audience} className="mt-3 text-sm leading-7 text-[#606A64]" /></>}</div><div className="grid gap-4">{preview.marketing.sections.map((section) => <article key={section.key} className="rounded-[24px] bg-[#173D32] p-6 text-white"><p className="text-xs uppercase tracking-[0.18em] text-white/55">{section.label}</p><ExpandableText value={section.value} previewLength={180} inverse className="mt-3 text-sm leading-7 text-white/80" /></article>)}</div></div></section>}
+        {preview.marketing && <section id="marketing" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Marketing</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">How you can show up</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><h3 className="text-xl font-semibold text-[#173D32]">Positioning</h3><ExpandableText value={preview.marketing.positioning} className="mt-4 text-sm leading-7 text-[#606A64]" />{preview.marketing.audience && <><h3 className="mt-7 font-semibold text-[#173D32]">Who it speaks to</h3><ExpandableText value={preview.marketing.audience} className="mt-3 text-sm leading-7 text-[#606A64]" /></>}</div><div className="grid gap-4">{preview.marketing.sections.map((section) => <article
+  key={section.key}
+  className="rounded-[24px] p-6 text-white"
+  style={{ backgroundColor: siteTheme.primary }}
+><p className="text-xs uppercase tracking-[0.18em] text-white/55">{section.label}</p><ExpandableText value={section.value} previewLength={180} inverse className="mt-3 text-sm leading-7 text-white/80" /></article>)}</div></div></section>}
 
-        {preview.search && <section id="search" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Search</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">How customers can find you</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><ExpandableText value={preview.search.positioning} className="text-sm leading-7 text-[#606A64]" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full bg-[#EEE9DC] px-3 py-2 text-sm text-[#173D32]">{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-[#28705E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><p className="text-xs text-[#3B806E]">Search preview</p><p className="mt-3 text-xl text-[#2457A7]">{preview.search.title || preview.business.name}</p><p className="mt-1 text-sm text-[#3B806E]">buzypeezy.preview › {preview.business.name.toLowerCase().replace(/\s+/g, "-")}</p><OptionalText value={preview.search.description} className="mt-2 text-sm leading-6 text-[#606A64]" /></div>}</div></section>}
+        {preview.search && <section id="search" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Search</p><h2
+  className="mt-3 text-4xl font-semibold tracking-[-0.04em]"
+  style={{ color: siteTheme.text }}
+>How customers can find you</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><ExpandableText value={preview.search.positioning} className="text-sm leading-7 text-[#606A64]" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full bg-[#EEE9DC] px-3 py-2 text-sm text-[#173D32]">{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-[#28705E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div
+  className="rounded-[26px] border p-7"
+  style={{
+    backgroundColor: siteTheme.surface,
+    borderColor: siteTheme.accent,
+  }}
+><p className="text-xs text-[#3B806E]">Search preview</p><p className="mt-3 text-xl text-[#2457A7]">{preview.search.title || preview.business.name}</p><p className="mt-1 text-sm text-[#3B806E]">buzypeezy.preview › {preview.business.name.toLowerCase().replace(/\s+/g, "-")}</p><OptionalText value={preview.search.description} className="mt-2 text-sm leading-6 text-[#606A64]" /></div>}</div></section>}
 
-        {preview.journey && <section id="customer-journey" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Customer Journey</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">From interest to enquiry</h2><div className="mt-7 grid gap-5 lg:grid-cols-3">{preview.journey.leadAction && <div className="rounded-[26px] bg-[#173D32] p-7 text-white"><p className="text-xs uppercase tracking-[0.18em] text-white/55">Primary lead action</p><OptionalText value={preview.journey.leadAction} className="mt-4 text-sm leading-7 text-white/80" /></div>}{preview.journey.enquiryPath && <div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><p className="text-xs uppercase tracking-[0.18em] text-[#8A713F]">Enquiry pathway</p><OptionalText value={preview.journey.enquiryPath} className="mt-4 text-sm leading-7 text-[#606A64]" /></div>}{preview.journey.customerJourney && <div className="rounded-[26px] border border-[#D8DCCF] bg-[#EEE9DC] p-7"><p className="text-xs uppercase tracking-[0.18em] text-[#8A713F]">Customer experience</p><OptionalText value={preview.journey.customerJourney} className="mt-4 text-sm leading-7 text-[#606A64]" /></div>}</div>{preview.journey.primaryCta && <div className="mt-6 rounded-[26px] bg-[#102A23] p-8 text-center text-white"><p className="text-sm text-white/65">Your lead invitation</p><p className="mx-auto mt-3 max-w-3xl text-xl font-semibold">{preview.journey.primaryCta}</p></div>}</section>}
+        {preview.journey && <section id="customer-journey" className="scroll-mt-6 py-14"><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Customer Journey</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">From interest to enquiry</h2><div className="mt-7 grid gap-5 lg:grid-cols-3">{preview.journey.leadAction && <div className="rounded-[26px] p-7 text-white" style={{ backgroundColor: siteTheme.primary }}><p className="text-xs uppercase tracking-[0.18em] text-white/55">Primary lead action</p><OptionalText value={preview.journey.leadAction} className="mt-4 text-sm leading-7 text-white/80" /></div>}{preview.journey.enquiryPath && <div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><p className="text-xs uppercase tracking-[0.18em] text-[#8A713F]">Enquiry pathway</p><OptionalText value={preview.journey.enquiryPath} className="mt-4 text-sm leading-7 text-[#606A64]" /></div>}{preview.journey.customerJourney && <div className="rounded-[26px] border border-[#D8DCCF] bg-[#EEE9DC] p-7"><p className="text-xs uppercase tracking-[0.18em] text-[#8A713F]">Customer experience</p><OptionalText value={preview.journey.customerJourney} className="mt-4 text-sm leading-7 text-[#606A64]" /></div>}</div>{preview.journey.primaryCta && <div className="mt-6 rounded-[26px] bg-[#102A23] p-8 text-center text-white"><p className="text-sm text-white/65">Your lead invitation</p><p className="mx-auto mt-3 max-w-3xl text-xl font-semibold">{preview.journey.primaryCta}</p></div>}</section>}
       </div>
     </main>
   );
