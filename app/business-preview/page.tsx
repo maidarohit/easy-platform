@@ -27,7 +27,7 @@ function ExpandableText({ value, className = "", previewLength = 220, inverse = 
 }) {
   if (!value) return null;
   if (value.length <= previewLength) return <p className={className}>{value}</p>;
-  return <div><p className={className}>{value.slice(0, previewLength).trimEnd()}…</p><details className="mt-3"><summary className={`cursor-pointer text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 ${inverse ? "text-white focus-visible:ring-white" : "text-[#28705E] focus-visible:ring-[#173D32]"}`}>View more</summary><p className={`${className} mt-3 whitespace-pre-wrap`}>{value}</p></details></div>;
+  return <div><p className={className}>{value.slice(0, previewLength).trimEnd()}…</p><details className="mt-3"><summary className={`cursor-pointer text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 ${inverse ? "text-white focus-visible:ring-white" : "text-current focus-visible:ring-current"}`}>View more</summary><p className={`${className} mt-3 whitespace-pre-wrap`}>{value}</p></details></div>;
 }
 
 function BusinessPreviewContent() {
@@ -658,7 +658,10 @@ style={{
     borderColor: siteTheme.accent,
     color: siteTheme.text,
   }}
-><ExpandableText value={preview.search.positioning} className="text-sm leading-7" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full border px-3 py-2 text-sm" style={{ backgroundColor: siteTheme.surface, borderColor: siteTheme.accent, color: siteTheme.text }}>{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-[#28705E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div
+><ExpandableText value={preview.search.positioning} className="text-sm leading-7" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full border px-3 py-2 text-sm" style={{ backgroundColor: siteTheme.surface, borderColor: siteTheme.accent, color: siteTheme.text }}>{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary
+  className="cursor-pointer text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current"
+  style={{ color: siteTheme.accent }}
+>View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div
   className="rounded-[26px] border p-7"
   style={{
     backgroundColor: siteTheme.surface,
