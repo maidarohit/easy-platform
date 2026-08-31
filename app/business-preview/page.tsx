@@ -651,13 +651,20 @@ style={{
 ><p className="text-xs font-semibold uppercase tracking-[0.22em]"style={{ color: siteTheme.accent }}>Search</p><h2
   className="mt-3 text-4xl font-semibold tracking-[-0.04em]"
   style={{ color: siteTheme.text }}
->How customers can find you</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div className="rounded-[26px] border border-[#D8DCCF] bg-white p-7"><ExpandableText value={preview.search.positioning} className="text-sm leading-7 text-[#606A64]" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full border px-3 py-2 text-sm" style={{ backgroundColor: siteTheme.surface, borderColor: siteTheme.accent, color: siteTheme.text }}>{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-[#28705E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div
+>How customers can find you</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div
+  className="rounded-[26px] border p-7"
+  style={{
+    backgroundColor: siteTheme.surface,
+    borderColor: siteTheme.accent,
+    color: siteTheme.text,
+  }}
+><ExpandableText value={preview.search.positioning} className="text-sm leading-7" />{preview.search.keywordTags.length > 0 && <div className="mt-5 flex flex-wrap gap-2" aria-label="Important search themes">{preview.search.keywordTags.map((keyword) => <span key={keyword} className="rounded-full border px-3 py-2 text-sm" style={{ backgroundColor: siteTheme.surface, borderColor: siteTheme.accent, color: siteTheme.text }}>{keyword}</span>)}</div>}{preview.search.keywords && <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold text-[#28705E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">View saved keyword list</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-[#606A64]">{preview.search.keywords}</p></details>}</div>{(preview.search.title || preview.search.description) && <div
   className="rounded-[26px] border p-7"
   style={{
     backgroundColor: siteTheme.surface,
     borderColor: siteTheme.accent,
   }}
-><p className="text-xs text-[#3B806E]">Search preview</p><p className="mt-3 text-xl text-[#2457A7]">{preview.search.title || preview.business.name}</p><p className="mt-1 text-sm text-[#3B806E]">buzypeezy.preview › {preview.business.name.toLowerCase().replace(/\s+/g, "-")}</p><OptionalText value={preview.search.description} className="mt-2 text-sm leading-6 text-[#606A64]" /></div>}</div></section>}
+><p className="text-xs" style={{ color: siteTheme.accent }}>Search preview</p><p className="mt-3 text-xl" style={{ color: siteTheme.text }}>{preview.search.title || preview.business.name}</p><p className="mt-1 text-sm" style={{ color: siteTheme.accent }}>buzypeezy.preview › {preview.business.name.toLowerCase().replace(/\s+/g, "-")}</p><OptionalText value={preview.search.description} className="mt-2 text-sm leading-6" /></div>}</div></section>}
 
         {preview.journey && (
   <section
