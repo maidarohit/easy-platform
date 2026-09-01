@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BILLING_PLANS } from "@/app/lib/billing-plans";
-
+import { LanguageSwitcher } from "./components/LanguageSwitcher";
+import { TranslatedText } from "./components/TranslatedText";
 const ArrowIcon = () => (
   <svg
     aria-hidden="true"
@@ -79,49 +80,30 @@ const outcomeIcons = [
     <path d="M15 7h5v5" />
   </svg>,
 ];
-
 export default function Home() {
-  const outcomes = [
-    ["Start Strong", "Turn an idea into a clear business direction."],
-    [
-      "Look Professional",
-      "Build a credible, consistent presence customers can trust.",
-    ],
-    [
-      "Reach More People",
-      "Create the systems needed to attract the right customers.",
-    ],
-    [
-      "Keep Growing",
-      "Understand what is working and what Buzypeezy recommends next.",
-    ],
-  ];
+const outcomes = [
+  ["startStrong", "startStrongDescription"],
+  ["lookProfessional", "lookProfessionalDescription"],
+  ["reachMore", "reachMoreDescription"],
+  ["keepGrowing", "keepGrowingDescription"],
+] as const;
   const steps = [
-    [
-      "Tell us about your business",
-      "Write naturally. You don’t need to know technical terms.",
-    ],
-    [
-      "Buzypeezy understands what you need",
-      "Your goals, customers and direction are organised automatically.",
-    ],
-    [
-      "Your business system is created",
-      "Everything works together from one shared business understanding.",
-    ],
-    [
-      "Review, improve and launch",
-      "You stay in control and can refine anything later.",
-    ],
-  ];
+    ["stepTellTitle", "stepTellDescription"],
+    ["stepUnderstandTitle", "stepUnderstandDescription"],
+    ["stepCreateTitle", "stepCreateDescription"],
+    ["stepReviewTitle", "stepReviewDescription"],
+  ] as const;
   const overview = [
-    "Your direction",
-    "Your digital presence",
-    "Your customer growth system",
-    "Your business content",
-    "Your performance overview",
-    "Recommended next actions",
-  ];
+    "overviewDirection", "overviewPresence", "overviewGrowth",
+    "overviewContent", "overviewPerformance", "overviewActions",
+  ] as const;
+  const benefits = [
+    "benefitSecure", "benefitOrganised", "benefitControl", "benefitGrowth",
+  ] as const;
+  const planFeatureKeys = {
+    pro: ["proFeatureConnected", "proFeatureAi", "proFeatureSaved"],
+    business: ["businessFeatureStarter", "businessFeatureCapacity", "businessFeatureSupport"],
+  } as const;
   const plans = [
     BILLING_PLANS.pro,
     { ...BILLING_PLANS.business, featured: true },
@@ -142,36 +124,37 @@ export default function Home() {
           </Link>
           <div className="hidden items-center gap-8 [font-size:clamp(0.9375rem,1.1vw,1.0625rem)] font-medium text-[#52605A] md:flex">
             <a href="#how-it-works" className="transition hover:text-[#173D32]">
-              How it Works
+              <TranslatedText id="howItWorks" />
             </a>
             <a href="#for-business" className="transition hover:text-[#173D32]">
-              For Business
+              <TranslatedText id="forBusiness" />
             </a>
             <a href="#pricing" className="transition hover:text-[#173D32]">
-              Pricing
+              <TranslatedText id="pricing" />
             </a>
             <a href="#about" className="transition hover:text-[#173D32]">
-              About
+              <TranslatedText id="about" />
             </a>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            <LanguageSwitcher />
             <Link
               href="/login"
               className="rounded-lg px-2 py-2 text-[15px] font-semibold text-[#173D32] transition hover:bg-[#EEE9DC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] sm:px-3"
             >
-              Log in
+              <TranslatedText id="login" />
             </Link>
             <Link
               href="/idea-finder"
               className="rounded-lg px-3 py-2 text-[15px] font-semibold text-[#173D32] transition hover:bg-[#173D32]/5"
             >
-              Find a Business Idea
+              <TranslatedText id="findIdea" />
             </Link>
             <Link
               href="/signup"
               className="rounded-xl bg-[#173D32] px-4 py-2.5 text-[15px] font-semibold text-white shadow-[0_10px_28px_rgba(23,61,50,0.16)] transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] sm:px-5"
             >
-              Start Building
+              <TranslatedText id="startBuilding" />
             </Link>
           </div>
         </div>
@@ -183,30 +166,30 @@ export default function Home() {
         <div className="relative mx-auto max-w-5xl px-5 text-center sm:px-8">
           <div className="mx-auto flex max-w-4xl flex-col items-center">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-              Business, made easier
+              <TranslatedText id="tagline" />
             </p>
             <h1 className="mt-7 max-w-4xl [font-size:clamp(2.75rem,7vw,5.75rem)] font-semibold leading-[0.96] tracking-[-0.06em] text-[#1B211E]">
-              Your business.
+              <TranslatedText id="hero1" />
               <br />
-              <span className="text-[#173D32]">Built intelligently.</span>
+              <span className="text-[#173D32]">
+  <TranslatedText id="hero2" />
+</span>
             </h1>
             <p className="mt-8 max-w-2xl [font-size:clamp(1.0625rem,1.7vw,1.375rem)] leading-[1.65] text-[#626A64]">
-              Tell Buzypeezy what you do and where you want to go. We’ll turn it
-              into a complete digital business system — ready to build, grow and
-              improve.
-            </p>
+  <TranslatedText id="description" />
+</p>
             <div className="mt-10 flex w-full flex-col justify-center gap-3 sm:w-auto sm:flex-row">
               <Link
                 href="/signup"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173D32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(23,61,50,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]"
               >
-                Start Building <ArrowIcon />
+                <TranslatedText id="startBuilding" /> <ArrowIcon />
               </Link>
               <a
                 href="#how-it-works"
                 className="inline-flex items-center justify-center rounded-xl border border-[#173D32]/20 bg-[#FCFBF7]/70 px-6 py-3.5 text-sm font-semibold text-[#173D32] transition hover:-translate-y-0.5 hover:border-[#173D32]/35 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]"
               >
-                See How It Works
+                <TranslatedText id="seeHow" />
               </a>
             </div>
           </div>
@@ -217,15 +200,13 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="max-w-4xl">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-              Built around your business
+              <TranslatedText id="businessEyebrow" />
             </p>
             <h2 className="mt-6 [font-size:clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.05em] text-[#0E2C24]">
-              One place to move your business forward.
+              <TranslatedText id="businessTitle" />
             </h2>
             <p className="mt-6 max-w-3xl [font-size:clamp(1rem,1.5vw,1.25rem)] leading-[1.75] text-[#6F756F]">
-              You don’t need to understand complex tools or connect disconnected
-              systems. Start with one business brief and Buzypeezy coordinates
-              what your business needs around the same clear direction.
+              <TranslatedText id="businessDescription" />
             </p>
           </div>
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -238,10 +219,10 @@ export default function Home() {
                   {outcomeIcons[index]}
                 </div>
                 <h3 className="mt-8 [font-size:clamp(1.5rem,2vw,1.75rem)] font-semibold leading-tight text-[#0E2C24]">
-                  {title}
+                  <TranslatedText id={title} />
                 </h3>
                 <p className="mt-4 [font-size:clamp(1rem,1.2vw,1.125rem)] leading-[1.7] text-[#6F756F]">
-                  {description}
+                  <TranslatedText id={description} />
                 </p>
               </article>
             ))}
@@ -256,10 +237,10 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="max-w-4xl">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-              How it works
+              <TranslatedText id="howItWorks" />
             </p>
             <h2 className="mt-6 [font-size:clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.05em] text-[#0E2C24]">
-              From what you know to what your business needs.
+              <TranslatedText id="howTitle" />
             </h2>
           </div>
           <div className="mt-14 grid gap-4 lg:grid-cols-4">
@@ -272,10 +253,10 @@ export default function Home() {
                   0{index + 1}
                 </p>
                 <h3 className="mt-8 [font-size:clamp(1.375rem,1.8vw,1.625rem)] font-semibold leading-tight text-[#0E2C24]">
-                  {title}
+                  <TranslatedText id={title} />
                 </h3>
                 <p className="mt-4 [font-size:clamp(1rem,1.15vw,1.125rem)] leading-[1.7] text-[#6F756F]">
-                  {description}
+                  <TranslatedText id={description} />
                 </p>
                 {index < 3 && (
                   <span className="absolute -right-3 top-8 z-10 hidden text-[#A8B8A7] lg:block">
@@ -291,30 +272,28 @@ export default function Home() {
       <section className="py-20 sm:py-28">
         <div className="mx-auto max-w-5xl px-5 text-center sm:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-            Begin naturally
+            <TranslatedText id="beginNaturally" />
           </p>
           <h2 className="mt-6 [font-size:clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.05em] text-[#0E2C24]">
-            Start with what you already know.
+            <TranslatedText id="beginTitle" />
           </h2>
           <p className="mx-auto mt-6 max-w-3xl [font-size:clamp(1rem,1.5vw,1.25rem)] leading-[1.75] text-[#6F756F]">
-            You don’t need a strategy document. Just tell Buzypeezy about your
-            business in your own words.
+            <TranslatedText id="beginDescription" />
           </p>
           <div className="relative mt-12 rounded-[30px] border border-[#173D32]/15 bg-[#FCFBF7] p-7 text-left shadow-[0_25px_70px_rgba(40,52,45,0.09)] sm:p-12">
             <div className="absolute inset-x-20 top-0 h-px bg-gradient-to-r from-transparent via-[#B89A61] to-transparent" />
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#7C857E]">
-              Tell Buzypeezy about your business
+              <TranslatedText id="briefLabel" />
             </p>
             <blockquote className="mt-6 [font-size:clamp(1.5rem,3vw,2.25rem)] leading-[1.45] tracking-[-0.025em] text-[#27332E]">
-              “I run a luxury real estate company in Bangalore and want to
-              attract more serious buyers.”
+              <TranslatedText id="briefExample" />
             </blockquote>
             <div className="mt-9 flex justify-end">
               <Link
                 href="/signup"
                 className="inline-flex items-center gap-2 rounded-xl bg-[#173D32] px-5 py-3 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]"
               >
-                Continue with Buzypeezy <ArrowIcon />
+                <TranslatedText id="continueWithBuzypeezy" /> <ArrowIcon />
               </Link>
             </div>
           </div>
@@ -325,14 +304,13 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl gap-14 px-5 sm:px-8 lg:grid-cols-[.9fr_1.1fr] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#D6C49D]">
-              Connected outcomes
+              <TranslatedText id="connectedOutcomes" />
             </p>
             <h2 className="mt-6 [font-size:clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.05em]">
-              See your business as one complete picture.
+              <TranslatedText id="connectedTitle" />
             </h2>
             <p className="mt-6 [font-size:clamp(1rem,1.5vw,1.25rem)] leading-[1.75] text-[#C1CBC5]">
-              Everything stays connected to the same business understanding, so
-              every next action has context.
+              <TranslatedText id="connectedDescription" />
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -344,7 +322,7 @@ export default function Home() {
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#D6C49D] text-sm font-semibold text-[#173D32]">
                   0{index + 1}
                 </span>
-                <span className="text-base font-medium">{item}</span>
+                <span className="text-base font-medium"><TranslatedText id={item} /></span>
               </div>
             ))}
           </div>
@@ -355,14 +333,13 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-              Simple plans
+              <TranslatedText id="simplePlans" />
             </p>
             <h2 className="mt-6 [font-size:clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.05em] text-[#0E2C24]">
-              Choose what fits your business.
+              <TranslatedText id="pricingTitle" />
             </h2>
             <p className="mx-auto mt-6 max-w-3xl [font-size:clamp(1rem,1.5vw,1.25rem)] leading-[1.75] text-[#6F756F]">
-              Start with the capacity you need today and move forward as your
-              business grows.
+              <TranslatedText id="pricingDescription" />
             </p>
           </div>
           <div className="mx-auto mt-14 grid max-w-4xl gap-6 lg:grid-cols-2">
@@ -373,25 +350,25 @@ export default function Home() {
               >
                 {plan.featured && (
                   <span className="absolute right-5 top-5 rounded-full bg-[#173D32] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white">
-                    Most selected
+                    <TranslatedText id="mostSelected" />
                   </span>
                 )}
                 <h3 className="text-2xl font-semibold text-[#0E2C24]">
-                  {plan.name}
+                  <TranslatedText id={plan.key === "pro" ? "planPro" : "planBusiness"} />
                 </h3>
                 <div className="mt-8 flex items-end gap-1">
                   <span className="[font-size:clamp(3.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.05em] text-[#0E2C24]">
                     {plan.price}
                   </span>
                   <span className="pb-1 text-base text-[#747B76]">
-                    {plan.period}
+                    <TranslatedText id={plan.key === "pro" ? "periodPro" : "periodBusiness"} />
                   </span>
                 </div>
                 <p className="mt-6 min-h-14 text-base leading-7 text-[#6F756F]">
-                  {plan.description}
+                  <TranslatedText id={plan.key === "pro" ? "planProDescription" : "planBusinessDescription"} />
                 </p>
                 <ul className="mt-8 space-y-4">
-                  {plan.features.map((feature) => (
+                  {plan.features.map((feature, index) => (
                     <li
                       key={feature}
                       className="flex items-center gap-3 text-base text-[#46514B]"
@@ -399,7 +376,7 @@ export default function Home() {
                       <span className="text-[#173D32]">
                         <CheckIcon />
                       </span>
-                      {feature}
+                      <TranslatedText id={planFeatureKeys[plan.key][index]} />
                     </li>
                   ))}
                 </ul>
@@ -407,7 +384,7 @@ export default function Home() {
                   href={`/billing?plan=${plan.key}`}
                   className={`mt-9 inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] ${plan.featured ? "bg-[#173D32] text-white hover:bg-[#0E2C24]" : "border border-[#173D32]/20 text-[#173D32] hover:border-[#173D32]/40 hover:bg-[#EDF0E8]"}`}
                 >
-                  Choose {plan.name}
+                  <TranslatedText id={plan.key === "pro" ? "choosePro" : "chooseBusiness"} />
                 </Link>
               </article>
             ))}
@@ -418,7 +395,7 @@ export default function Home() {
             href="/billing"
             className="inline-flex rounded-xl bg-[#173D32] px-6 py-3.5 font-semibold text-white hover:bg-[#0E2C24]"
           >
-            Continue to secure checkout
+            <TranslatedText id="secureCheckout" />
           </Link>
         </div>
       </section>
@@ -430,19 +407,14 @@ export default function Home() {
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="max-w-4xl">
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6E774D]">
-              Designed for clarity
+              <TranslatedText id="designedForClarity" />
             </p>
             <h2 className="mt-6 [font-size:clamp(2.25rem,4.5vw,3.75rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#0E2C24]">
-              Built for businesses that want simplicity without losing control.
+              <TranslatedText id="aboutTitle" />
             </h2>
           </div>
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              "Secure account access",
-              "Your projects stay organised",
-              "You remain in control",
-              "Built to grow with your business",
-            ].map((item) => (
+            {benefits.map((item) => (
               <div
                 key={item}
                 className="flex items-center gap-3 rounded-2xl border border-[#173D32]/10 bg-[#FCFBF7]/75 p-5 text-base font-medium text-[#344039]"
@@ -450,7 +422,7 @@ export default function Home() {
                 <span className="text-[#173D32]">
                   <CheckIcon />
                 </span>
-                {item}
+                <TranslatedText id={item} />
               </div>
             ))}
           </div>
@@ -460,17 +432,16 @@ export default function Home() {
       <section className="py-24 text-center sm:py-32">
         <div className="mx-auto max-w-4xl px-5">
           <h2 className="[font-size:clamp(2.5rem,5.5vw,4.25rem)] font-semibold leading-[1.01] tracking-[-0.055em] text-[#0E2C24]">
-            Ready to make your business easier?
+            <TranslatedText id="finalTitle" />
           </h2>
           <p className="mt-7 [font-size:clamp(1rem,1.5vw,1.25rem)] leading-[1.75] text-[#6F756F]">
-            Start with what you know. Buzypeezy will help organise what comes
-            next.
+            <TranslatedText id="finalDescription" />
           </p>
           <Link
             href="/signup"
             className="mt-9 inline-flex items-center gap-2 rounded-xl bg-[#173D32] px-7 py-4 text-base font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]"
           >
-            Start Building <ArrowIcon />
+            <TranslatedText id="startBuilding" /> <ArrowIcon />
           </Link>
         </div>
       </section>
@@ -481,32 +452,32 @@ export default function Home() {
             <p className="font-semibold text-[#173D32]">Buzypeezy</p>
             <div className="flex flex-wrap gap-x-6 gap-y-3">
               <a href="#how-it-works" className="hover:text-[#173D32]">
-                How it Works
+                <TranslatedText id="howItWorks" />
               </a>
               <a href="#pricing" className="hover:text-[#173D32]">
-                Pricing
+                <TranslatedText id="pricing" />
               </a>
               <Link href="/login" className="hover:text-[#173D32]">
-                Log in
+                <TranslatedText id="login" />
               </Link>
               <Link href="/signup" className="hover:text-[#173D32]">
-                Start Building
+                <TranslatedText id="startBuilding" />
               </Link>
             </div>
-            <p>Built to make business simpler.</p>
+            <p><TranslatedText id="footerTagline" /></p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-3 border-t border-[#173D32]/10 pt-6">
             <Link href="/privacy" className="hover:text-[#173D32]">
-              Privacy Policy
+              <TranslatedText id="privacyPolicy" />
             </Link>
             <Link href="/terms" className="hover:text-[#173D32]">
-              Terms of Service
+              <TranslatedText id="termsOfService" />
             </Link>
             <Link href="/refund-cancellation" className="hover:text-[#173D32]">
-              Refund &amp; Cancellation
+              <TranslatedText id="refundCancellation" />
             </Link>
             <Link href="/contact-support" className="hover:text-[#173D32]">
-              Contact &amp; Support
+              <TranslatedText id="contactSupport" />
             </Link>
           </div>
         </div>
