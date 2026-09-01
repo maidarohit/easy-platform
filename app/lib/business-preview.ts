@@ -138,6 +138,9 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
       about: displayExcerpt(websiteEdits?.aboutText || branding?.story, 900),
       features: displayExcerpt(website.websiteFeatures, 800),
       contact: displayText(websiteEdits?.email) || displayText(websiteEdits?.phone) || displayText(websiteEdits?.whatsapp),
+      heroImage: null as string | null,
+      secondaryImage: null as string | null,
+      businessVideo: null as string | null,
     } : null,
     marketing: marketing ? {
       positioning: displayText(marketing.marketingStrategy),

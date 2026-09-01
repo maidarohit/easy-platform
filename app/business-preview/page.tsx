@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import type { BusinessPreview } from "@/app/lib/business-preview";
@@ -11,6 +11,13 @@ import {
   applyPreviewOverrides, PREVIEW_EDIT_RULES, previewFieldValue, validatePreviewOverrides,
   type PreviewEditableField, type PreviewOverrides,
 } from "@/app/lib/business-preview-edits";
+import { BusinessSiteVisual } from "@/app/components/BusinessSiteVisual";
+import {
+  businessServiceVisual,
+  businessShowcaseVisuals,
+  resolveBusinessVisual,
+  uploadedSrcFromRecord,
+} from "@/app/lib/business-site-visuals";
 
 type Viewport = "desktop" | "tablet" | "mobile";
 type Publication = { status: "unpublished" | "active" | "inactive"; publicUrl?: string; publishedPreviewRevision?: number; canPublish?: boolean };
@@ -41,6 +48,10 @@ function BusinessPreviewContent() {
 const [colorTheme, setColorTheme] = useState<"modern-green" | "luxury-dark" | "minimal-light" | "warm-earth" | "bold-business">("modern-green");
 const [backgroundStyle, setBackgroundStyle] = useState<"clean" | "industry" | "gradient" | "pattern">("industry");
 const [visualIntensity, setVisualIntensity] = useState<"none" | "subtle" | "medium">("subtle");
+  const [uploadingSlot, setUploadingSlot] = useState<"hero" | "secondary" | "video" | null>(null);
+  const mainPhotoInputRef = useRef<HTMLInputElement>(null);
+  const secondPhotoInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
 const siteTheme = {
   "modern-green": {
@@ -180,8 +191,13 @@ const visualOpacity =
   }
 
   function resetToOriginal() {
-    if (originalPreview) setPreview(originalPreview);
-    setDraftOverrides({});
+    const imageOnly = {
+      ...(savedOverrides.heroImage ? { heroImage: savedOverrides.heroImage } : {}),
+      ...(savedOverrides.secondaryImage ? { secondaryImage: savedOverrides.secondaryImage } : {}),
+      ...(savedOverrides.businessVideo ? { businessVideo: savedOverrides.businessVideo } : {}),
+    };
+    if (originalPreview) setPreview(applyPreviewOverrides(originalPreview, imageOnly));
+    setDraftOverrides(imageOnly);
     setError("");
   }
 
@@ -206,6 +222,118 @@ const visualOpacity =
     } finally { setSaving(false); }
   }
 
+  async function uploadBusinessPhoto(slot: "hero" | "secondary", file: File) {
+    if (!projectId || uploadingSlot) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setError("That photo is too large. Use an image under 4 MB.");
+      const input = slot === "hero" ? mainPhotoInputRef.current : secondPhotoInputRef.current;
+      if (input) input.value = "";
+      return;
+    }
+    setUploadingSlot(slot);
+    setError("");
+    try {
+      const body = new FormData();
+      body.append("projectId", projectId);
+      body.append("slot", slot);
+      body.append("image", file);
+      const response = await authenticatedFetch("/api/business-preview/images", { method: "POST", body });
+      const data = await response.json() as {
+        preview?: BusinessPreview;
+        overrides?: PreviewOverrides;
+        error?: string;
+        debug?: { reason?: string; message?: string; bucket?: string; code?: string | number };
+      };
+      if (!response.ok) {
+        const debugHint = data.debug?.reason
+          ? ` (${data.debug.reason}${data.debug.bucket ? `: ${data.debug.bucket}` : ""})`
+          : "";
+        throw new Error(`${data.error || "Unable to upload that photo."}${process.env.NODE_ENV === "development" ? debugHint : ""}`);
+      }
+      if (data.preview) setPreview(data.preview);
+      if (data.overrides) {
+        setSavedOverrides(data.overrides);
+        setDraftOverrides((current) => ({
+          ...current,
+          heroImage: data.overrides?.heroImage,
+          secondaryImage: data.overrides?.secondaryImage,
+          businessVideo: data.overrides?.businessVideo,
+        }));
+      }
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload that photo.");
+    } finally {
+      setUploadingSlot(null);
+      const input = slot === "hero" ? mainPhotoInputRef.current : secondPhotoInputRef.current;
+      if (input) input.value = "";
+    }
+  }
+
+  async function uploadBusinessVideo(file: File) {
+    if (!projectId || uploadingSlot) return;
+    if (file.size > 50 * 1024 * 1024) {
+      setError("That video is too large. Use a file under 50 MB.");
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      return;
+    }
+    setUploadingSlot("video");
+    setError("");
+    try {
+      const signResponse = await authenticatedFetch("/api/business-preview/videos/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, contentType: file.type, byteSize: file.size }),
+      });
+      const signData = await signResponse.json() as {
+        uploadUrl?: string;
+        objectPath?: string;
+        contentType?: string;
+        requiredHeaders?: Record<string, string>;
+        error?: string;
+      };
+      if (!signResponse.ok) throw new Error(signData.error || "Unable to start that video upload.");
+      if (!signData.uploadUrl || !signData.objectPath || !signData.requiredHeaders) {
+        throw new Error("Unable to start that video upload.");
+      }
+      const putResponse = await fetch(signData.uploadUrl, {
+        method: "PUT",
+        headers: signData.requiredHeaders,
+        body: file,
+      });
+      if (!putResponse.ok) throw new Error("Unable to upload that video. Please try again.");
+      const finalizeResponse = await authenticatedFetch("/api/business-preview/videos/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          objectPath: signData.objectPath,
+          contentType: signData.contentType,
+        }),
+      });
+      const data = await finalizeResponse.json() as {
+        preview?: BusinessPreview;
+        overrides?: PreviewOverrides;
+        error?: string;
+      };
+      if (!finalizeResponse.ok) throw new Error(data.error || "Unable to save that video.");
+      if (data.preview) setPreview(data.preview);
+      if (data.overrides) {
+        setSavedOverrides(data.overrides);
+        setDraftOverrides((current) => ({
+          ...current,
+          heroImage: data.overrides?.heroImage,
+          secondaryImage: data.overrides?.secondaryImage,
+          businessVideo: data.overrides?.businessVideo,
+        }));
+      }
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Unable to upload that video.");
+    } finally {
+      setUploadingSlot(null);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  }
+
   async function updatePublication(method: "POST" | "DELETE") {
     if (!projectId || publishing) return;
     setPublishing(true); setError("");
@@ -228,6 +356,12 @@ const visualOpacity =
   const brand = preview.brand;
   const website = preview.website;
   const renderedSections = renderedBusinessPreviewSections(preview);
+  const visualContext = { industry: preview.business.industry, description: preview.business.description };
+  const showVisuals = visualIntensity !== "none";
+  const heroVisual = resolveBusinessVisual({ slot: "hero", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "hero") });
+  const aboutVisual = resolveBusinessVisual({ slot: "about", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "about") });
+  const ctaVisual = resolveBusinessVisual({ slot: "social", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "social") });
+  const showcaseVisuals = businessShowcaseVisuals({ ...visualContext, count: 4, uploadedSrcs: [uploadedSrcFromRecord(website, "showcase")] });
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-4 py-6 text-[#1B211E] sm:px-7 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -258,7 +392,7 @@ const visualOpacity =
 
         {!editing && <section id="contact-social" className="mt-5 rounded-[24px] border border-[#D8DCCF] bg-white p-5 sm:p-7"><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Contact &amp; Social</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">How can customers contact you?</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#606A64]">Only details you enter and save here are approved for your public page. Your private account email and phone are never published automatically. The secure enquiry form remains available even if you add no direct details.</p><form onSubmit={saveContactSettings} className="mt-6 grid gap-4 sm:grid-cols-2">{PUBLIC_CONTACT_FIELDS.map((field) => <label key={field} className="text-sm font-semibold capitalize text-[#173D32]">{field === "linkedin" ? "LinkedIn URL" : field === "instagram" || field === "facebook" || field === "website" ? `${field} URL` : field === "location" ? "Location / service area" : `Public ${field}`}<input type={field === "email" ? "email" : field === "phone" || field === "whatsapp" ? "tel" : field === "location" ? "text" : "url"} value={contact[field] ?? ""} placeholder={field === "whatsapp" || field === "phone" ? "+919876543210" : undefined} onChange={(event) => setContact((current) => ({ ...current, [field]: event.target.value }))} className="mt-2 w-full rounded-xl border border-[#C7CDBF] px-4 py-3 font-normal" /></label>)}<div className="sm:col-span-2"><button type="submit" disabled={savingContact} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60">{savingContact ? "Saving…" : "Save approved contact details"}</button>{contactStatus && <p role="status" className="mt-3 text-sm text-[#606A64]">{contactStatus}</p>}</div></form></section>}
 
-        {editing && originalPreview && <section aria-label="Edit Preview" className="sticky top-3 z-20 mt-5 rounded-[26px] border border-[#A8B8A7] bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Edit Preview</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">Make simple text changes</h2><p className="mt-2 text-sm text-[#606A64]">Your generated originals stay unchanged.</p></div><div className="rounded-xl border border-dashed border-[#C7CDBF] bg-[#F7F4EC] px-4 py-3 text-sm text-[#606A64]">Images can be added later.</div></div><div className="mt-6 grid max-h-[48vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2">{(Object.keys(PREVIEW_EDIT_RULES) as PreviewEditableField[]).map((field) => { const baseline = previewFieldValue(originalPreview, field); if (!baseline) return null; const rule = PREVIEW_EDIT_RULES[field]; const edited = Object.hasOwn(draftOverrides, field); return <label key={field} className="block rounded-2xl border border-[#E4E5DD] bg-[#FCFBF7] p-4"><span className="flex items-center justify-between gap-3 text-sm font-semibold text-[#173D32]"><span>{rule.label}</span>{edited && <span className="text-xs font-medium text-[#8A713F]">Edited</span>}</span><textarea value={draftOverrides[field] ?? baseline} maxLength={rule.maximum} rows={field.includes("title") || field.includes("Headline") || field.includes("Cta") || field === "brand.tagline" ? 2 : 4} onChange={(event) => updateDraft(field, event.target.value)} className="mt-3 w-full resize-y rounded-xl border border-[#C7CDBF] bg-white p-3 text-sm leading-6 text-[#1B211E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]" /><span className="mt-1 block text-right text-xs text-[#7B847E]">{(draftOverrides[field] ?? baseline).length}/{rule.maximum}</span></label>; })}</div><div className="mt-5 flex flex-wrap gap-3 border-t border-[#E4E5DD] pt-5"><button type="button" disabled={saving} onClick={() => void saveChanges()} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2">{saving ? "Saving..." : "Save Changes"}</button><button type="button" disabled={saving} onClick={cancelEditing} className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 font-semibold text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Cancel</button><button type="button" disabled={saving} onClick={resetToOriginal} className="min-h-11 rounded-xl px-5 font-semibold text-[#8A4B3D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A4B3D]">Reset to Original</button></div></section>}
+        {editing && originalPreview && <section aria-label="Edit Preview" className="sticky top-3 z-20 mt-5 rounded-[26px] border border-[#A8B8A7] bg-white/95 p-5 shadow-xl backdrop-blur sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Edit Preview</p><h2 className="mt-2 text-2xl font-semibold text-[#173D32]">Make simple text changes</h2><p className="mt-2 text-sm text-[#606A64]">Your generated originals stay unchanged.</p></div></div><div className="mt-6 grid max-h-[48vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2">{(Object.keys(PREVIEW_EDIT_RULES) as PreviewEditableField[]).map((field) => { const baseline = previewFieldValue(originalPreview, field); if (!baseline) return null; const rule = PREVIEW_EDIT_RULES[field]; const edited = Object.hasOwn(draftOverrides, field); return <label key={field} className="block rounded-2xl border border-[#E4E5DD] bg-[#FCFBF7] p-4"><span className="flex items-center justify-between gap-3 text-sm font-semibold text-[#173D32]"><span>{rule.label}</span>{edited && <span className="text-xs font-medium text-[#8A713F]">Edited</span>}</span><textarea value={draftOverrides[field] ?? baseline} maxLength={rule.maximum} rows={field.includes("title") || field.includes("Headline") || field.includes("Cta") || field === "brand.tagline" ? 2 : 4} onChange={(event) => updateDraft(field, event.target.value)} className="mt-3 w-full resize-y rounded-xl border border-[#C7CDBF] bg-white p-3 text-sm leading-6 text-[#1B211E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]" /><span className="mt-1 block text-right text-xs text-[#7B847E]">{(draftOverrides[field] ?? baseline).length}/{rule.maximum}</span></label>; })}</div><div className="mt-5 flex flex-wrap gap-3 border-t border-[#E4E5DD] pt-5"><button type="button" disabled={saving} onClick={() => void saveChanges()} className="min-h-11 rounded-xl bg-[#173D32] px-5 font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2">{saving ? "Saving..." : "Save Changes"}</button><button type="button" disabled={saving} onClick={cancelEditing} className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 font-semibold text-[#173D32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]">Cancel</button><button type="button" disabled={saving} onClick={resetToOriginal} className="min-h-11 rounded-xl px-5 font-semibold text-[#8A4B3D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8A4B3D]">Reset to Original</button></div></section>}
 
         {brand && <section id="brand" className="scroll-mt-6 py-14">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Brand</p>
@@ -415,19 +549,20 @@ const visualOpacity =
   }}
 >
               <div className="flex items-center justify-between border-b border-[#E8E5DC] px-5 py-4"><strong className="text-[#173D32]">{preview.business.name}</strong><span className="text-xs text-[#606A64]">Home&nbsp;&nbsp; About&nbsp;&nbsp; Contact</span></div>
-              <div className="grid overflow-hidden lg:grid-cols-[1.08fr_0.92fr]">
+              <div className="grid items-center overflow-hidden lg:grid-cols-[1.15fr_0.85fr]">
   <div
-  className="px-6 py-14 sm:px-10 sm:py-20"
+  className="relative px-6 py-14 sm:px-10 sm:py-20"
   style={{
-    backgroundColor: siteTheme.primary,
-    color: colorTheme === "minimal-light" ? "#FFFFFF" : "#FFFFFF",
+    background: `linear-gradient(165deg, ${siteTheme.primary} 0%, ${siteTheme.primary}F2 100%)`,
+    color: "#FFFFFF",
   }}
 >
+    <div className="relative max-w-xl">
     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
       Designed around your business
     </p>
 
-    <h3 className="mt-4 max-w-3xl text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
+    <h3 className="mt-4 text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-5xl">
       {website.heroHeadline || preview.business.name}
     </h3>
 
@@ -443,11 +578,42 @@ previewLength={170}
         {website.primaryCta}
       </span>
     )}
+    </div>
   </div>
 
-  <div className="bg-[#E9DCC9] p-6 sm:p-10">
-    <div className="flex min-h-[300px] flex-col justify-between rounded-[28px] border border-black/10 bg-white/75 p-6 shadow-sm">
-      <div>
+  <div className="relative p-6 sm:p-8" style={{ backgroundColor: siteTheme.background }}>
+    {showVisuals ? (
+      <BusinessSiteVisual src={heroVisual.src} alt={heroVisual.alt} interactive overlay className="aspect-[4/3] min-h-52 shadow-xl" roundedClassName="rounded-[1.75rem] border border-black/10" />
+    ) : (
+      <div className="min-h-52 rounded-[1.75rem] border border-black/10" style={{ backgroundColor: siteTheme.surface }} />
+    )}
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      <input
+        ref={mainPhotoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void uploadBusinessPhoto("hero", file);
+        }}
+      />
+      <button
+        type="button"
+        disabled={Boolean(uploadingSlot)}
+        onClick={() => mainPhotoInputRef.current?.click()}
+        className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#173D32] disabled:opacity-60"
+      >
+        {uploadingSlot === "hero" ? "Uploading…" : website.heroImage ? "Replace main photo" : "Upload main photo"}
+      </button>
+      {website.heroImage && <p className="text-sm text-[#606A64]">Main photo is saved with this business.</p>}
+    </div>
+  </div>
+</div>
+
+{showVisuals && (
+  <div className="px-6 py-12 sm:px-10" style={{ backgroundColor: siteTheme.surface }}>
+    <div className="max-w-2xl">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8A713F]">
           Visual showcase
         </p>
@@ -459,39 +625,70 @@ previewLength={170}
         <p className="mt-3 max-w-md text-sm leading-6 text-[#606A64]">
           Add real project photos, product images, portfolio work or video when available.
         </p>
-      </div>
-
-      {website.serviceCards.length > 0 && (
-        <div className="mt-8 grid gap-3 sm:grid-cols-2">
-          {website.serviceCards.slice(0, 4).map((card) => (
-            <div
-              key={`visual-${card.title}`}
-              className="rounded-2xl border p-4"
-style={{
-  backgroundColor: siteTheme.surface,
-  borderColor: siteTheme.accent,
-}}
-            >
-              <div
-  className="mb-4 h-16 rounded-xl"
-  style={{ backgroundColor: siteTheme.background }}
-/>
-              <p
-  className="text-sm font-semibold"
-  style={{ color: siteTheme.text }}
->
-                {card.title}
-              </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <input
+            ref={secondPhotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void uploadBusinessPhoto("secondary", file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={Boolean(uploadingSlot)}
+            onClick={() => secondPhotoInputRef.current?.click()}
+            className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#173D32] disabled:opacity-60"
+          >
+            {uploadingSlot === "secondary" ? "Uploading…" : website.secondaryImage ? "Replace second photo" : "Upload second photo"}
+          </button>
+          {website.secondaryImage && <p className="text-sm text-[#606A64]">Second photo is saved with this business.</p>}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void uploadBusinessVideo(file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={Boolean(uploadingSlot)}
+            onClick={() => videoInputRef.current?.click()}
+            className="min-h-11 rounded-xl border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#173D32] disabled:opacity-60"
+          >
+            {uploadingSlot === "video" ? "Uploading…" : website.businessVideo ? "Replace business video" : "Upload business video"}
+          </button>
+          {website.businessVideo && <p className="text-sm text-[#606A64]">Business video is saved with this business.</p>}
+        </div>
+        {website.businessVideo && (
+          <video
+            src={website.businessVideo}
+            controls
+            playsInline
+            preload="metadata"
+            className="mt-6 w-full rounded-[1.25rem] border border-black/10 bg-black"
+          />
+        )}
+    </div>
+        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-12">
+          {showcaseVisuals.map((visual, index) => (
+            <div key={`${visual.src}-${index}`} className={`business-site-card overflow-hidden ${index === 0 || index === 3 ? "col-span-2 aspect-[16/9] md:col-span-8 md:aspect-[16/10]" : "aspect-[4/3] md:col-span-4"}`}>
+              <BusinessSiteVisual src={visual.src} alt={visual.alt} className="h-full min-h-full" roundedClassName="rounded-[1.25rem]" />
             </div>
           ))}
         </div>
-      )}
-    </div>
   </div>
-</div>
+)}
 
 {website.services && (
-  <div className="px-6 py-12 sm:px-10">
+  <div className="px-6 py-12 sm:px-10" style={{ backgroundColor: siteTheme.background }}>
     <div className="max-w-2xl">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8A713F]">
         What we offer
@@ -503,15 +700,24 @@ style={{
 
     {website.serviceCards.length > 0 ? (
       <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {website.serviceCards.slice(0, 6).map((card, index) => (
+        {website.serviceCards.map((card, index) => (
           <article
             key={`${card.title}-${card.description}`}
-            className="rounded-[24px] border p-6"
+            className="business-site-card overflow-hidden rounded-[24px] border p-0"
 style={{
   backgroundColor: siteTheme.surface,
   borderColor: siteTheme.accent,
 }}
           >
+            {showVisuals && (
+              <BusinessSiteVisual
+                src={businessServiceVisual({ index, ...visualContext, uploadedSrc: uploadedSrcFromRecord(card, "services") }).src}
+                alt=""
+                className="h-28"
+                roundedClassName="rounded-none"
+              />
+            )}
+            <div className="p-6">
             <div
   className="mb-5 flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold text-white"
   style={{ backgroundColor: siteTheme.primary }}
@@ -531,6 +737,7 @@ style={{
               previewLength={100}
               className="mt-2 text-sm leading-6"
             />
+            </div>
           </article>
         ))}
       </div>
@@ -547,16 +754,18 @@ style={{
 {website.about && (
   <div
     className="px-6 py-12 sm:px-10"
-    style={{ backgroundColor: siteTheme.background }}
+    style={{ backgroundColor: siteTheme.surface }}
   >
     <div
-      className="mx-auto max-w-3xl rounded-[24px] border p-6 sm:p-8"
+      className="mx-auto grid max-w-5xl overflow-hidden rounded-[24px] border lg:grid-cols-[0.9fr_1.1fr]"
       style={{
-        backgroundColor: siteTheme.surface,
+        backgroundColor: siteTheme.background,
         borderColor: siteTheme.accent,
         color: siteTheme.text,
       }}
     >
+      {showVisuals && <BusinessSiteVisual src={aboutVisual.src} alt={aboutVisual.alt} className="min-h-52 lg:min-h-full" roundedClassName="rounded-none" />}
+      <div className="flex flex-col justify-center p-6 sm:p-8">
       <p
         className="text-xs font-semibold uppercase tracking-[0.18em]"
         style={{ color: siteTheme.accent }}
@@ -576,14 +785,18 @@ style={{
         previewLength={220}
         className="mt-4 text-sm leading-7"
       />
+      </div>
     </div>
   </div>
 )}
 
 <div
-  className="px-6 py-12 text-center text-white sm:px-10"
+  className="relative overflow-hidden px-6 py-12 text-center text-white sm:px-10"
   style={{ backgroundColor: siteTheme.primary }}
 >
+  <div aria-hidden="true" className="business-site-cta-pattern pointer-events-none absolute inset-0 opacity-40" />
+  {showVisuals && <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 opacity-25 lg:block"><BusinessSiteVisual src={ctaVisual.src} alt="" className="h-full min-h-full" roundedClassName="rounded-none" /></div>}
+  <div className="relative">
   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">
     Start your project
   </p>
@@ -607,6 +820,7 @@ style={{
       {website.primaryCta}
     </span>
   )}
+  </div>
 </div>
 
 <div
@@ -621,14 +835,7 @@ style={{
 </div>
 </div>
 </section>}
-        {preview.marketing && <section
-  id="marketing"
-  className="scroll-mt-6 py-14"
-  style={{
-    backgroundColor: siteTheme.background,
-    color: siteTheme.text,
-  }}
-><p className="text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: siteTheme.accent }}>Marketing</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em]" style={{ color: siteTheme.text }}>How you can show up</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div
+        {preview.marketing && <section id="marketing" className="scroll-mt-6 py-14" style={{ backgroundColor: siteTheme.background, color: siteTheme.text }}><p className="text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: siteTheme.accent }}>Marketing</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em]" style={{ color: siteTheme.text }}>How you can show up</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div
   className="rounded-[26px] border p-7"
   style={{
     backgroundColor: siteTheme.surface,
@@ -641,14 +848,7 @@ style={{
   style={{ backgroundColor: siteTheme.primary }}
 ><p className="text-xs uppercase tracking-[0.18em] text-white/55">{section.label}</p><ExpandableText value={section.value} previewLength={180} inverse className="mt-3 text-sm leading-7 text-white/80" /></article>)}</div></div></section>}
 
-        {preview.search && <section
-  id="search"
-  className="scroll-mt-6 py-14"
-  style={{
-    backgroundColor: siteTheme.background,
-    color: siteTheme.text,
-  }}
-><p className="text-xs font-semibold uppercase tracking-[0.22em]"style={{ color: siteTheme.accent }}>Search</p><h2
+        {preview.search && <section id="search" className="scroll-mt-6 py-14" style={{ backgroundColor: siteTheme.background, color: siteTheme.text }}><p className="text-xs font-semibold uppercase tracking-[0.22em]"style={{ color: siteTheme.accent }}>Search</p><h2
   className="mt-3 text-4xl font-semibold tracking-[-0.04em]"
   style={{ color: siteTheme.text }}
 >How customers can find you</h2><div className="mt-7 grid gap-5 lg:grid-cols-2"><div
@@ -670,14 +870,7 @@ style={{
 ><p className="text-xs" style={{ color: siteTheme.accent }}>Search preview</p><p className="mt-3 text-xl" style={{ color: siteTheme.text }}>{preview.search.title || preview.business.name}</p><p className="mt-1 text-sm" style={{ color: siteTheme.accent }}>buzypeezy.preview › {preview.business.name.toLowerCase().replace(/\s+/g, "-")}</p><OptionalText value={preview.search.description} className="mt-2 text-sm leading-6" /></div>}</div></section>}
 
         {preview.journey && (
-  <section
-    id="customer-journey"
-    className="scroll-mt-6 py-14"
-    style={{
-      backgroundColor: siteTheme.background,
-      color: siteTheme.text,
-    }}
-  >
+  <section id="customer-journey" className="scroll-mt-6 py-14" style={{ backgroundColor: siteTheme.background, color: siteTheme.text }}>
     <p
       className="text-xs font-semibold uppercase tracking-[0.22em]"
       style={{ color: siteTheme.accent }}

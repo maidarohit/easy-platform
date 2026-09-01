@@ -8,6 +8,10 @@ import {
   type App,
 } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
+import { firebaseStorageBucketName } from "@/app/lib/firebase-storage-bucket";
+
+export { firebaseStorageBucketName, FIREBASE_PROJECT_STORAGE_BUCKET } from "@/app/lib/firebase-storage-bucket";
 
 function getFirebaseAdminApp(): App {
   if (getApps().length > 0) {
@@ -28,7 +32,12 @@ function getFirebaseAdminApp(): App {
       clientEmail,
       privateKey: privateKey.replace(/\\n/g, "\n"),
     }),
+    storageBucket: firebaseStorageBucketName(),
   });
+}
+
+export function getFirebaseAdminStorageBucket() {
+  return getStorage(getFirebaseAdminApp()).bucket(firebaseStorageBucketName());
 }
 
 export async function verifyFirebaseIdToken(
