@@ -10,6 +10,7 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { validateProjectMutationBody } from "@/app/lib/project-request-validation";
+import { supportedLanguageOrEnglish } from "@/app/lib/supported-languages";
 
 const MAX_PROJECT_BODY_BYTES = 32 * 1024;
 
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
       brandStyle: asText(body.brandStyle),
       brandDescription: asText(body.businessDescription ?? body.brandDescription),
       result: asText(body.result),
+      primaryLanguage: supportedLanguageOrEnglish(body.primaryLanguage),
     };
 
     const [existingProject] = createOnly ? [] : await db
@@ -133,9 +135,10 @@ export async function GET(req: Request) {
 
   try {
     userId = (await verifyFirebaseIdToken(req)).uid;
-  } catch {
-    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
-  }
+  } catch (error) {
+  console.error("PROJECTS_GET_AUTH_ERROR:", error);
+  return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
+}
 
   try {
     const { searchParams } = new URL(req.url);

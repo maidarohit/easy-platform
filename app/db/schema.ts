@@ -17,6 +17,7 @@ import type { BusinessDnaContent } from "@/app/lib/business-dna";
 import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import type { PublicContactSettings } from "@/app/lib/public-contact";
+import type { SupportedLanguageCode } from "@/app/lib/supported-languages";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -40,9 +41,12 @@ export const projects = pgTable("projects", {
   brandStyle: text("brand_style"),
   brandDescription: text("brand_description"),
   result: text("result"),
+  primaryLanguage: varchar("primary_language", { length: 2 }).$type<SupportedLanguageCode>().default("en").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  check("projects_primary_language_check", sql`${table.primaryLanguage} in ('en','es','fr','de','pt','ar','hi','ja','ko','zh','kn','ta','te','ml')`),
+]);
 
 export const aiUsage = pgTable("ai_usage", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -253,6 +257,92 @@ export const projectPublicContacts = pgTable("project_public_contacts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [index("project_public_contacts_owner_idx").on(table.userId)]);
 
+export type ProjectCommerceCheckoutMode = "order_request";
+export type ProjectCommerceSettingsJson = Readonly<Record<string, never>>;
+export const projectCommerceSettings = pgTable("project_commerce_settings", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  checkoutMode: varchar("checkout_mode", { length: 32 }).$type<ProjectCommerceCheckoutMode>().notNull().default("order_request"),
+  settings: jsonb("settings").$type<ProjectCommerceSettingsJson>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("project_commerce_settings_owner_idx").on(table.userId)]);
+
+export type ProjectProductKind = "product" | "service";
+export const projectProducts = pgTable("project_products", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  slug: varchar("slug", { length: 180 }),
+  description: text("description"),
+  category: varchar("category", { length: 120 }),
+  kind: varchar("kind", { length: 20 }).$type<ProjectProductKind>().notNull().default("product"),
+  pricePaise: integer("price_paise").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  imageUrl: text("image_url"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("project_products_project_idx").on(table.projectId),
+  index("project_products_owner_idx").on(table.userId),
+  uniqueIndex("project_products_project_slug_uidx").on(table.projectId, table.slug).where(sql`${table.slug} is not null`),
+  check("project_products_kind_check", sql`${table.kind} in ('product','service')`),
+  check("project_products_price_paise_check", sql`${table.pricePaise} >= 0`),
+]);
+
+export type MerchantPaymentProvider = "razorpay";
+export type MerchantPaymentStatus =
+  | "not_started"
+  | "setup_in_progress"
+  | "under_review"
+  | "active"
+  | "needs_action"
+  | "unavailable";
+export type MerchantOnboardingStatus =
+  | "not_started"
+  | "account_created"
+  | "stakeholder_created"
+  | "product_requested"
+  | "settlements_submitted"
+  | "needs_clarification"
+  | "under_review"
+  | "activated"
+  | "unavailable"
+  | "failed";
+
+export const projectMerchantPaymentAccounts = pgTable("project_merchant_payment_accounts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: varchar("provider", { length: 32 }).$type<MerchantPaymentProvider>().notNull().default("razorpay"),
+  providerAccountId: varchar("provider_account_id", { length: 64 }),
+  status: varchar("status", { length: 32 }).$type<MerchantPaymentStatus>().notNull().default("not_started"),
+  onboardingStatus: varchar("onboarding_status", { length: 40 }).$type<MerchantOnboardingStatus>().notNull().default("not_started"),
+  productConfigurationId: varchar("product_configuration_id", { length: 64 }),
+  stakeholderId: varchar("stakeholder_id", { length: 64 }),
+  lastErrorCode: varchar("last_error_code", { length: 64 }),
+  lastErrorMessage: varchar("last_error_message", { length: 280 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("project_merchant_payment_accounts_project_provider_uidx").on(table.projectId, table.provider),
+  index("project_merchant_payment_accounts_owner_idx").on(table.userId),
+  check("project_merchant_payment_accounts_provider_check", sql`${table.provider} in ('razorpay')`),
+  check(
+    "project_merchant_payment_accounts_status_check",
+    sql`${table.status} in ('not_started','setup_in_progress','under_review','active','needs_action','unavailable')`,
+  ),
+  check(
+    "project_merchant_payment_accounts_onboarding_status_check",
+    sql`${table.onboardingStatus} in ('not_started','account_created','stakeholder_created','product_requested','settlements_submitted','needs_clarification','under_review','activated','unavailable','failed')`,
+  ),
+]);
+
 export type BusinessPublicationStatus = "active" | "inactive";
 export const businessPublications = pgTable(
   "business_publications",
@@ -276,6 +366,93 @@ export const businessPublications = pgTable(
     check("business_publications_revision_check", sql`${table.publishedPreviewRevision} >= 0`),
   ],
 );
+
+export type PublicBusinessOrderStatus = "pending" | "confirmed" | "fulfilled" | "cancelled";
+export type PublicBusinessPaymentStatus = "unpaid" | "pending" | "paid" | "refunded";
+export type PublicBusinessDeliveryAddress = Readonly<{ text: string }>;
+export const publicBusinessOrders = pgTable("public_business_orders", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  publicationId: uuid("publication_id").references(() => businessPublications.id, { onDelete: "restrict" }),
+  customerName: varchar("customer_name", { length: 160 }).notNull(),
+  customerEmail: varchar("customer_email", { length: 254 }),
+  customerPhone: varchar("customer_phone", { length: 32 }),
+  deliveryAddress: jsonb("delivery_address").$type<PublicBusinessDeliveryAddress | null>(),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  subtotalPaise: integer("subtotal_paise").notNull(),
+  totalPaise: integer("total_paise").notNull(),
+  status: varchar("status", { length: 24 }).$type<PublicBusinessOrderStatus>().notNull().default("pending"),
+  paymentStatus: varchar("payment_status", { length: 24 }).$type<PublicBusinessPaymentStatus>().notNull().default("unpaid"),
+  customerNote: text("customer_note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("public_business_orders_project_idx").on(table.projectId),
+  index("public_business_orders_publication_idx").on(table.publicationId),
+  index("public_business_orders_created_idx").on(table.createdAt),
+  check("public_business_orders_subtotal_paise_check", sql`${table.subtotalPaise} >= 0`),
+  check("public_business_orders_total_paise_check", sql`${table.totalPaise} >= 0`),
+  check("public_business_orders_status_check", sql`${table.status} in ('pending','confirmed','fulfilled','cancelled')`),
+  check("public_business_orders_payment_status_check", sql`${table.paymentStatus} in ('unpaid','pending','paid','refunded')`),
+]);
+
+export const publicBusinessOrderItems = pgTable("public_business_order_items", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderId: uuid("order_id").notNull().references(() => publicBusinessOrders.id, { onDelete: "cascade" }),
+  productId: uuid("product_id").references(() => projectProducts.id, { onDelete: "set null" }),
+  productName: varchar("product_name", { length: 160 }).notNull(),
+  unitPricePaise: integer("unit_price_paise").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  lineTotalPaise: integer("line_total_paise").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("public_business_order_items_order_idx").on(table.orderId),
+  check("public_business_order_items_unit_price_paise_check", sql`${table.unitPricePaise} >= 0`),
+  check("public_business_order_items_quantity_check", sql`${table.quantity} > 0`),
+  check("public_business_order_items_line_total_paise_check", sql`${table.lineTotalPaise} >= 0`),
+]);
+
+export type PublicBusinessPaymentProvider = "razorpay";
+export type PublicBusinessPaymentEventOutcome = "processed" | "ignored_duplicate" | "ignored_unsupported" | "failed";
+
+export const publicBusinessOrderPayments = pgTable("public_business_order_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  orderId: uuid("order_id").notNull().references(() => publicBusinessOrders.id, { onDelete: "restrict" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  merchantAccountId: uuid("merchant_account_id").notNull().references(() => projectMerchantPaymentAccounts.id, { onDelete: "restrict" }),
+  provider: varchar("provider", { length: 32 }).$type<PublicBusinessPaymentProvider>().notNull().default("razorpay"),
+  providerOrderId: varchar("provider_order_id", { length: 64 }),
+  providerPaymentId: varchar("provider_payment_id", { length: 64 }),
+  providerAccountId: varchar("provider_account_id", { length: 64 }).notNull(),
+  providerReceipt: varchar("provider_receipt", { length: 40 }).notNull(),
+  amountPaise: integer("amount_paise").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("public_business_order_payments_order_uidx").on(table.orderId),
+  uniqueIndex("public_business_order_payments_receipt_uidx").on(table.providerReceipt),
+  uniqueIndex("public_business_order_payments_provider_order_uidx").on(table.provider, table.providerOrderId).where(sql`${table.providerOrderId} is not null`),
+  uniqueIndex("public_business_order_payments_provider_payment_uidx").on(table.provider, table.providerPaymentId).where(sql`${table.providerPaymentId} is not null`),
+  index("public_business_order_payments_project_idx").on(table.projectId),
+  check("public_business_order_payments_provider_check", sql`${table.provider} in ('razorpay')`),
+  check("public_business_order_payments_amount_paise_check", sql`${table.amountPaise} > 0`),
+  check("public_business_order_payments_currency_check", sql`${table.currency} = 'INR'`),
+]);
+
+export const publicBusinessPaymentEvents = pgTable("public_business_payment_events", {
+  providerEventId: varchar("provider_event_id", { length: 200 }).primaryKey(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  providerOrderId: varchar("provider_order_id", { length: 64 }),
+  providerPaymentId: varchar("provider_payment_id", { length: 64 }),
+  orderId: uuid("order_id").references(() => publicBusinessOrders.id, { onDelete: "restrict" }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  outcome: varchar("outcome", { length: 32 }).$type<PublicBusinessPaymentEventOutcome>(),
+}, (table) => [
+  index("public_business_payment_events_provider_order_idx").on(table.providerOrderId),
+  index("public_business_payment_events_order_idx").on(table.orderId),
+]);
 
 export const businessPublicationVersions = pgTable(
   "business_publication_versions",

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { parseSupportedLanguageCode } from "@/app/lib/supported-languages";
+
 const MAX_ID_LENGTH = 128;
 const MAX_NAME_LENGTH = 200;
 const MAX_SHORT_LENGTH = 200;
@@ -48,6 +50,7 @@ export function validateProjectMutationBody(
     "userId",
     "name",
     "creationIntent",
+    "primaryLanguage",
     ...projectShortFields,
     ...projectLongFields,
   ]);
@@ -61,6 +64,7 @@ export function validateProjectMutationBody(
   }
   if (!optionalBoundedString(value.userId, MAX_ID_LENGTH)) return null;
   if (value.creationIntent !== undefined && value.creationIntent !== "new-business") return null;
+  if (value.primaryLanguage !== undefined && !parseSupportedLanguageCode(value.primaryLanguage)) return null;
   for (const field of projectShortFields) {
     if (!optionalBoundedString(value[field], MAX_SHORT_LENGTH)) return null;
   }
@@ -71,6 +75,7 @@ export function validateProjectMutationBody(
 
   const validated: Record<string, string> = { id, name };
   if (value.creationIntent === "new-business") validated.creationIntent = value.creationIntent;
+  if (typeof value.primaryLanguage === "string") validated.primaryLanguage = value.primaryLanguage;
   for (const field of [...projectShortFields, ...projectLongFields]) {
     const item = value[field];
     if (typeof item === "string") validated[field] = item;
