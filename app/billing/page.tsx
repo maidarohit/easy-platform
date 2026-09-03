@@ -145,8 +145,8 @@ export default function BillingPage() {
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-5 py-16 text-[#1B211E]">
       <div className="mx-auto max-w-4xl">
-        <Link href="/" className="font-semibold text-[#173D32]">
-          ← Buzypeezy
+        <Link href="/dashboard" className="font-semibold text-[#173D32]">
+          ← Back to Dashboard
         </Link>
         <h1 className="mt-8 text-4xl font-semibold text-[#0E2C24]">
           Plans and billing

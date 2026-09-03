@@ -19,9 +19,31 @@ import {
 
 type Viewport = "desktop" | "tablet" | "mobile";
 type Publication = { status: "unpublished" | "active" | "inactive"; publicUrl?: string; publishedPreviewRevision?: number; canPublish?: boolean };
+type CatalogueItem = Readonly<{
+  id: string;
+  name: string;
+  kind: "product" | "service";
+  category: string | null;
+  description: string | null;
+  pricePaise: number;
+  isActive: boolean;
+}>;
+type PaymentSummary = Readonly<{ uiState: "not_connected" | "setup_in_progress" | "under_review" | "active" | "needs_action" | "unavailable" }>;
 const VIEWPORT_WIDTH: Readonly<Record<Viewport, string>> = {
   desktop: "max-w-6xl", tablet: "max-w-3xl", mobile: "max-w-sm",
 };
+
+function catalogueLabel(items: readonly CatalogueItem[]) {
+  if (items.every((item) => item.kind === "product")) return "Products";
+  if (items.every((item) => item.kind === "service")) {
+    return items.some((item) => /package|plan|bundle/i.test(`${item.category ?? ""} ${item.name}`)) ? "Packages" : "Services";
+  }
+  return "Store";
+}
+
+function formatInr(pricePaise: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(pricePaise / 100);
+}
 
 function OptionalText({ value, className = "" }: { value: string | null; className?: string }) {
   return value ? <p className={className}>{value}</p> : null;
@@ -105,6 +127,8 @@ const visualOpacity =
   const [contact, setContact] = useState<PublicContactSettings>({});
   const [savingContact, setSavingContact] = useState(false);
   const [contactStatus, setContactStatus] = useState("");
+  const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+  const [merchantPaymentsActive, setMerchantPaymentsActive] = useState(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -122,6 +146,29 @@ const visualOpacity =
       })
       .catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open your preview."); })
       .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    void Promise.all([
+      authenticatedFetch(`/api/store/products?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
+      authenticatedFetch(`/api/store/payments/status?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
+    ]).then(async ([productsResponse, paymentResponse]) => {
+      const productsData = await productsResponse.json() as { products?: CatalogueItem[] };
+      const paymentData = await paymentResponse.json() as { payment?: PaymentSummary };
+      if (!active) return;
+      setCatalogue(productsResponse.ok && Array.isArray(productsData.products)
+        ? productsData.products.filter((item) => item.isActive)
+        : []);
+      setMerchantPaymentsActive(paymentResponse.ok && paymentData.payment?.uiState === "active");
+    }).catch(() => {
+      if (active) {
+        setCatalogue([]);
+        setMerchantPaymentsActive(false);
+      }
+    });
     return () => { active = false; };
   }, [projectId]);
 
@@ -360,6 +407,7 @@ const visualOpacity =
   const heroVisual = media.hero;
   const aboutVisual = media.about;
   const showcaseVisuals = media.work;
+  const storeLabel = catalogueLabel(catalogue);
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-4 py-6 text-[#1B211E] sm:px-7 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -546,7 +594,7 @@ const visualOpacity =
                )}%, transparent) 0 1px, transparent 1px 32px)`,
   }}
 >
-              <div className="flex items-center justify-between border-b border-[#E8E5DC] px-5 py-4"><strong className="text-[#173D32]">{preview.business.name}</strong><span className="text-xs text-[#606A64]">Home&nbsp;&nbsp; About&nbsp;&nbsp; Contact</span></div>
+              <div className="flex items-center justify-between border-b border-[#E8E5DC] px-5 py-4"><strong className="text-[#173D32]">{preview.business.name}</strong><span className="text-xs text-[#606A64]">Home&nbsp;&nbsp; About{catalogue.length > 0 ? <>&nbsp;&nbsp; {storeLabel}</> : null}&nbsp;&nbsp; Contact</span></div>
               <div className="grid items-center overflow-hidden lg:grid-cols-[1.15fr_0.85fr]">
   <div
   className="relative px-6 py-14 sm:px-10 sm:py-20"
@@ -782,6 +830,34 @@ style={{
         className="mt-4 text-sm leading-7"
       />
       </div>
+    </div>
+  </div>
+)}
+
+{catalogue.length > 0 && (
+  <div className="px-6 py-12 sm:px-10" style={{ backgroundColor: siteTheme.background }}>
+    <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: siteTheme.accent }}>{storeLabel}</p>
+    <h4 className="mt-3 text-3xl font-semibold tracking-[-0.04em]" style={{ color: siteTheme.text }}>{storeLabel} from {preview.business.name}</h4>
+    <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {catalogue.map((item) => (
+        <article key={item.id} className="business-site-card rounded-[24px] border p-6" style={{ backgroundColor: siteTheme.surface, borderColor: siteTheme.accent }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] opacity-55">{item.kind === "service" ? "Service" : "Product"}</p>
+          <h5 className="mt-3 text-xl font-semibold" style={{ color: siteTheme.text }}>{item.name}</h5>
+          {item.description && <ExpandableText value={item.description} previewLength={110} className="mt-3 text-sm leading-6" />}
+          <p className="mt-4 font-semibold" style={{ color: siteTheme.text }}>{formatInr(item.pricePaise)}</p>
+          {publication.status === "active" && publication.publicUrl ? (
+            <Link
+              href={`${publication.publicUrl}?projectId=${encodeURIComponent(projectId)}&product=${encodeURIComponent(item.id)}#order`}
+              className="mt-5 inline-flex text-sm font-semibold"
+              style={{ color: siteTheme.primary }}
+            >
+              {merchantPaymentsActive ? "Buy" : "Enquire"} →
+            </Link>
+          ) : (
+            <span className="mt-5 inline-flex text-sm font-semibold opacity-60" style={{ color: siteTheme.primary }}>Available after publishing</span>
+          )}
+        </article>
+      ))}
     </div>
   </div>
 )}

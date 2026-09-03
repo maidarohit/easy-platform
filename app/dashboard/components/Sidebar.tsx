@@ -12,6 +12,7 @@ const PRIMARY_ITEMS: readonly MenuItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "⌂" },
   { label: "My Business", href: "/master-workspace", icon: "◇" },
   { label: "Preview", href: "/business-preview", icon: "◫" },
+  { label: "Store", href: "/store", icon: "▣" },
   { label: "Automation", href: "/dashboard/automation", icon: "↻" },
   { label: "Settings", href: "/settings", icon: "⚙" },
 ];
@@ -48,9 +49,10 @@ function NavigationLink({ item, projectId, active }: { item: MenuItem; projectId
   </Link>;
 }
 
-export default function Sidebar() {
+export default function Sidebar({ projectId: suppliedProjectId = "" }: { projectId?: string }) {
   const pathname = usePathname();
-  const projectId = useSearchParams().get("projectId")?.trim() ?? "";
+  const queryProjectId = useSearchParams().get("projectId")?.trim() ?? "";
+  const projectId = suppliedProjectId.trim() || queryProjectId;
   const [publication, setPublication] = useState<Publication>({ status: "unpublished" });
   const advancedActive = ADVANCED_ITEMS.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 

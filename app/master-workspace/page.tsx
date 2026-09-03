@@ -116,7 +116,7 @@ function MasterWorkspaceContent() {
   if (loading || workspaceLoading) {
     return (
       <div className="flex min-h-screen bg-[#f7f3e9]">
-        <Sidebar />
+        <Sidebar projectId={projectId} />
 
         <main className="flex flex-1 items-center justify-center">
           <div className="text-center">
@@ -132,7 +132,7 @@ function MasterWorkspaceContent() {
 
   return (
     <div className="flex min-h-screen bg-[#f7f3e9] text-[#103c32]">
-      <Sidebar />
+      <Sidebar projectId={projectId} />
 
       <main className="min-w-0 flex-1 px-6 py-8 lg:px-10 xl:px-14">
         <div className="mx-auto max-w-[1500px]">
@@ -150,6 +150,12 @@ function MasterWorkspaceContent() {
               <Link href={projectLink("/dashboard/automation")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Manage Automation</Link>
               <Link href={projectLink("/social")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Social &amp; Content</Link>
               <Link href={projectLink("/reports")} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Weekly Report</Link>
+              <Link
+                href={projectLink("/store")}
+                className="inline-flex min-h-11 items-center rounded-full border border-[#DED6C3] bg-white px-5 text-sm font-semibold"
+              >
+                Store & Products
+              </Link>
               <ProductTutorial area="master-workspace" />
               <WorkspaceGuide />
             </div>
