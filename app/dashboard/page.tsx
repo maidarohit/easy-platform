@@ -43,7 +43,7 @@ function DashboardPageContent() {
   const [summaryError, setSummaryError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [projectActions, setProjectActions] = useState<Record<string, { label: string; href: string }>>({});
+  const [, setProjectActions] = useState<Record<string, { label: string; href: string }>>({});
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
@@ -160,7 +160,7 @@ function DashboardPageContent() {
   const openAdvancedTools = (project: Project) => {
     router.push(`/master-workspace?projectId=${encodeURIComponent(project.id)}#advanced-tools`);
   };
-  const continueBusiness = (project: Project) => router.push((projectActions[project.id] ?? customerProjectAction(project)).href);
+  const continueBusiness = (project: Project) => router.push(`/master-workspace?projectId=${encodeURIComponent(project.id)}`);
   const filteredProjects = projects.filter((project) => {
   const query = searchQuery.toLowerCase();
 
