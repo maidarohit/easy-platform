@@ -20,6 +20,7 @@ type WebsitePreviewProps = {
   websiteRequirements?: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
   websiteEdits?: WebsiteEdits;
+  primaryLanguage?: string;
 };
 
 export default function WebsitePreview({
@@ -31,15 +32,49 @@ export default function WebsitePreview({
   websiteRequirements,
   brandResult,
   websiteEdits,
+  primaryLanguage = "en",
 }: WebsitePreviewProps) {
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
 
   const primaryColor = theme.primaryColor;
   const businessName = websiteEdits?.companyName || companyName || "Your Business";
-  const editedBrandResult = websiteEdits && brandResult
-    ? { ...brandResult, heroHeadline: websiteEdits.heroHeadline, websiteOverview: websiteEdits.heroDescription }
+  const savedHeroHeadline = websiteEdits?.heroHeadline?.trim() || "";
+
+const resolvedHeroHeadline =
+  /^Build a stronger .+ presence online$/i.test(savedHeroHeadline)
+    ? brandResult?.websiteGoal || savedHeroHeadline
+    : savedHeroHeadline || brandResult?.websiteGoal;
+
+const editedBrandResult =
+  websiteEdits && brandResult
+    ? {
+        ...brandResult,
+        heroHeadline: resolvedHeroHeadline,
+        websiteOverview: websiteEdits.heroDescription,
+      }
     : brandResult;
   const editedGoal = websiteEdits?.primaryCtaLabel || websiteGoal;
+  const previewTranslations = {
+  en: { home: "Home", services: "Services", about: "About", contact: "Contact", howWeCanHelp: "How we can help" },
+  es: { home: "Inicio", services: "Servicios", about: "Acerca de", contact: "Contacto", howWeCanHelp: "Cómo podemos ayudar" },
+  fr: { home: "Accueil", services: "Services", about: "À propos", contact: "Contact", howWeCanHelp: "Comment nous pouvons vous aider" },
+  de: { home: "Startseite", services: "Leistungen", about: "Über uns", contact: "Kontakt", howWeCanHelp: "Wie wir helfen können" },
+  pt: { home: "Início", services: "Serviços", about: "Sobre", contact: "Contato", howWeCanHelp: "Como podemos ajudar" },
+  ar: { home: "الرئيسية", services: "الخدمات", about: "من نحن", contact: "اتصل بنا", howWeCanHelp: "كيف يمكننا مساعدتك" },
+  hi: { home: "होम", services: "सेवाएँ", about: "हमारे बारे में", contact: "संपर्क", howWeCanHelp: "हम कैसे मदद कर सकते हैं" },
+  ja: { home: "ホーム", services: "サービス", about: "私たちについて", contact: "お問い合わせ", howWeCanHelp: "私たちがお手伝いできること" },
+  ko: { home: "홈", services: "서비스", about: "소개", contact: "문의", howWeCanHelp: "도움드릴 수 있는 방법" },
+  zh: { home: "首页", services: "服务", about: "关于我们", contact: "联系我们", howWeCanHelp: "我们如何帮助您" },
+  kn: { home: "ಮುಖಪುಟ", services: "ಸೇವೆಗಳು", about: "ನಮ್ಮ ಬಗ್ಗೆ", contact: "ಸಂಪರ್ಕ", howWeCanHelp: "ನಾವು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು" },
+  ta: { home: "முகப்பு", services: "சேவைகள்", about: "எங்களைப் பற்றி", contact: "தொடர்பு", howWeCanHelp: "நாங்கள் எப்படி உதவலாம்" },
+  te: { home: "హోమ్", services: "సేవలు", about: "మా గురించి", contact: "సంప్రదించండి", howWeCanHelp: "మేము ఎలా సహాయం చేయగలం" },
+  ml: { home: "ഹോം", services: "സേവനങ്ങൾ", about: "ഞങ്ങളെക്കുറിച്ച്", contact: "ബന്ധപ്പെടുക", howWeCanHelp: "ഞങ്ങൾ എങ്ങനെ സഹായിക്കാം" },
+} as const;
+
+const ui =
+  previewTranslations[
+    primaryLanguage as keyof typeof previewTranslations
+  ] || previewTranslations.en;
 
   const headline = `Build a stronger ${
     industry || "business"
@@ -70,6 +105,7 @@ export default function WebsitePreview({
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
           previewMode={previewMode}
+                  labels={ui}
         />
       );
       break;
@@ -83,6 +119,7 @@ export default function WebsitePreview({
           websiteRequirements={websiteRequirements}
           previewMode={previewMode}
           brandResult={editedBrandResult}
+                  labels={ui}
         />
       );
       break;
@@ -94,6 +131,7 @@ export default function WebsitePreview({
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+                  labels={ui}
         />
       );
       break;
@@ -105,6 +143,7 @@ export default function WebsitePreview({
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+                  labels={ui}
         />
       );
       break;
@@ -116,6 +155,7 @@ export default function WebsitePreview({
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          labels={ui}
         />
       );
       break;
@@ -127,6 +167,7 @@ export default function WebsitePreview({
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+                  labels={ui}
         />
       );
       break;
@@ -144,17 +185,27 @@ export default function WebsitePreview({
         {websiteEdits && (
           <section className="grid gap-8 border-t border-slate-200 bg-white px-8 py-14 text-slate-900 lg:grid-cols-2 lg:px-14">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">About</p>
-              <h2 className="mt-3 text-3xl font-bold">About {businessName}</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+  {ui.about}
+</p>
+<h2 className="mt-3 text-3xl font-bold">
+  {ui.about} {businessName}
+</h2>
               <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-slate-600">{websiteEdits.aboutText}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Services</p>
-              <h2 className="mt-3 text-3xl font-bold">How we can help</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+  {ui.services}
+</p>
+<h2 className="mt-3 text-3xl font-bold">
+  {ui.howWeCanHelp}
+</h2>
               <p className="mt-4 whitespace-pre-wrap break-words leading-7 text-slate-600">{websiteEdits.servicesText}</p>
             </div>
             <div className="lg:col-span-2 rounded-2xl bg-slate-950 p-7 text-white">
-              <h2 className="text-2xl font-bold">Contact {businessName}</h2>
+              <h2 className="text-2xl font-bold">
+  {ui.contact} {businessName}
+</h2>
               <div className="mt-4 grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
                 {websiteEdits.phone && <p>Phone: {websiteEdits.phone}</p>}
                 {websiteEdits.email && <p>Email: {websiteEdits.email}</p>}
