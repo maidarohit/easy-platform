@@ -10,6 +10,13 @@ type CorporateTemplateProps = {
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  labels: {
+    home: string;
+    services: string;
+    about: string;
+    contact: string;
+    howWeCanHelp: string;
+  };
 };
 
 export default function CorporateTemplate({
@@ -17,16 +24,19 @@ export default function CorporateTemplate({
   industry,
   websiteGoal,
   brandResult,
+  labels,
 }: CorporateTemplateProps) {
-  const businessName = companyName || "Your Business";
+  const businessName = companyName || industry || "—";
 
   const headline =
     brandResult?.heroHeadline ||
-    `Helping ${industry || "businesses"} transform with confidence`;
+    brandResult?.websiteGoal ||
+    businessName;
 
   const description =
     brandResult?.websiteOverview ||
-    "A professional enterprise website designed to build trust, communicate capability, and support long-term business growth.";
+    brandResult?.designRecommendations ||
+    headline;
 
   return (
     <div className="overflow-hidden rounded-xl bg-white text-slate-950">
@@ -34,22 +44,22 @@ export default function CorporateTemplate({
         <div className="text-xl font-bold tracking-tight">{businessName}</div>
 
         <div className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
-          <span>Solutions</span>
-          <span>Industries</span>
-          <span>About</span>
-          <span>Insights</span>
-          <span>Contact</span>
+          <span>{labels.services}</span>
+          <span>{labels.howWeCanHelp}</span>
+          <span>{labels.about}</span>
+          <span>{labels.howWeCanHelp}</span>
+          <span>{labels.contact}</span>
         </div>
 
         <button className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700">
-          Request Demo
+          {labels.contact}
         </button>
       </nav>
 
       <section className="grid items-center gap-16 px-8 py-20 lg:grid-cols-[1.05fr_0.95fr] lg:px-12 lg:py-28">
         <div>
           <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
-            Enterprise digital solutions
+            {labels.howWeCanHelp}
           </span>
 <FadeIn>
           <h1 className="mt-7 max-w-3xl text-5xl font-semibold leading-[1.03] tracking-[-0.04em] sm:text-6xl">
@@ -63,11 +73,11 @@ export default function CorporateTemplate({
 
           <div className="mt-8 flex flex-wrap gap-4">
             <button className="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700">
-              {websiteGoal || "Get Started"}
+              {websiteGoal || labels.contact}
             </button>
 
             <AnimatedButton className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-900 transition hover:bg-slate-50">
-              View Solutions
+              {labels.services}
             </AnimatedButton>
           </div>
         </div>
@@ -75,23 +85,23 @@ export default function CorporateTemplate({
         <AnimatedCard className="rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-xl">
           <div className="flex items-center justify-between border-b border-slate-200 pb-5">
             <div>
-              <p className="text-sm text-slate-500">Enterprise Overview</p>
+              <p className="text-sm text-slate-500">{labels.about}</p>
               <p className="mt-1 text-2xl font-bold text-slate-950">
-                Performance Dashboard
+                {businessName}
               </p>
             </div>
 
             <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-              Live
+              {labels.howWeCanHelp}
             </span>
           </div>
 
           <AnimatedCard className="mt-6 grid grid-cols-2 gap-4">
             {[
-              ["Revenue", "$18.4M"],
-              ["Active Users", "42K"],
-              ["Projects", "126"],
-              ["Uptime", "99.99%"],
+              [labels.services, "$18.4M"],
+              [labels.about, "42K"],
+              [labels.contact, "126"],
+              [labels.howWeCanHelp, "99.99%"],
             ].map(([label, value]) => (
               <AnimatedCard
                 key={label}
@@ -105,7 +115,7 @@ export default function CorporateTemplate({
 
           <AnimatedCard className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
             <div className="flex items-center justify-between">
-              <p className="font-semibold text-slate-950">Business Growth</p>
+              <p className="font-semibold text-slate-950">{labels.howWeCanHelp}</p>
               <span className="text-sm font-semibold text-emerald-600">
                 +28.4%
               </span>

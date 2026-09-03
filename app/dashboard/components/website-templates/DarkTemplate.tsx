@@ -9,6 +9,13 @@ type DarkTemplateProps = {
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  labels: {
+    home: string;
+    services: string;
+    about: string;
+    contact: string;
+    howWeCanHelp: string;
+  };
 };
 
 export default function DarkTemplate({
@@ -16,16 +23,19 @@ export default function DarkTemplate({
   industry,
   websiteGoal,
   brandResult,
+  labels,
 }: DarkTemplateProps) {
-  const businessName = companyName || "Your Business";
+  const businessName = companyName || industry || "—";
 
   const headline =
     brandResult?.heroHeadline ||
-    `Build the future of ${industry || "business"} with intelligent digital systems`;
+    brandResult?.websiteGoal ||
+    businessName;
 
   const description =
     brandResult?.websiteOverview ||
-    "A dark, high-performance website designed for ambitious brands, technology businesses, and modern teams ready to scale.";
+    brandResult?.designRecommendations ||
+    headline;
 
   return (
     <div className="overflow-hidden rounded-[28px] bg-[#020617] text-white">
@@ -33,14 +43,14 @@ export default function DarkTemplate({
         <div className="text-xl font-bold tracking-tight">{businessName}</div>
 
         <div className="hidden items-center gap-8 text-sm text-slate-400 md:flex">
-          <span>Platform</span>
-          <span>Solutions</span>
-          <span>Resources</span>
-          <span>Company</span>
+          <span>{labels.home}</span>
+          <span>{labels.services}</span>
+          <span>{labels.about}</span>
+          <span>{labels.contact}</span>
         </div>
 <AnimatedButton>
         <button className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-5 py-2.5 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-slate-950">
-          Launch Now
+          {websiteGoal || labels.contact}
         </button>
         </AnimatedButton>
       </nav>
@@ -53,7 +63,7 @@ export default function DarkTemplate({
         <div className="relative grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <span className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300">
-              Intelligent digital infrastructure
+              {labels.howWeCanHelp}
             </span>
 
             <h1 className="mt-7 max-w-3xl text-5xl font-semibold leading-[1.02] tracking-[-0.05em] sm:text-6xl lg:text-7xl">
@@ -67,21 +77,21 @@ export default function DarkTemplate({
             <div className="mt-9 flex flex-wrap gap-4">
               <AnimatedButton>
               <button className="rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 px-7 py-3.5 font-semibold text-white transition hover:-translate-y-1">
-                {websiteGoal || "Get Started"}
+                {websiteGoal || labels.contact}
               </button>
               </AnimatedButton>
 <AnimatedButton>
               <button className="rounded-full border border-white/15 bg-white/5 px-7 py-3.5 font-semibold text-white transition hover:bg-white/10">
-                Explore Platform
+                {labels.services}
               </button>
               </AnimatedButton>
             </div>
 
             <div className="mt-12 flex flex-wrap gap-10">
               {[
-                ["99.99%", "Platform uptime"],
-                ["120+", "Global markets"],
-                ["24/7", "AI-powered support"],
+                ["99.99%", labels.howWeCanHelp],
+                ["120+", labels.about],
+                ["24/7", labels.contact],
               ].map(([value, label]) => (
                 <div key={label}>
                   <p className="text-3xl font-semibold">{value}</p>
@@ -96,23 +106,23 @@ export default function DarkTemplate({
             <div className="absolute inset-8 rounded-[32px] border border-cyan-400/20 bg-slate-950/80 p-6 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">
               <div className="flex items-center justify-between border-b border-white/10 pb-5">
                 <div>
-                  <p className="text-sm text-slate-500">System overview</p>
+                  <p className="text-sm text-slate-500">{labels.about}</p>
                   <p className="mt-1 text-2xl font-semibold">
-                    Intelligence Dashboard
+                    {businessName}
                   </p>
                 </div>
 
                 <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  Operational
+                  {labels.howWeCanHelp}
                 </span>
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-4">
                 {[
-                  ["Automation", "86%"],
-                  ["Efficiency", "94%"],
-                  ["Growth", "+41%"],
-                  ["Security", "A+"],
+                  [labels.services, "86%"],
+                  [labels.about, "94%"],
+                  [labels.howWeCanHelp, "+41%"],
+                  [labels.contact, "A+"],
                 ].map(([label, value]) => (
                   <AnimatedCard key={label}>
   <div
@@ -127,7 +137,7 @@ export default function DarkTemplate({
 
               <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
                 <div className="flex items-center justify-between">
-                  <p className="font-semibold">System performance</p>
+                  <p className="font-semibold">{labels.howWeCanHelp}</p>
                   <span className="text-sm font-semibold text-cyan-300">
                     +32.8%
                   </span>
@@ -147,23 +157,23 @@ export default function DarkTemplate({
 
             <div className="absolute -left-8 bottom-16 w-60 rounded-[24px] border border-cyan-400/20 bg-slate-950/90 p-5 shadow-2xl backdrop-blur-xl">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                Live insight
+                {labels.about}
               </p>
               <p className="mt-3 text-3xl font-semibold text-cyan-300">+28%</p>
               <p className="mt-2 text-sm text-slate-400">
-                Conversion improvement
+                {description.slice(0, 80)}
               </p>
             </div>
 
             <div className="absolute -right-6 top-20 w-56 rounded-[24px] border border-violet-400/20 bg-slate-950/90 p-5 shadow-2xl backdrop-blur-xl">
               <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                AI activity
+                {labels.services}
               </p>
               <p className="mt-3 text-3xl font-semibold text-violet-300">
                 12.4K
               </p>
               <p className="mt-2 text-sm text-slate-400">
-                Tasks completed today
+                {description.slice(0, 80)}
               </p>
             </div>
           </div>
@@ -172,7 +182,7 @@ export default function DarkTemplate({
 
       <section className="border-y border-white/10 bg-white/[0.02] px-8 py-12 lg:px-12">
         <p className="text-center text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
-          Trusted by future-focused teams
+          {labels.about}
         </p>
 
         <div className="mt-8 grid grid-cols-2 gap-8 text-center text-sm font-bold tracking-[0.18em] text-slate-500 sm:grid-cols-3 lg:grid-cols-6">
@@ -189,19 +199,19 @@ export default function DarkTemplate({
       <section className="px-8 py-24 lg:px-12">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">
-            Platform capabilities
+            {labels.services}
           </p>
 
           <h2 className="mt-4 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-            Built for intelligent growth
+            {headline}
           </h2>
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            ["AI Automation", "Reduce repetitive work and scale operations intelligently."],
-            ["Advanced Analytics", "Turn complex data into clear, actionable decisions."],
-            ["Secure Infrastructure", "Protect your business with reliable enterprise-grade systems."],
+            [labels.services, brandResult?.websiteFeatures || description],
+            [labels.about, brandResult?.designRecommendations || description],
+            [labels.contact, description],
           ].map(([title, text]) => (
             <AnimatedCard key={title}>
             <div
@@ -218,17 +228,17 @@ export default function DarkTemplate({
 
       <section className="border-t border-white/10 px-8 py-24 text-center lg:px-12">
         <p className="text-sm font-semibold uppercase tracking-[0.24em] text-violet-300">
-          Build what comes next
+          {labels.contact}
         </p>
 <AnimatedCard>
         <h2 className="mx-auto mt-5 max-w-4xl text-5xl font-semibold leading-[1.05] tracking-[-0.05em]">
-          Create a smarter digital future for {businessName}.
+          {headline}
         </h2>
         </AnimatedCard>
 <AnimatedButton
   className="mt-10 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 px-8 py-4 font-semibold text-white transition hover:scale-105"
 >
-  Start Building
+  {websiteGoal || labels.contact}
 </AnimatedButton>
       </section>
     </div>

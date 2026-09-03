@@ -13,6 +13,13 @@ type LuxuryTemplateProps = {
   websiteRequirements?: string;
   previewMode?: "desktop" | "tablet" | "mobile";
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  labels: {
+    home: string;
+    services: string;
+    about: string;
+    contact: string;
+    howWeCanHelp: string;
+  };
 };
 
 export default function LuxuryTemplate({
@@ -22,6 +29,7 @@ export default function LuxuryTemplate({
   websiteRequirements,
   previewMode = "desktop",
   brandResult,
+  labels,
 }: LuxuryTemplateProps) {
   if (/real\s*estate|realty|property|properties/i.test(industry)) {
     return (
@@ -32,19 +40,22 @@ export default function LuxuryTemplate({
         websiteRequirements={websiteRequirements}
         previewMode={previewMode}
         brandResult={brandResult}
+        labels={labels}
       />
     );
   }
 
-  const businessName = companyName || "Your Business";
+  const businessName = companyName || industry || "—";
 
   const headline =
     brandResult?.heroHeadline ||
-    `Elevate your ${industry || "business"} with a refined digital presence`;
+    brandResult?.websiteGoal ||
+    businessName;
 
   const description =
     brandResult?.websiteOverview ||
-    "A sophisticated digital experience designed to build trust, attract premium clients, and position your business with authority.";
+    brandResult?.designRecommendations ||
+    headline;
 
   return (
     <div className="overflow-hidden rounded-[8px] bg-[#0b0a09] text-[#f8f3e8]">
@@ -54,15 +65,15 @@ export default function LuxuryTemplate({
         </div>
 
         <div className="hidden items-center gap-10 text-xs uppercase tracking-[0.22em] text-[#c8bea9] md:flex">
-          <span>Home</span>
-          <span>About</span>
-          <span>Services</span>
-          <span>Journal</span>
-          <span>Contact</span>
+          <span>{labels.home}</span>
+          <span>{labels.about}</span>
+          <span>{labels.services}</span>
+          <span>{labels.howWeCanHelp}</span>
+          <span>{labels.contact}</span>
         </div>
 
         <button className="border border-[#d4af37] px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.2em] text-[#d4af37] transition hover:bg-[#d4af37] hover:text-black">
-          Enquire
+          {labels.contact}
         </button>
       </nav>
 
@@ -73,7 +84,7 @@ export default function LuxuryTemplate({
         <div className="relative grid items-center gap-16 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-[#d4af37]">
-              Curated digital excellence
+              {labels.about}
             </p>
 <FadeIn>
             <h1 className="mt-7 max-w-3xl font-serif text-5xl leading-[1.05] tracking-[-0.03em] sm:text-6xl lg:text-7xl">
@@ -89,12 +100,12 @@ export default function LuxuryTemplate({
             <div className="mt-10 flex flex-wrap gap-4">
                 <AnimatedButton>
   <span className="inline-flex bg-[#d4af37] px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.18em] text-black">
-    SELL PRODUCTS
+    {websiteGoal || labels.contact}
   </span>
 </AnimatedButton>
 <AnimatedButton>
   <span className="inline-flex border border-[#5b5247] px-7 py-3.5 text-sm font-semibold uppercase tracking-[0.18em]">
-    Discover More
+    {labels.services}
   </span>
 </AnimatedButton>
             </div>
@@ -104,7 +115,7 @@ export default function LuxuryTemplate({
               <div>
                 <p className="font-serif text-3xl text-[#d4af37]">18+</p>
                 <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[#9e9485]">
-                  Years of excellence
+                  {labels.about}
                 </p>
               </div>
               </AnimatedCard>
@@ -112,7 +123,7 @@ export default function LuxuryTemplate({
               <div>
                 <p className="font-serif text-3xl text-[#d4af37]">240</p>
                 <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[#9e9485]">
-                  Select clients
+                  {labels.services}
                 </p>
               </div>
               </AnimatedCard>
@@ -120,7 +131,7 @@ export default function LuxuryTemplate({
               <div>
                 <p className="font-serif text-3xl text-[#d4af37]">32</p>
                 <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[#9e9485]">
-                  Global markets
+                  {labels.contact}
                 </p>
               </div>
               </AnimatedCard>
@@ -133,15 +144,15 @@ export default function LuxuryTemplate({
             <div className="absolute inset-8 border border-[#5b5247] bg-[#14110f] p-8 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">
               <div className="flex items-center justify-between border-b border-[#2d2924] pb-5">
                 <p className="text-xs uppercase tracking-[0.25em] text-[#9e9485]">
-                  Private overview
+                  {labels.about}
                 </p>
                 <span className="text-xs uppercase tracking-[0.2em] text-[#d4af37]">
-                  Live
+                  {labels.howWeCanHelp}
                 </span>
               </div>
 
               <div className="mt-10">
-                <p className="text-sm text-[#9e9485]">Portfolio performance</p>
+                <p className="text-sm text-[#9e9485]">{labels.howWeCanHelp}</p>
                 <p className="mt-3 font-serif text-5xl text-[#f8f3e8]">+38.4%</p>
 
                 <div className="mt-10 grid grid-cols-7 items-end gap-3">
@@ -158,14 +169,14 @@ export default function LuxuryTemplate({
               <div className="mt-10 grid grid-cols-2 gap-4">
                 <div className="border border-[#2d2924] bg-[#0d0b09] p-5">
                   <p className="text-xs uppercase tracking-[0.18em] text-[#7f7669]">
-                    Conversion
+                    {labels.contact}
                   </p>
                   <p className="mt-3 font-serif text-3xl">9.8%</p>
                 </div>
 
                 <div className="border border-[#2d2924] bg-[#0d0b09] p-5">
                   <p className="text-xs uppercase tracking-[0.18em] text-[#7f7669]">
-                    Client value
+                    {labels.about}
                   </p>
                   <p className="mt-3 font-serif text-3xl">$1.2M</p>
                 </div>
@@ -174,19 +185,19 @@ export default function LuxuryTemplate({
 </AnimatedCard>
             <div className="absolute -left-8 bottom-10 w-64 border border-[#5b5247] bg-[#f3ead8] p-6 text-black shadow-2xl">
               <p className="text-xs uppercase tracking-[0.2em] text-[#7a6e5e]">
-                Featured service
+                {labels.services}
               </p>
               <p className="mt-3 font-serif text-2xl">
-                Bespoke growth strategy
+                {brandResult?.websiteGoal || headline}
               </p>
               <p className="mt-4 text-sm leading-6 text-[#5c554d]">
-                Tailored positioning, design and execution for premium brands.
+                {description}
               </p>
             </div>
 
             <div className="absolute -right-6 top-14 w-52 border border-[#5b5247] bg-[#1b1713]/95 p-5 shadow-2xl backdrop-blur">
               <p className="text-xs uppercase tracking-[0.18em] text-[#9e9485]">
-                Client confidence
+                {labels.about}
               </p>
               <p className="mt-3 font-serif text-4xl text-[#d4af37]">98%</p>
               <div className="mt-5 h-px bg-[#3a342d]">
@@ -199,7 +210,7 @@ export default function LuxuryTemplate({
 
       <section className="border-y border-[#2d2924] bg-[#0f0d0b] px-8 py-12 lg:px-14">
         <p className="text-center text-xs uppercase tracking-[0.3em] text-[#7f7669]">
-          Trusted by distinguished brands
+          {labels.about}
         </p>
 
         <div className="mt-9 grid grid-cols-2 gap-8 text-center font-serif text-lg tracking-[0.16em] text-[#8f8577] sm:grid-cols-3 lg:grid-cols-6">
@@ -214,24 +225,23 @@ export default function LuxuryTemplate({
       <section className="px-8 py-24 lg:px-14">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-xs uppercase tracking-[0.32em] text-[#d4af37]">
-            Our approach
+            {labels.howWeCanHelp}
           </p>
 
           <h2 className="mt-5 font-serif text-4xl leading-tight sm:text-5xl">
-            Refined strategy. Impeccable execution.
+            {headline}
           </h2>
 
           <p className="mx-auto mt-6 max-w-2xl leading-8 text-[#a99f90]">
-            Every detail is considered to create a digital presence that feels
-            distinctive, credible and timeless.
+            {description}
           </p>
         </div>
 
         <div className="mt-14 grid gap-6 md:grid-cols-3">
           {[
-            ["01", "Positioning", "Clarify your value and sharpen your market presence."],
-            ["02", "Experience", "Create a visual system that feels premium and effortless."],
-            ["03", "Growth", "Turn attention into meaningful business outcomes."],
+            ["01", labels.about, brandResult?.designRecommendations || description],
+            ["02", labels.services, brandResult?.websiteFeatures || description],
+            ["03", labels.contact, description],
           ].map(([number, title, text]) => (
             <div
               key={number}
@@ -247,15 +257,15 @@ export default function LuxuryTemplate({
 
       <section className="border-t border-[#2d2924] px-8 py-24 text-center lg:px-14">
         <p className="text-xs uppercase tracking-[0.3em] text-[#d4af37]">
-          Begin your next chapter
+          {labels.contact}
         </p>
 
         <h2 className="mx-auto mt-5 max-w-3xl font-serif text-5xl leading-tight">
-          Let’s build a digital presence worthy of {businessName}.
+          {headline}
         </h2>
 
         <button className="mt-10 bg-[#d4af37] px-8 py-4 text-sm font-semibold uppercase tracking-[0.2em] text-black">
-          Start a Conversation
+          {websiteGoal || labels.contact}
         </button>
       </section>
     </div>

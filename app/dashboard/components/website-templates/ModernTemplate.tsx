@@ -12,6 +12,13 @@ type ModernTemplateProps = {
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  labels: {
+    home: string;
+    services: string;
+    about: string;
+    contact: string;
+    howWeCanHelp: string;
+  };
   previewMode?: "desktop" | "tablet" | "mobile";
 };
 
@@ -20,16 +27,19 @@ export default function ModernTemplate({
   industry,
   websiteGoal,
   brandResult,
+  labels,
 }: ModernTemplateProps) {
-  const businessName = companyName || "Your Business";
+  const businessName = companyName || industry || "—";
 
   const headline =
     brandResult?.heroHeadline ||
-    `Build a stronger ${industry || "business"} presence online`;
+    brandResult?.websiteGoal ||
+    businessName;
 
   const description =
     brandResult?.websiteOverview ||
-    "A modern digital experience designed to build trust, attract customers, and grow your business.";
+    brandResult?.designRecommendations ||
+    headline;
 
   return (
     <div className="overflow-hidden rounded-[28px] bg-white text-slate-950">
@@ -37,14 +47,14 @@ export default function ModernTemplate({
         <div className="text-xl font-bold tracking-tight">{businessName}</div>
 
         <div className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
-          <span>Home</span>
-          <span>About</span>
-          <span>Services</span>
-          <span>Contact</span>
+          <span>{labels.home}</span>
+          <span>{labels.about}</span>
+          <span>{labels.services}</span>
+          <span>{labels.contact}</span>
         </div>
 
         <button className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:scale-105">
-          Get Started
+          {websiteGoal || labels.contact}
         </button>
       </nav>
 
@@ -55,7 +65,7 @@ export default function ModernTemplate({
         <div className="relative grid items-center gap-16 lg:grid-cols-[1.15fr_0.85fr]">
           <SlideUp>
             <span className="inline-flex rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur">
-              Modern digital experience
+              {labels.about}
             </span>
 
             <FadeIn delay={0.2}>
@@ -73,27 +83,27 @@ export default function ModernTemplate({
             <ScaleIn delay={0.6}>
 <div className="mt-8 flex flex-wrap gap-4">
     <AnimatedButton className="rounded-full bg-cyan-500 px-6 py-3 font-semibold text-slate-950 transition">
-  {websiteGoal || "Start Today"}
+  {websiteGoal || labels.contact}
 </AnimatedButton>
 <AnimatedButton className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold transition hover:bg-slate-50">
-  View Our Work
+  {labels.services}
 </AnimatedButton>
             </div>
 
             <div className="mt-10 flex flex-wrap gap-8 text-sm text-slate-500">
               <div>
                 <p className="text-2xl font-bold text-slate-950">120+</p>
-                <p>Projects delivered</p>
+                <p>{labels.services}</p>
               </div>
 
               <div>
                 <p className="text-2xl font-bold text-slate-950">98%</p>
-                <p>Client satisfaction</p>
+                <p>{labels.about}</p>
               </div>
 
               <div>
                 <p className="text-2xl font-bold text-slate-950">24/7</p>
-                <p>Business support</p>
+                <p>{labels.contact}</p>
               </div>
             </div>
           </ScaleIn>
@@ -117,7 +127,7 @@ export default function ModernTemplate({
       <div className="px-6 pb-6 pt-14">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-medium text-slate-400">Welcome back</p>
+            <p className="text-xs font-medium text-slate-400">{labels.home}</p>
             <p className="mt-1 font-bold text-slate-950">{businessName}</p>
           </div>
 
@@ -126,7 +136,7 @@ export default function ModernTemplate({
 
         <div className="mt-7 rounded-3xl bg-slate-950 p-5 text-white">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-white/60">Total performance</p>
+            <p className="text-xs text-white/60">{labels.howWeCanHelp}</p>
             <span className="rounded-full bg-emerald-400/20 px-2 py-1 text-[10px] text-emerald-300">
               +16.7%
             </span>
@@ -147,12 +157,12 @@ export default function ModernTemplate({
 
         <div className="mt-5 grid grid-cols-2 gap-3">
           <AnimatedCard className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-400">Customers</p>
+            <p className="text-xs text-slate-400">{labels.about}</p>
             <p className="mt-2 text-xl font-bold text-slate-950">842</p>
           </AnimatedCard>
 
           <AnimatedCard className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs text-slate-400">Growth</p>
+            <p className="text-xs text-slate-400">{labels.services}</p>
             <p className="mt-2 text-xl font-bold text-slate-950">+42%</p>
           </AnimatedCard>
         </div>
@@ -160,9 +170,9 @@ export default function ModernTemplate({
         <div className="mt-5 rounded-2xl bg-slate-50 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-400">Latest activity</p>
+              <p className="text-xs text-slate-400">{labels.about}</p>
               <p className="mt-1 text-sm font-semibold text-slate-950">
-                New conversion
+                {labels.contact}
               </p>
             </div>
 
@@ -187,7 +197,7 @@ export default function ModernTemplate({
 
     <div className="mt-6 flex items-end justify-between">
       <div>
-        <p className="text-[10px] uppercase text-white/40">Valid thru</p>
+        <p className="text-[10px] uppercase text-white/40">{labels.about}</p>
         <p className="text-sm">06/28</p>
       </div>
 
@@ -197,7 +207,7 @@ export default function ModernTemplate({
 
   {/* Spending card */}
   <AnimatedCard className="absolute right-0 top-24 z-30 w-52 rounded-[26px] border border-white/30 bg-slate-950/95 p-5 text-white shadow-2xl backdrop-blur-xl">
-    <p className="text-xs text-white/60">Monthly performance</p>
+    <p className="text-xs text-white/60">{labels.howWeCanHelp}</p>
     <p className="mt-2 text-2xl font-bold">$6,420</p>
 
     <div className="mt-5 flex items-center justify-center">
@@ -208,15 +218,15 @@ export default function ModernTemplate({
 
     <div className="mt-5 space-y-2 text-xs text-white/70">
       <div className="flex justify-between">
-        <span>Marketing</span>
+        <span>{labels.services}</span>
         <span>48%</span>
       </div>
       <div className="flex justify-between">
-        <span>Sales</span>
+        <span>{labels.contact}</span>
         <span>28%</span>
       </div>
       <div className="flex justify-between">
-        <span>Operations</span>
+        <span>{labels.about}</span>
         <span>24%</span>
       </div>
     </div>
@@ -224,7 +234,7 @@ export default function ModernTemplate({
 
   {/* Success card */}
   <AnimatedCard className="absolute bottom-20 right-4 z-30 w-56 rounded-[26px] border border-white/70 bg-white/90 p-5 shadow-2xl backdrop-blur-xl">
-    <p className="text-xs font-medium text-slate-400">Conversion success</p>
+    <p className="text-xs font-medium text-slate-400">{labels.howWeCanHelp}</p>
     <div className="mt-2 flex items-end justify-between">
       <p className="text-3xl font-bold text-slate-950">98.6%</p>
       <span className="text-xs font-semibold text-emerald-500">+2.4%</span>
@@ -247,19 +257,19 @@ export default function ModernTemplate({
       <section className="bg-slate-950 px-8 py-20 text-white lg:px-12">
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-300">
-            What we deliver
+            {labels.services}
           </p>
 
           <h2 className="mt-4 text-4xl font-bold tracking-tight">
-            Built for modern business growth
+            {headline}
           </h2>
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            ["Strategy", "Clear direction aligned with your business goals."],
-            ["Design", "Premium visual experiences that build trust."],
-            ["Growth", "Conversion-focused systems built to scale."],
+            [labels.about, brandResult?.designRecommendations || description],
+            [labels.services, brandResult?.websiteFeatures || description],
+            [labels.contact, description],
           ].map(([title, text]) => (
             <AnimatedCard
               key={title}
@@ -274,7 +284,7 @@ export default function ModernTemplate({
       </section>
       <section className="border-y border-slate-200 bg-white px-8 py-10 lg:px-12">
         <p className="text-center text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-          Trusted by ambitious teams worldwide
+          {labels.about}
         </p>
 
         <div className="mt-8 grid grid-cols-2 items-center gap-8 text-center sm:grid-cols-3 lg:grid-cols-6">
@@ -292,16 +302,15 @@ export default function ModernTemplate({
       </section>
       <section className="px-8 py-20 text-center lg:px-12">
         <h2 className="text-4xl font-bold tracking-tight">
-          Ready to grow {businessName}?
+          {headline}
         </h2>
 
         <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
-          Build a professional digital presence designed to convert attention
-          into real business growth.
+          {description}
         </p>
 
         <button className="mt-8 rounded-full bg-slate-950 px-8 py-4 font-semibold text-white transition hover:scale-105">
-          Start Your Project
+          {websiteGoal || labels.contact}
         </button>
       </section>
     </div>
