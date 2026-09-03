@@ -13,9 +13,7 @@ import {
 } from "@/app/lib/business-preview-edits";
 import { BusinessSiteVisual } from "@/app/components/BusinessSiteVisual";
 import {
-  businessServiceVisual,
-  businessShowcaseVisuals,
-  resolveBusinessVisual,
+  resolveWebsiteMedia,
   uploadedSrcFromRecord,
 } from "@/app/lib/business-site-visuals";
 
@@ -358,10 +356,10 @@ const visualOpacity =
   const renderedSections = renderedBusinessPreviewSections(preview);
   const visualContext = { industry: preview.business.industry, description: preview.business.description };
   const showVisuals = visualIntensity !== "none";
-  const heroVisual = resolveBusinessVisual({ slot: "hero", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "hero") });
-  const aboutVisual = resolveBusinessVisual({ slot: "about", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "about") });
-  const ctaVisual = resolveBusinessVisual({ slot: "social", ...visualContext, uploadedSrc: uploadedSrcFromRecord(website, "social") });
-  const showcaseVisuals = businessShowcaseVisuals({ ...visualContext, count: 4, uploadedSrcs: [uploadedSrcFromRecord(website, "showcase")] });
+  const media = resolveWebsiteMedia({ ...visualContext, uploaded: { hero: uploadedSrcFromRecord(website, "hero") } });
+  const heroVisual = media.hero;
+  const aboutVisual = media.about;
+  const showcaseVisuals = media.work;
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-4 py-6 text-[#1B211E] sm:px-7 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -582,11 +580,9 @@ previewLength={170}
   </div>
 
   <div className="relative p-6 sm:p-8" style={{ backgroundColor: siteTheme.background }}>
-    {showVisuals ? (
+    {showVisuals && heroVisual ? (
       <BusinessSiteVisual src={heroVisual.src} alt={heroVisual.alt} interactive overlay className="aspect-[4/3] min-h-52 shadow-xl" roundedClassName="rounded-[1.75rem] border border-black/10" />
-    ) : (
-      <div className="min-h-52 rounded-[1.75rem] border border-black/10" style={{ backgroundColor: siteTheme.surface }} />
-    )}
+    ) : null}
     <div className="mt-4 flex flex-wrap items-center gap-3">
       <input
         ref={mainPhotoInputRef}
@@ -677,13 +673,13 @@ previewLength={170}
           />
         )}
     </div>
-        <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-12">
+        {showcaseVisuals.length > 0 && <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-12">
           {showcaseVisuals.map((visual, index) => (
             <div key={`${visual.src}-${index}`} className={`business-site-card overflow-hidden ${index === 0 || index === 3 ? "col-span-2 aspect-[16/9] md:col-span-8 md:aspect-[16/10]" : "aspect-[4/3] md:col-span-4"}`}>
               <BusinessSiteVisual src={visual.src} alt={visual.alt} className="h-full min-h-full" roundedClassName="rounded-[1.25rem]" />
             </div>
           ))}
-        </div>
+        </div>}
   </div>
 )}
 
@@ -709,9 +705,9 @@ style={{
   borderColor: siteTheme.accent,
 }}
           >
-            {showVisuals && (
+            {showVisuals && resolveWebsiteMedia({ ...visualContext, uploaded: { services: uploadedSrcFromRecord(card, "services") } }).services[0] && (
               <BusinessSiteVisual
-                src={businessServiceVisual({ index, ...visualContext, uploadedSrc: uploadedSrcFromRecord(card, "services") }).src}
+                src={resolveWebsiteMedia({ ...visualContext, uploaded: { services: uploadedSrcFromRecord(card, "services") } }).services[0]!.src}
                 alt=""
                 className="h-28"
                 roundedClassName="rounded-none"
@@ -757,14 +753,14 @@ style={{
     style={{ backgroundColor: siteTheme.surface }}
   >
     <div
-      className="mx-auto grid max-w-5xl overflow-hidden rounded-[24px] border lg:grid-cols-[0.9fr_1.1fr]"
+      className={`mx-auto grid max-w-5xl overflow-hidden rounded-[24px] border ${showVisuals && aboutVisual ? "lg:grid-cols-[0.9fr_1.1fr]" : ""}`}
       style={{
         backgroundColor: siteTheme.background,
         borderColor: siteTheme.accent,
         color: siteTheme.text,
       }}
     >
-      {showVisuals && <BusinessSiteVisual src={aboutVisual.src} alt={aboutVisual.alt} className="min-h-52 lg:min-h-full" roundedClassName="rounded-none" />}
+      {showVisuals && aboutVisual && <BusinessSiteVisual src={aboutVisual.src} alt={aboutVisual.alt} className="min-h-52 lg:min-h-full" roundedClassName="rounded-none" />}
       <div className="flex flex-col justify-center p-6 sm:p-8">
       <p
         className="text-xs font-semibold uppercase tracking-[0.18em]"
@@ -795,7 +791,6 @@ style={{
   style={{ backgroundColor: siteTheme.primary }}
 >
   <div aria-hidden="true" className="business-site-cta-pattern pointer-events-none absolute inset-0 opacity-40" />
-  {showVisuals && <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 opacity-25 lg:block"><BusinessSiteVisual src={ctaVisual.src} alt="" className="h-full min-h-full" roundedClassName="rounded-none" /></div>}
   <div className="relative">
   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">
     Start your project

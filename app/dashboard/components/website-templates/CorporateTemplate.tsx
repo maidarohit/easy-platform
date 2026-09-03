@@ -4,12 +4,15 @@ import FadeIn from "../animations/FadeIn";
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type CorporateTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  media: ResolvedWebsiteMedia;
   labels: {
     home: string;
     services: string;
@@ -25,6 +28,7 @@ export default function CorporateTemplate({
   websiteGoal,
   brandResult,
   labels,
+  media,
 }: CorporateTemplateProps) {
   const businessName = companyName || industry || "—";
 
@@ -82,7 +86,8 @@ export default function CorporateTemplate({
           </div>
         </div>
 
-        <AnimatedCard className="rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-xl">
+        <AnimatedCard className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-50 p-6 shadow-xl">
+          {media.hero && <WebsiteMediaVisual media={media.hero} className="absolute inset-0 z-40 h-full" />}
           <div className="flex items-center justify-between border-b border-slate-200 pb-5">
             <div>
               <p className="text-sm text-slate-500">{labels.about}</p>

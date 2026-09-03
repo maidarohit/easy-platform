@@ -6,6 +6,8 @@ import Floating from "../animations/Floating";
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type ModernTemplateProps = {
   companyName: string;
@@ -20,6 +22,7 @@ type ModernTemplateProps = {
     howWeCanHelp: string;
   };
   previewMode?: "desktop" | "tablet" | "mobile";
+  media: ResolvedWebsiteMedia;
 };
 
 export default function ModernTemplate({
@@ -28,6 +31,7 @@ export default function ModernTemplate({
   websiteGoal,
   brandResult,
   labels,
+  media,
 }: ModernTemplateProps) {
   const businessName = companyName || industry || "—";
 
@@ -110,6 +114,7 @@ export default function ModernTemplate({
           </SlideUp>
 
           <div className="relative min-h-[640px]">
+  {media.hero && <WebsiteMediaVisual media={media.hero} className="absolute inset-0 z-40 h-full rounded-[40px] shadow-2xl" />}
   {/* Soft background glow */}
   <div className="absolute inset-0 rounded-[40px] bg-gradient-to-br from-blue-100 via-white to-violet-100" />
   <div className="absolute left-10 top-16 h-72 w-72 rounded-full bg-cyan-300/30 blur-3xl" />

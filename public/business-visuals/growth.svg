@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-label="Growth and performance chart illustration">
+  <rect width="800" height="560" fill="#E8EFEA"/>
+  <rect x="70" y="70" width="660" height="420" rx="28" fill="#173D32"/>
+  <rect x="98" y="98" width="604" height="364" rx="18" fill="#F7F4EC"/>
+  <path d="M150 390h500" stroke="#D8D1BE" stroke-width="2"/>
+  <path d="M150 150v240" stroke="#D8D1BE" stroke-width="2"/>
+  <rect x="186" y="250" width="48" height="140" rx="8" fill="#C7B48A"/>
+  <rect x="258" y="210" width="48" height="180" rx="8" fill="#8A713F"/>
+  <rect x="330" y="180" width="48" height="210" rx="8" fill="#2F6B5A"/>
+  <rect x="402" y="156" width="48" height="234" rx="8" fill="#173D32"/>
+  <rect x="474" y="128" width="48" height="262" rx="8" fill="#C7A86B"/>
+  <path d="M170 340 250 300 330 268 410 210 490 170 570 148 650 120" fill="none" stroke="#173D32" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="650" cy="120" r="10" fill="#C7A86B"/>
+  <path d="M620 108l42-28 8 18" fill="none" stroke="#C7A86B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

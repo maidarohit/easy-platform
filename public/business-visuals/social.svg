@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-label="Social and content strategy visual">
+  <rect width="800" height="560" fill="#F4F0E6"/>
+  <rect x="80" y="90" width="250" height="320" rx="28" fill="#173D32"/>
+  <rect x="98" y="112" width="214" height="276" rx="18" fill="#F7F4EC"/>
+  <circle cx="205" cy="170" r="28" fill="#C7A86B"/>
+  <rect x="132" y="214" width="146" height="10" rx="5" fill="#173D32"/>
+  <rect x="148" y="234" width="114" height="8" rx="4" fill="#C7B48A"/>
+  <rect x="132" y="264" width="146" height="86" rx="12" fill="#EEE9DC"/>
+  <rect x="360" y="70" width="360" height="140" rx="24" fill="#FFFFFF" stroke="#E4DDD0"/>
+  <circle cx="408" cy="140" r="22" fill="#173D32"/>
+  <rect x="444" y="122" width="180" height="10" rx="5" fill="#173D32"/>
+  <rect x="444" y="142" width="120" height="8" rx="4" fill="#C7B48A"/>
+  <rect x="360" y="232" width="360" height="140" rx="24" fill="#FFFFFF" stroke="#E4DDD0"/>
+  <circle cx="408" cy="302" r="22" fill="#8A713F"/>
+  <rect x="444" y="284" width="200" height="10" rx="5" fill="#173D32"/>
+  <rect x="444" y="304" width="140" height="8" rx="4" fill="#C7B48A"/>
+  <rect x="360" y="392" width="170" height="78" rx="20" fill="#173D32"/>
+  <rect x="550" y="392" width="170" height="78" rx="20" fill="#C7A86B"/>
+</svg>

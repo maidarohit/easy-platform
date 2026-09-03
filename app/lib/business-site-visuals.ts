@@ -1,5 +1,15 @@
 export type BusinessVisualSlot = "hero" | "showcase" | "services" | "about" | "social";
 export type BusinessVisualFamily = "digital" | "local" | "product" | "creative" | "consulting" | "professional";
+export type WebsiteMediaSlot = "hero" | "work" | "about" | "services";
+export type WebsiteMediaSource = "uploaded" | "business" | "matched";
+export type WebsiteMediaVisual = { src: string; alt: string; source: WebsiteMediaSource };
+export type WebsiteMediaInput = Partial<Record<WebsiteMediaSlot, string | readonly string[] | null>>;
+export type ResolvedWebsiteMedia = {
+  hero: WebsiteMediaVisual | null;
+  work: readonly WebsiteMediaVisual[];
+  about: WebsiteMediaVisual | null;
+  services: readonly WebsiteMediaVisual[];
+};
 
 const VISUALS = {
   analytics: "/business-visuals/analytics.svg",
@@ -87,6 +97,83 @@ function isUsableUploadedSrc(value: string | null | undefined) {
 }
 
 export { isUsableUploadedSrc as isUsableBusinessUploadedSrc };
+
+const WEBSITE_MATCHES: readonly {
+  pattern: RegExp;
+  visuals: Partial<Record<WebsiteMediaSlot, readonly [string, string][]>>;
+}[] = [
+  {
+    pattern: /\b(?:digital marketing|marketing agency|seo|saas|software|technology|tech company|analytics|advertising agency|web development)\b/i,
+    visuals: {
+      hero: [[VISUALS.analytics, "Business analytics and digital growth illustration"]],
+      work: [[VISUALS.workspace, "Digital work and project workspace illustration"]],
+      about: [[VISUALS.collaboration, "Business team collaboration illustration"]],
+      services: [[VISUALS.growth, "Digital growth services illustration"]],
+    },
+  },
+  {
+    pattern: /\b(?:consulting|consultant|business coach|advisor|advisory|professional services)\b/i,
+    visuals: {
+      hero: [[VISUALS.collaboration, "Professional strategy and collaboration illustration"]],
+      work: [[VISUALS.growth, "Client results and business progress illustration"]],
+      about: [[VISUALS.workspace, "Professional business workspace illustration"]],
+      services: [[VISUALS.analytics, "Business advisory and analysis illustration"]],
+    },
+  },
+  {
+    pattern: /\b(?:restaurant|cafe|café|bakery|hospitality|hotel|catering)\b/i,
+    visuals: { hero: [[VISUALS.hospitality, "Welcoming hospitality business interior illustration"]] },
+  },
+  {
+    pattern: /\b(?:retail|ecommerce|e-commerce|online store|product brand|shop)\b/i,
+    visuals: { hero: [[VISUALS.retail, "Retail products and customer shopping illustration"]] },
+  },
+  {
+    pattern: /\b(?:photography|photographer|creative studio|design studio|interior design|artist|art studio)\b/i,
+    visuals: { hero: [[VISUALS.studio, "Creative studio and project work illustration"]] },
+  },
+];
+
+function uploadedMediaValues(value: WebsiteMediaInput[WebsiteMediaSlot]) {
+  const values = Array.isArray(value) ? value : [value];
+  return values.filter((item): item is string => typeof item === "string" && isUsableUploadedSrc(item));
+}
+
+export function resolveWebsiteMedia(input: Readonly<{
+  industry?: string | null;
+  description?: string | null;
+  uploaded?: WebsiteMediaInput | null;
+}>): ResolvedWebsiteMedia {
+  const context = `${input.industry ?? ""} ${input.description ?? ""}`;
+  const matched = WEBSITE_MATCHES.find((entry) => entry.pattern.test(context));
+  const used = new Set<string>();
+
+  const resolveSlot = (slot: WebsiteMediaSlot): WebsiteMediaVisual[] => {
+    // Only media explicitly assigned to a semantic slot is eligible. Legacy
+    // secondary/gallery uploads have no subject metadata, so they remain saved
+    // but are not auto-promoted into Work or About.
+    const uploaded = slot === "hero" || slot === "services"
+      ? uploadedMediaValues(input.uploaded?.[slot])
+      : [];
+    const candidates: WebsiteMediaVisual[] = uploaded.map((src) => ({
+      src: src.trim(),
+      alt: `${slot === "work" ? "Project work" : slot} visual for ${input.industry || "the business"}`,
+      source: "uploaded",
+    }));
+    for (const [src, alt] of matched?.visuals[slot] ?? []) candidates.push({ src, alt, source: "matched" });
+    return candidates.filter((visual) => {
+      if (used.has(visual.src)) return false;
+      used.add(visual.src);
+      return true;
+    });
+  };
+
+  const hero = resolveSlot("hero");
+  const work = resolveSlot("work");
+  const about = resolveSlot("about");
+  const services = resolveSlot("services");
+  return { hero: hero[0] ?? null, work, about: about[0] ?? null, services };
+}
 
 export function businessVisualFamily(industry?: string | null, description?: string | null): BusinessVisualFamily {
   const context = `${industry ?? ""} ${description ?? ""}`.toLowerCase();

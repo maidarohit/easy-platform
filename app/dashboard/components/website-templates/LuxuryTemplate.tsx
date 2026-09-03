@@ -5,6 +5,8 @@ import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import RealEstateTemplate from "./RealEstateTemplate";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type LuxuryTemplateProps = {
   companyName: string;
@@ -13,6 +15,7 @@ type LuxuryTemplateProps = {
   websiteRequirements?: string;
   previewMode?: "desktop" | "tablet" | "mobile";
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  media: ResolvedWebsiteMedia;
   labels: {
     home: string;
     services: string;
@@ -30,6 +33,7 @@ export default function LuxuryTemplate({
   previewMode = "desktop",
   brandResult,
   labels,
+  media,
 }: LuxuryTemplateProps) {
   if (/real\s*estate|realty|property|properties/i.test(industry)) {
     return (
@@ -41,6 +45,7 @@ export default function LuxuryTemplate({
         previewMode={previewMode}
         brandResult={brandResult}
         labels={labels}
+        media={media}
       />
     );
   }
@@ -139,6 +144,7 @@ export default function LuxuryTemplate({
           </div>
 
           <div className="relative min-h-[620px]">
+            {media.hero && <WebsiteMediaVisual media={media.hero} className="absolute inset-0 z-40 h-full border border-[#5b5247] shadow-2xl" />}
             <div className="absolute inset-0 border border-[#3a342d] bg-gradient-to-br from-[#171411] via-[#0f0d0b] to-[#241b11]" />
 <AnimatedCard>
             <div className="absolute inset-8 border border-[#5b5247] bg-[#14110f] p-8 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">

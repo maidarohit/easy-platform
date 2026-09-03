@@ -48,6 +48,7 @@ export default async function PublishedWebsitePage({
         previewMode="desktop"
         brandResult={snapshot.websiteOutput}
         websiteEdits={snapshot.websiteEdits}
+        media={snapshot.media}
       />
     </main>
   );

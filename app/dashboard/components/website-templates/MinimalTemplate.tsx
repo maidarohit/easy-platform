@@ -2,12 +2,15 @@
 
 import AnimatedCard from "../animations/AnimatedCard";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type MinimalTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  media: ResolvedWebsiteMedia;
   labels: {
     home: string;
     services: string;
@@ -23,6 +26,7 @@ export default function MinimalTemplate({
   websiteGoal,
   brandResult,
   labels,
+  media,
 }: MinimalTemplateProps) {
   const businessName = companyName || industry || "—";
 
@@ -62,17 +66,17 @@ export default function MinimalTemplate({
     {
       number: "01",
       title: navLabels[0],
-      text: brandResult?.websiteOverview || description,
+      text: "Explore what we offer and find the right fit for your needs.",
     },
     {
       number: "02",
       title: navLabels[1],
-      text: brandResult?.designRecommendations || description,
+      text: "Tell us about your goals, preferences, and the outcome you want.",
     },
     {
       number: "03",
       title: navLabels[2],
-      text: brandResult?.websiteFeatures || description,
+      text: "Receive a clear, tailored next step from our team.",
     },
   ];
 
@@ -119,6 +123,7 @@ export default function MinimalTemplate({
               </button>
             </div>
           </div>
+          {media.hero && <WebsiteMediaVisual media={media.hero} className="mt-12 h-[clamp(280px,48vw,560px)] rounded-[28px]" />}
         </div>
       </section>
 

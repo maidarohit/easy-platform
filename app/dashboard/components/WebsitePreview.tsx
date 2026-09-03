@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
+import { resolveWebsiteMedia, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 
 import { websiteThemes } from "./websiteThemes";
 import ModernTemplate from "./website-templates/ModernTemplate";
@@ -10,6 +11,7 @@ import CorporateTemplate from "./website-templates/CorporateTemplate";
 import CreativeTemplate from "./website-templates/CreativeTemplate";
 import MinimalTemplate from "./website-templates/MinimalTemplate";
 import DarkTemplate from "./website-templates/DarkTemplate";
+import WebsiteMediaVisual from "./WebsiteMediaVisual";
 
 type WebsitePreviewProps = {
   companyName: string;
@@ -21,6 +23,7 @@ type WebsitePreviewProps = {
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
   websiteEdits?: WebsiteEdits;
   primaryLanguage?: string;
+  media?: WebsiteMediaInput;
 };
 
 export default function WebsitePreview({
@@ -33,8 +36,10 @@ export default function WebsitePreview({
   brandResult,
   websiteEdits,
   primaryLanguage = "en",
+  media,
 }: WebsitePreviewProps) {
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
+  const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });
 
   const primaryColor = theme.primaryColor;
   const businessName = websiteEdits?.companyName || companyName || "Your Business";
@@ -104,6 +109,7 @@ const ui =
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
           previewMode={previewMode}
                   labels={ui}
         />
@@ -119,6 +125,7 @@ const ui =
           websiteRequirements={websiteRequirements}
           previewMode={previewMode}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
                   labels={ui}
         />
       );
@@ -131,6 +138,7 @@ const ui =
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
                   labels={ui}
         />
       );
@@ -143,6 +151,7 @@ const ui =
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
                   labels={ui}
         />
       );
@@ -155,6 +164,7 @@ const ui =
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
           labels={ui}
         />
       );
@@ -167,6 +177,7 @@ const ui =
           industry={industry}
           websiteGoal={editedGoal}
           brandResult={editedBrandResult}
+          media={resolvedMedia}
                   labels={ui}
         />
       );
@@ -182,6 +193,24 @@ const ui =
         className={`easy-website-preview mx-auto overflow-hidden rounded-[32px] border border-cyan-500/20 bg-slate-950/70 shadow-[0_0_70px_rgba(6,182,212,0.16)] backdrop-blur-xl transition-all duration-500 ${previewWidthClass}`}
       >
         {selectedTemplate}
+        {(resolvedMedia.work.length > 0 || resolvedMedia.about || resolvedMedia.services.length > 0) && (
+          <div className="border-t border-slate-200 bg-white px-8 py-14 text-slate-900 lg:px-14">
+            {resolvedMedia.work.length > 0 && (
+              <section>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Selected work</p>
+                <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                  {resolvedMedia.work.map((visual) => <WebsiteMediaVisual key={visual.src} media={visual} className="h-72 rounded-2xl" />)}
+                </div>
+              </section>
+            )}
+            {(resolvedMedia.about || resolvedMedia.services.length > 0) && (
+              <div className="mt-10 grid gap-5 lg:grid-cols-2">
+                {resolvedMedia.about && <section><p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{ui.about}</p><WebsiteMediaVisual media={resolvedMedia.about} className="h-72 rounded-2xl" /></section>}
+                {resolvedMedia.services.map((visual) => <section key={visual.src}><p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{ui.services}</p><WebsiteMediaVisual media={visual} className="h-72 rounded-2xl" /></section>)}
+              </div>
+            )}
+          </div>
+        )}
         {websiteEdits && (
           <section className="grid gap-8 border-t border-slate-200 bg-white px-8 py-14 text-slate-900 lg:grid-cols-2 lg:px-14">
             <div>

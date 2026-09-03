@@ -3,12 +3,15 @@ import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import Floating from "../animations/Floating";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type DarkTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  media: ResolvedWebsiteMedia;
   labels: {
     home: string;
     services: string;
@@ -24,6 +27,7 @@ export default function DarkTemplate({
   websiteGoal,
   brandResult,
   labels,
+  media,
 }: DarkTemplateProps) {
   const businessName = companyName || industry || "—";
 
@@ -101,6 +105,7 @@ export default function DarkTemplate({
             </div>
           </div>
           <div className="relative min-h-[620px]">
+            {media.hero && <WebsiteMediaVisual media={media.hero} className="absolute inset-0 z-40 h-full rounded-[40px] shadow-2xl" />}
             <div className="absolute inset-0 rounded-[40px] border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.03] to-transparent backdrop-blur-xl" />
 
             <div className="absolute inset-8 rounded-[32px] border border-cyan-400/20 bg-slate-950/80 p-6 shadow-[0_40px_100px_rgba(0,0,0,0.45)]">

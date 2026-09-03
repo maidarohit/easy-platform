@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-label="Product range illustration">
+  <rect width="800" height="560" fill="#EEF3F8"/>
+  <rect x="90" y="120" width="180" height="240" rx="24" fill="#FFFFFF" stroke="#D5DEE7"/>
+  <rect x="310" y="90" width="180" height="300" rx="24" fill="#102A43"/>
+  <rect x="530" y="140" width="180" height="220" rx="24" fill="#FFFFFF" stroke="#D5DEE7"/>
+  <rect x="118" y="150" width="124" height="90" rx="14" fill="#EEF3F8"/>
+  <rect x="338" y="120" width="124" height="110" rx="14" fill="#2F80ED" opacity="0.35"/>
+  <rect x="558" y="168" width="124" height="80" rx="14" fill="#EEF3F8"/>
+  <rect x="118" y="260" width="90" height="10" rx="5" fill="#102A43"/>
+  <rect x="338" y="250" width="90" height="10" rx="5" fill="#FFFFFF"/>
+  <rect x="558" y="270" width="90" height="10" rx="5" fill="#102A43"/>
+  <rect x="200" y="420" width="400" height="18" rx="9" fill="#D5DEE7"/>
+</svg>

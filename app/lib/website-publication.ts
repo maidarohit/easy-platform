@@ -1,4 +1,5 @@
 import "server-only";
+import { isUsableBusinessUploadedSrc, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 
 export const WEBSITE_TEMPLATES = [
   "Modern",
@@ -33,6 +34,7 @@ export type WebsitePublicationSnapshot = {
   template: WebsiteTemplate;
   websiteOutput: Record<(typeof OUTPUT_FIELDS)[number], string>;
   websiteEdits?: WebsiteEdits;
+  media?: WebsiteMediaInput;
 };
 
 export type WebsiteEdits = {
@@ -78,6 +80,20 @@ function safeString(value: unknown, max: number, required = true): string | null
     return null;
   }
   return normalized;
+}
+
+function validateWebsiteMedia(value: unknown): WebsiteMediaInput | null {
+  if (value === undefined) return {};
+  if (!isPlainObject(value) || Object.keys(value).some((key) => !["hero", "work", "about", "services"].includes(key))) return null;
+  const output: WebsiteMediaInput = {};
+  for (const key of ["hero", "work", "about", "services"] as const) {
+    const raw = value[key];
+    if (raw === undefined || raw === null) continue;
+    const values = Array.isArray(raw) ? raw : [raw];
+    if (values.length > 8 || values.some((item) => typeof item !== "string" || !isUsableBusinessUploadedSrc(item))) return null;
+    output[key] = values.map((item) => (item as string).trim());
+  }
+  return output;
 }
 
 export function validateWebsiteTemplate(value: unknown): WebsiteTemplate | null {
@@ -157,6 +173,7 @@ export function buildWebsitePublicationSnapshot(input: {
   template: unknown;
   websiteOutput: unknown;
   websiteEdits?: unknown;
+  media?: unknown;
 }): WebsitePublicationSnapshot | null {
   const companyName = safeString(input.companyName, MAX_SHORT);
   const industry = safeString(input.industry, MAX_SHORT);
@@ -165,14 +182,15 @@ export function buildWebsitePublicationSnapshot(input: {
   const template = validateWebsiteTemplate(input.template);
   const websiteOutput = validateWebsiteAiOutput(input.websiteOutput);
   const websiteEdits = input.websiteEdits === undefined ? undefined : validateWebsiteEdits(input.websiteEdits);
+  const media = validateWebsiteMedia(input.media);
   if (companyName === null || industry === null || websiteGoal === null ||
-      websiteRequirements === null || !template || !websiteOutput || (input.websiteEdits !== undefined && !websiteEdits)) return null;
-  return { schemaVersion: 1, companyName, industry, websiteGoal, websiteRequirements, template, websiteOutput, ...(websiteEdits && { websiteEdits }) };
+      websiteRequirements === null || !template || !websiteOutput || !media || (input.websiteEdits !== undefined && !websiteEdits)) return null;
+  return { schemaVersion: 1, companyName, industry, websiteGoal, websiteRequirements, template, websiteOutput, ...(websiteEdits && { websiteEdits }), ...(Object.keys(media).length && { media }) };
 }
 
 export function validateWebsitePublicationSnapshot(value: unknown): WebsitePublicationSnapshot | null {
   if (!isPlainObject(value)) return null;
-  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput", "websiteEdits"];
+  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput", "websiteEdits", "media"];
   if (Object.keys(value).some((key) => !expected.includes(key)) || value.schemaVersion !== 1) return null;
   return buildWebsitePublicationSnapshot({
     companyName: value.companyName,
@@ -182,6 +200,7 @@ export function validateWebsitePublicationSnapshot(value: unknown): WebsitePubli
     template: value.template,
     websiteOutput: value.websiteOutput,
     websiteEdits: value.websiteEdits,
+    media: value.media,
   });
 }
 

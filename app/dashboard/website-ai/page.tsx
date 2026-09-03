@@ -11,6 +11,7 @@ import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 import auth from "../../lib/auth";
 import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
+import type { WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 
 const WEBSITE_GOALS = [
   "Generate Leads",
@@ -107,6 +108,7 @@ const [showGoLiveReview, setShowGoLiveReview] = useState(false);
 const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">("buzypeezy");
 const [customDomain, setCustomDomain] = useState("");
 const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
+const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
 >("desktop");
@@ -138,6 +140,25 @@ useEffect(() => {
     active = false;
   };
 }, [project, projectId]);
+useEffect(() => {
+  if (!projectId) return;
+  let active = true;
+  const loadWebsiteMedia = async () => {
+    try {
+      const response = await authenticatedFetch(`/api/business-preview?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load project media.");
+      if (!active) return;
+      setWebsiteMedia({
+        hero: data.preview?.website?.heroImage || null,
+      });
+    } catch {
+      if (active) setWebsiteMedia({});
+    }
+  };
+  loadWebsiteMedia();
+  return () => { active = false; };
+}, [projectId]);
 useEffect(() => {
   if (!projectId || !project?.userId) return;
 
@@ -182,7 +203,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [projectId, project?.brandStyle, project?.companyName, project?.industry, project?.userId]);
+}, [projectId, project?.brandStyle, project?.companyName, project?.industry, project?.userId, projectPrimaryLanguage]);
 useEffect(() => {
   if (!projectId) return;
   let active = true;
@@ -668,6 +689,7 @@ return (
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
                     <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined}
 primaryLanguage={projectPrimaryLanguage}
+media={websiteMedia}
 />
                   </div>
                 </div>

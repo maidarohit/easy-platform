@@ -7,12 +7,15 @@ import Floating from "../animations/Floating";
 import AnimatedButton from "../animations/AnimatedButton";
 import AnimatedCard from "../animations/AnimatedCard";
 import type { WebsiteAiOutput } from "../../../lib/ai";
+import type { ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
+import WebsiteMediaVisual from "../WebsiteMediaVisual";
 
 type CreativeTemplateProps = {
   companyName: string;
   industry: string;
   websiteGoal: string;
   brandResult?: WebsiteAiOutput & { heroHeadline?: string };
+  media: ResolvedWebsiteMedia;
   labels: {
     home: string;
     services: string;
@@ -28,6 +31,7 @@ export default function CreativeTemplate({
   websiteGoal,
   brandResult,
   labels,
+  media,
 }: CreativeTemplateProps) {
   const businessName = companyName || industry || "—";
 
@@ -112,6 +116,7 @@ export default function CreativeTemplate({
           </div>
 <AnimatedCard>
           <div className="relative min-h-[620px]">
+            {media.hero && <WebsiteMediaVisual media={media.hero} className="absolute inset-0 z-40 h-full rounded-[40px] shadow-2xl" />}
             <div className="absolute left-10 top-12 h-80 w-72 rotate-[-8deg] rounded-[36px] bg-fuchsia-500 shadow-2xl" />
             <div className="absolute right-8 top-20 h-80 w-72 rotate-[8deg] rounded-[36px] bg-cyan-400 shadow-2xl" />
             <div className="absolute left-1/2 top-1/2 z-20 w-[310px] -translate-x-1/2 -translate-y-1/2 rounded-[38px] border-4 border-slate-950 bg-white p-6 shadow-[10px_12px_0_#0f172a]">

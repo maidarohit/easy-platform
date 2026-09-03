@@ -1,8 +1,8 @@
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import { publicContactMethods } from "@/app/lib/public-contact";
 
-const INTERNAL_PAGE_LABELS = new Set(["home", "services", "service detail page", "service detail pages", "portfolio", "portfolio case studies", "case studies", "pricing", "pricing packages", "process", "about", "contact", "faq", "blog"]);
-const INTERNAL_PUBLIC_TEXT = /\b(?:day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword strategy|meta titles?|meta descriptions?|kpis?|conversion rate|marketing score|ai agent|prompt|model output)\b/i;
+const INTERNAL_PAGE_LABELS = new Set(["home", "homepage", "landing", "landing page", "services", "service detail", "service detail page", "service detail pages", "portfolio", "portfolio case studies", "case studies", "project detail", "project details", "pricing", "pricing packages", "process", "about", "contact", "faq", "blog"]);
+const INTERNAL_PUBLIC_TEXT = /\b(?:day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword strategy|meta titles?|meta descriptions?|kpis?|conversion rate|conversion flow|marketing score|ai agent|prompt|model output)\b/i;
 const LABEL_PREFIX = /^(?:persona|audience|target audience|customer segment|step|phase|service|product|offer)\s*\d*\s*[:–—-]\s*/i;
 const LIST_MARKER = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
@@ -63,7 +63,14 @@ export function publicAudience(snapshot: PublishedBusinessSnapshot): PublicCard[
   return [...unique.values()].slice(0, 4);
 }
 export function publicProcess(snapshot: PublishedBusinessSnapshot) {
-  const source = pieces(snapshot.journey?.customerJourney || snapshot.journey?.enquiryPath, 6).map((value) => card(value).title).filter((value) => value.length <= 90);
+  const source = pieces(snapshot.journey?.customerJourney || snapshot.journey?.enquiryPath, 6)
+    .map((value) => card(value).title.trim())
+    .filter((value) => {
+      const label = normalizedLabel(value);
+      if (value.length < 3 || value.length > 90 || /[:;]$/.test(value) || INTERNAL_PAGE_LABELS.has(label)) return false;
+      const opens = (value.match(/\(/g) || []).length; const closes = (value.match(/\)/g) || []).length;
+      return opens === closes && !INTERNAL_PUBLIC_TEXT.test(value);
+    });
   if (source.length >= 3) return source;
   return /\b(?:shop|store|ecommerce|e-commerce|retail|product)\b/i.test(`${snapshot.business.industry} ${snapshot.website?.services}`)
     ? ["Explore the range", "Choose what fits", "Place your enquiry or order"]

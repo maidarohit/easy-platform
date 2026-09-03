@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" role="img" aria-label="Team collaboration illustration">
+  <rect width="800" height="560" fill="#F3EEE3"/>
+  <rect x="90" y="80" width="620" height="380" rx="32" fill="#FFFFFF"/>
+  <rect x="90" y="80" width="620" height="72" rx="32" fill="#173D32"/>
+  <rect x="90" y="120" width="620" height="32" fill="#173D32"/>
+  <circle cx="138" cy="116" r="8" fill="#C7A86B"/>
+  <circle cx="164" cy="116" r="8" fill="#E9E4D8"/>
+  <circle cx="190" cy="116" r="8" fill="#8A713F"/>
+  <rect x="130" y="190" width="200" height="220" rx="20" fill="#EEE9DC"/>
+  <circle cx="230" cy="262" r="36" fill="#173D32"/>
+  <path d="M186 338c12-28 28-42 44-42s32 14 44 42" fill="#2F6B5A"/>
+  <rect x="360" y="190" width="200" height="220" rx="20" fill="#E9E4D8"/>
+  <circle cx="460" cy="262" r="36" fill="#8A713F"/>
+  <path d="M416 338c12-28 28-42 44-42s32 14 44 42" fill="#C7A86B"/>
+  <rect x="590" y="210" width="80" height="180" rx="20" fill="#173D32"/>
+  <circle cx="630" cy="268" r="24" fill="#F7F4EC"/>
+  <path d="M602 338c8-20 18-30 28-30s20 10 28 30" fill="#C7A86B"/>
+  <rect x="150" y="430" width="120" height="10" rx="5" fill="#D8D1BE"/>
+  <rect x="380" y="430" width="120" height="10" rx="5" fill="#D8D1BE"/>
+</svg>
