@@ -53,6 +53,13 @@ function MasterWorkspaceContent() {
   const [workspaceError, setWorkspaceError] = useState("");
   const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
   const [publication, setPublication] = useState<BusinessPublication>({ status: "unpublished" });
+  const [primaryLanguage, setPrimaryLanguage] = useState("en");
+  const [languageSaving, setLanguageSaving] = useState(false);
+  const [languageMessage, setLanguageMessage] = useState("");
+
+  useEffect(() => {
+  setPrimaryLanguage(project?.primaryLanguage || "en");
+}, [project?.primaryLanguage, projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -103,7 +110,45 @@ function MasterWorkspaceContent() {
       setApprovingOutputId(null);
     }
   };
+const savePrimaryLanguage = async () => {
+  if (!projectId) {
+    setLanguageMessage("Open a saved project first.");
+    return;
+  }
 
+  setLanguageSaving(true);
+  setLanguageMessage("");
+
+  try {
+    const response = await authenticatedFetch("/api/projects", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId,
+        primaryLanguage,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to save language.");
+    }
+
+    setPrimaryLanguage(data.project?.primaryLanguage || primaryLanguage);
+    setLanguageMessage("Language saved.");
+  } catch (languageError) {
+    setLanguageMessage(
+      languageError instanceof Error
+        ? languageError.message
+        : "Unable to save language.",
+    );
+  } finally {
+    setLanguageSaving(false);
+  }
+};
   const projectLink = (path: string) =>
     projectId
       ? `${path}?projectId=${encodeURIComponent(projectId)}`
@@ -195,7 +240,7 @@ function MasterWorkspaceContent() {
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#ff6e7f] via-[#ffb7af] to-[#30d9ec]" />
 
             <div className="flex flex-col justify-between gap-8 xl:flex-row">
-              <div>
+              <div className="min-w-0 xl:w-[30%] xl:min-w-[280px] xl:flex-none">
                 <div className="mb-3 flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#f5c7c4] bg-[#fff1ee] text-xl">
                     ✦
@@ -221,7 +266,7 @@ function MasterWorkspaceContent() {
                 </p>
               </div>
 
-              <div className="grid min-w-[300px] grid-cols-2 gap-3">
+              <div className="grid min-w-0 w-full grid-cols-2 gap-3 xl:flex-1">
                 <div className="rounded-2xl border border-[#e5e0d5] bg-[#faf8f1] p-4">
                   <p className="text-[9px] font-bold tracking-[0.2em] text-[#9b8b72]">
                     INDUSTRY
@@ -239,6 +284,53 @@ function MasterWorkspaceContent() {
                     {displayedProject?.goal || "Not provided"}
                   </p>
                 </div>
+                <div className="col-span-2 rounded-2xl border border-[#e5e0d5] bg-[#faf8f1] p-4">
+  <p className="text-[9px] font-bold tracking-[0.2em] text-[#9b8b72]">
+    PRIMARY LANGUAGE
+  </p>
+
+  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+    <select
+      value={primaryLanguage}
+      onChange={(event) => {
+        setPrimaryLanguage(event.target.value);
+        setLanguageMessage("");
+      }}
+      disabled={!projectId || languageSaving}
+      className="min-h-11 flex-1 rounded-xl border border-[#ded9cc] bg-white px-3 text-sm font-medium text-[#103c32]"
+    >
+      <option value="en">English</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+      <option value="de">German</option>
+      <option value="pt">Portuguese</option>
+      <option value="ar">Arabic</option>
+      <option value="hi">Hindi</option>
+      <option value="ja">Japanese</option>
+      <option value="ko">Korean</option>
+      <option value="zh">Chinese</option>
+      <option value="kn">Kannada</option>
+      <option value="ta">Tamil</option>
+      <option value="te">Telugu</option>
+      <option value="ml">Malayalam</option>
+    </select>
+
+    <button
+      type="button"
+      onClick={savePrimaryLanguage}
+      disabled={!projectId || languageSaving}
+      className="min-h-11 rounded-xl bg-[#103c32] px-5 text-sm font-semibold text-white disabled:opacity-50"
+    >
+      {languageSaving ? "Saving..." : "Save Language"}
+    </button>
+  </div>
+
+  {languageMessage && (
+    <p className="mt-2 text-xs font-medium text-[#66756f]">
+      {languageMessage}
+    </p>
+  )}
+</div>
 
                 <div className="rounded-2xl border border-[#e5e0d5] bg-[#faf8f1] p-4">
                   <p className="text-[9px] font-bold tracking-[0.2em] text-[#9b8b72]">
