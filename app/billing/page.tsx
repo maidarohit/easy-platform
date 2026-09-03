@@ -16,7 +16,10 @@ type BillingStatus = {
     status: SubscriptionStatus;
     cancelAtPeriodEnd: boolean;
   } | null;
-  entitlements: { paidAccess: boolean };
+  entitlements: {
+    paidAccess: boolean;
+    subscriptionPaidAccess: boolean;
+  };
 };
 const copy: Record<SubscriptionStatus, [string, string]> = {
   pending: [
@@ -134,6 +137,10 @@ export default function BillingPage() {
   const stateCopy = status?.subscription
     ? copy[status.subscription.status]
     : null;
+  const hasActiveSubscription = status?.subscription?.status === "active";
+  const activePlan = status?.subscription?.status === "active"
+    ? status.subscription.plan
+    : null;
   const billingReturn = selectedPlan ? `/billing?plan=${selectedPlan}` : "/billing";
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-5 py-16 text-[#1B211E]">
@@ -197,13 +204,13 @@ export default function BillingPage() {
                 {plan.description}
               </p>
               <button
-                disabled={loading !== null || status?.entitlements.paidAccess}
+                disabled={loading !== null || hasActiveSubscription}
                 onClick={() => checkout(plan.key)}
                 className="mt-8 w-full rounded-xl bg-[#173D32] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading === plan.key
                   ? "Payment setup in progress…"
-                  : status?.entitlements.paidAccess
+                  : activePlan === plan.key
                     ? "Subscription active"
                     : `Choose ${plan.name}`}
               </button>

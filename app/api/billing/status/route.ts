@@ -23,7 +23,11 @@ export async function GET(request: Request) {
       currentPeriodEnd: subscription.currentPeriodEnd,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     } : null,
-    entitlements: { ...entitlements, paidAccess },
+    entitlements: {
+      ...entitlements,
+      subscriptionPaidAccess: entitlements.paidAccess,
+      paidAccess,
+    },
     billingConfiguration: getSafeBillingDiagnostics(),
   });
 }
