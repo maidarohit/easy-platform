@@ -106,6 +106,7 @@ const [publicationLoading, setPublicationLoading] = useState(false);
 const [showGoLiveReview, setShowGoLiveReview] = useState(false);
 const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">("buzypeezy");
 const [customDomain, setCustomDomain] = useState("");
+const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
 >("desktop");
@@ -735,6 +736,49 @@ primaryLanguage={projectPrimaryLanguage}
               </section>}
             </section>
           )}
+
+          <section className="relative mt-7 rounded-[24px] border border-cyan-400/20 bg-slate-950/70 p-5 sm:p-6">
+            {project && project.id === projectId ? (
+              <>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Domain setup</p>
+                <h2 className="mt-2 text-2xl font-semibold text-white">Your Domain</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-400">Use your own domain for your Buzypeezy website.</p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <a
+                    href={`https://www.godaddy.com/en-in/domains?domaintocheck=${encodeURIComponent(`${(project.companyName || companyName).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 59) || "yourbusiness"}.com`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={copyButtonClass}
+                  >
+                    Find &amp; Buy a Domain
+                  </a>
+                  <button type="button" onClick={() => setShowOwnedDomainSetup((current) => !current)} className={copyButtonClass}>
+                    I Already Own a Domain
+                  </button>
+                </div>
+                <p className="mt-4 text-xs leading-5 text-slate-500">Domain purchase and payment are completed securely with the domain provider.</p>
+
+                {showOwnedDomainSetup && (
+                  <div className="mt-5 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Connection guidance / setup</p>
+                    <p className="mt-3 text-sm leading-6 text-slate-300">Enter the domain you already own. Buzypeezy will guide you through connecting it to your website.</p>
+                    <input
+                      value={customDomain}
+                      onChange={(event) => setCustomDomain(event.target.value.trim().toLowerCase())}
+                      placeholder="yourbusiness.com"
+                      maxLength={253}
+                      className="mt-4 h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50"
+                      aria-label="Domain you already own"
+                    />
+                    {customDomain && !customDomainIsValid && <p className="mt-2 text-xs text-red-300">Enter a domain only, without http, paths or spaces.</p>}
+                    <p className="mt-3 text-xs leading-5 text-amber-200">This is a guidance step only. Your domain is not connected yet, and Buzypeezy will not change DNS automatically.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">Select a business project first.</p>
+            )}
+          </section>
 
           {!brandResult && !loading && (
             <section className="relative mt-8 overflow-hidden rounded-[26px] border border-dashed border-red-500/20 bg-slate-900/45 p-8 text-center sm:p-12">
