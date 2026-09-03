@@ -58,8 +58,15 @@ function MasterWorkspaceContent() {
   const [languageMessage, setLanguageMessage] = useState("");
 
   useEffect(() => {
-  setPrimaryLanguage(project?.primaryLanguage || "en");
-}, [project?.primaryLanguage, projectId]);
+  const savedLanguage =
+    project &&
+    "primaryLanguage" in project &&
+    typeof project.primaryLanguage === "string"
+      ? project.primaryLanguage
+      : "en";
+
+  setPrimaryLanguage(savedLanguage);
+}, [project, projectId]);
 
   useEffect(() => {
     if (!projectId) return;
