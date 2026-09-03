@@ -12,7 +12,9 @@ import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib
 export const AI_MANAGER_WORKFLOW = "ai-manager";
 
 function callbackBaseUrl() {
-  const value = process.env.AI_MANAGER_CALLBACK_BASE_URL?.trim().replace(/\/+$/, "");
+  const value = (process.env.AI_MANAGER_CALLBACK_BASE_URL?.trim()
+    || (process.env.NODE_ENV === "development" ? "http://localhost:3000" : ""))
+    .replace(/\/+$/, "");
   if (!value) throw new SpecialistExecutionError("before_dispatch", 503);
   const url = new URL(value);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new SpecialistExecutionError("before_dispatch", 503);

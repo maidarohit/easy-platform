@@ -11,6 +11,7 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
+import { supportedLanguageOrEnglish } from "@/app/lib/supported-languages";
 import { and, eq } from "drizzle-orm";
 
 const WEBSITE_AI_WORKFLOW = "website-ai";
@@ -55,9 +56,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "projectId is required." }, { status: 400 });
   }
 
+  let primaryLanguage = "en";
   try {
     const [ownedProject] = await db
-      .select({ id: projects.id })
+      .select({ id: projects.id, primaryLanguage: projects.primaryLanguage })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.userId, uid)))
       .limit(1);
@@ -65,6 +67,7 @@ export async function POST(request: Request) {
     if (!ownedProject) {
       return Response.json({ error: "Project not found." }, { status: 404 });
     }
+    primaryLanguage = supportedLanguageOrEnglish(ownedProject.primaryLanguage);
   } catch {
     console.error("Website AI project authorization failed.");
     return Response.json({ error: "Unable to authorize project." }, { status: 500 });
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const websitePayload = { ...body };
+  const websitePayload: Record<string, unknown> = { ...body, primaryLanguage };
   delete websitePayload.projectId;
   delete websitePayload.userId;
   const controller = new AbortController();

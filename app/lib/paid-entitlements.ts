@@ -114,7 +114,7 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
   }
   const [row] = await db.select({ count: sql<number>`coalesce(sum(${aiUsage.requestCount}), 0)` }).from(aiUsage).where(and(...conditions));
   const used = Number(row?.count ?? 0);
-  return used >= limit
+  return !privateBetaUser && used >= limit
     ? { ok: false as const, reason: "PLAN_LIMIT_REACHED" as const, category, used, limit }
     : { ok: true as const, plan, category, used, limit };
 }

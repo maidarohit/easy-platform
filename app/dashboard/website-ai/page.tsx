@@ -46,10 +46,16 @@ function isValidCustomDomain(value: string) {
   ) && /^[a-z]{2,63}$/.test(labels.at(-1) || "");
 }
 
-function initialWebsiteEdits(companyName: string, industry: string, template: string, result: WebsiteAiOutput): WebsiteEdits {
+function initialWebsiteEdits(
+  companyName: string,
+  industry: string,
+  template: string,
+  result: WebsiteAiOutput,
+  primaryLanguage = "en"
+): WebsiteEdits {
   return {
     companyName: companyName || "Your Business",
-    heroHeadline: `Build a stronger ${industry || "business"} presence online`,
+    heroHeadline: result.websiteGoal || companyName || industry,
     heroDescription: result.websiteOverview,
     aboutText: result.designRecommendations,
     servicesText: result.websiteFeatures,
@@ -57,7 +63,23 @@ function initialWebsiteEdits(companyName: string, industry: string, template: st
     email: "",
     address: "",
     whatsapp: "",
-    primaryCtaLabel: "Get Started",
+    primaryCtaLabel:
+  ({
+    en: "Get Started",
+    es: "Empezar",
+    fr: "Commencer",
+    de: "Starten",
+    pt: "Começar",
+    ar: "ابدأ",
+    hi: "शुरू करें",
+    ja: "始める",
+    ko: "시작하기",
+    zh: "开始",
+    kn: "ಪ್ರಾರಂಭಿಸಿ",
+    ta: "தொடங்குங்கள்",
+    te: "ప్రారంభించండి",
+    ml: "തുടങ്ങുക",
+  } as Record<string, string>)[primaryLanguage] || "Get Started",
     primaryCtaLink: "#contact",
     template: WEBSITE_TEMPLATES.includes(template as (typeof WEBSITE_TEMPLATES)[number]) ? template : "Modern",
   };
@@ -65,6 +87,8 @@ function initialWebsiteEdits(companyName: string, industry: string, template: st
 
 function WebsiteAIPageContent() {
     const { project, projectId } = useProjectMemory();
+    const projectPrimaryLanguage =
+  (project as { primaryLanguage?: string } | null)?.primaryLanguage ?? "en";
     const [companyName, setCompanyName] = useState("");
 const [industry, setIndustry] = useState("");
 const [targetAudience, setTargetAudience] = useState("");
@@ -145,6 +169,7 @@ useEffect(() => {
         project?.industry || "",
         project?.brandStyle || "Modern",
         restoredResult,
+        projectPrimaryLanguage,
       ));
     } catch (error) {
       console.error("Failed to restore Website AI output:", error);
@@ -201,7 +226,16 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
 };
 const beginEditingWebsite = () => {
   if (!brandResult) return;
-  setDraftEdits(websiteEdits || initialWebsiteEdits(companyName, industry, brandStyle, brandResult));
+  setDraftEdits(
+  websiteEdits ||
+    initialWebsiteEdits(
+      companyName,
+      industry,
+      brandStyle,
+      brandResult,
+      projectPrimaryLanguage
+    )
+);
   setEditingWebsite(true);
   setShowGoLiveReview(false);
 };
@@ -230,7 +264,11 @@ const saveWebsiteEdits = async () => {
     const response = await authenticatedFetch("/api/project-outputs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId, module: "website", result: updatedResult }),
+      body: JSON.stringify({
+        projectId,
+        module: "website",
+        result: JSON.stringify(updatedResult),
+      }),
     });
     if (!response.ok) throw new Error("Unable to save website changes.");
     setBrandResult(updatedResult);
@@ -439,7 +477,15 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
-setWebsiteEdits(initialWebsiteEdits(companyName, industry, brandStyle, parsed));
+setWebsiteEdits(
+  initialWebsiteEdits(
+    companyName,
+    industry,
+    brandStyle,
+    parsed,
+    projectPrimaryLanguage
+  )
+);
 setDraftEdits(null);
 setEditingWebsite(false);
 
@@ -451,9 +497,8 @@ if (projectId) {
     },
     body: JSON.stringify({
       projectId,
-      userId: currentUser.uid,
       module: "website",
-      result: parsed,
+      result: JSON.stringify(parsed),
     }),
   });
 
@@ -620,7 +665,9 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined}/>
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined}
+primaryLanguage={projectPrimaryLanguage}
+/>
                   </div>
                 </div>
               </section>
