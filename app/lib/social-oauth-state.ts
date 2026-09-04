@@ -13,7 +13,7 @@ export function createSocialOAuthState(input: Omit<StatePayload, "nonce" | "expi
   return `${encoded}.${createHmac("sha256", secret).update(encoded).digest("base64url")}`;
 }
 
-export function verifySocialOAuthState(state: string, expectedUid: string, now = Date.now()): StatePayload | null {
+export function verifySocialOAuthState(state: string, expectedUid?: string, now = Date.now()): StatePayload | null {
   const secret = process.env.SOCIAL_OAUTH_STATE_SECRET;
   const [encoded, signature, extra] = state.split(".");
   if (!secret || !encoded || !signature || extra) return null;
@@ -23,6 +23,6 @@ export function verifySocialOAuthState(state: string, expectedUid: string, now =
   if (received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as StatePayload;
-    return payload.uid === expectedUid && payload.expiresAt >= now && (payload.provider === "meta" || payload.provider === "linkedin") ? payload : null;
+    return (!expectedUid || payload.uid === expectedUid) && payload.expiresAt >= now && (payload.provider === "meta" || payload.provider === "linkedin") ? payload : null;
   } catch { return null; }
 }

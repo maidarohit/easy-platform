@@ -51,6 +51,8 @@ function SocialPageContent() {
       const response = await authenticatedFetch("/api/social/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, provider }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Social publishing setup is not connected yet.");
+      if (typeof payload.authorizationUrl !== "string") throw new Error("Meta did not return an authorization URL.");
+      window.location.assign(payload.authorizationUrl);
     } catch (connectionError) { setError(connectionError instanceof Error ? connectionError.message : "Social publishing setup is not connected yet."); }
     finally { setBusy(false); }
   }

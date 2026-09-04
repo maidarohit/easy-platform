@@ -141,6 +141,7 @@ export const socialConnections = pgTable(
     provider: varchar("provider", { length: 16 }).$type<SocialProvider>().notNull(),
     providerAccountId: varchar("provider_account_id", { length: 255 }),
     accountName: varchar("account_name", { length: 255 }),
+    accessTokenEncrypted: text("access_token_encrypted"),
     status: varchar("status", { length: 24 }).$type<SocialConnectionStatus>().notNull().default("setup_required"),
     connectedAt: timestamp("connected_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),

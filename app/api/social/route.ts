@@ -25,7 +25,14 @@ export async function GET(request: Request) {
     const [[dna], marketingRows, connections] = await Promise.all([
       db.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, access.userId), eq(projectBusinessDna.confirmed, true))).limit(1),
       db.select({ module: projectOutputs.module, result: projectOutputs.result }).from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, access.userId), inArray(projectOutputs.module, [...SOCIAL_MARKETING_MODULES]))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),
-      db.select().from(socialConnections).where(and(eq(socialConnections.projectId, projectId), eq(socialConnections.userId, access.userId))),
+      db.select({
+        provider: socialConnections.provider,
+        providerAccountId: socialConnections.providerAccountId,
+        accountName: socialConnections.accountName,
+        status: socialConnections.status,
+        connectedAt: socialConnections.connectedAt,
+        expiresAt: socialConnections.expiresAt,
+      }).from(socialConnections).where(and(eq(socialConnections.projectId, projectId), eq(socialConnections.userId, access.userId))),
     ]);
     const recommendation = recommendationFromSavedData(selectLatestSavedMarketing(marketingRows), dna?.dna as Record<string, unknown> | null);
     const localDate = socialLocalDate();
