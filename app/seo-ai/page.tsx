@@ -235,23 +235,21 @@ ${cleanGrowthRecommendations(brandResult.growthRecommendations)}
       return;
     }
 
+    if (!projectId) {
+      toast.error("Please open a project before saving SEO intelligence.");
+      return;
+    }
+
     try {
-      const response = await authenticatedFetch("/api/projects", {
+      const response = await authenticatedFetch("/api/project-outputs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          id: crypto.randomUUID(),
-          userId: user.uid,
-          name: `${companyName} SEO Project`,
-          companyName,
-          industry,
-          targetAudience,
-          goal: targetAudience,
-          brandStyle,
-          brandDescription,
-          result: JSON.stringify(brandResult),
+          projectId,
+          module: "seo",
+          result: brandResult,
         }),
       });
 
