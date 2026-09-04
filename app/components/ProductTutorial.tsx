@@ -1,15 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-export const GETTING_STARTED_VIDEO_PATH = "/videos/buzypeezy-getting-started.mp4";
-export const GETTING_STARTED_CAPTIONS_PATH = "/videos/buzypeezy-getting-started.vtt";
+export const GETTING_STARTED_VIDEO_PATH =
+  "/tutorials/buzypeezy-getting-started-en.mp4";
+
+export const GETTING_STARTED_CAPTIONS_PATH =
+  "/videos/buzypeezy-getting-started.vtt";
+
+const TUTORIAL_LANGUAGES = [
+  {
+    id: "en",
+    label: "English",
+    src: "/tutorials/buzypeezy-getting-started-en.mp4",
+  },
+  {
+    id: "hi",
+    label: "हिंदी",
+    src: "/tutorials/buzypeezy-getting-started-hi.mp4",
+  },
+  {
+    id: "ar",
+    label: "العربية",
+    src: "/tutorials/buzypeezy-getting-started-ar.mp4",
+  },
+] as const;
+
+type TutorialLanguage = (typeof TUTORIAL_LANGUAGES)[number]["id"];
 export const GETTING_STARTED_TUTORIAL_KEY = "buzypeezy:tutorial-viewed:getting-started";
 
 type ProductTutorialProps = Readonly<{
-  area: "onboarding" | "easy-mode" | "master-workspace";
+  area: "homepage" | "onboarding" | "easy-mode" | "master-workspace";
   mode?: "entry" | "replay";
   onComplete?: () => void;
+  trigger?: ReactNode;
+  triggerClassName?: string;
 }>;
 
 function rememberTutorial() {
@@ -24,21 +49,96 @@ function tutorialWasCompleted() {
 
 function TutorialVideo({ requested }: { requested: boolean }) {
   const [missing, setMissing] = useState(false);
-  if (!requested || missing) {
+  const [language, setLanguage] = useState<TutorialLanguage>("en");
+
+  const selectedVideo =
+    TUTORIAL_LANGUAGES.find((item) => item.id === language) ??
+    TUTORIAL_LANGUAGES[0];
+
+  if (!requested) {
     return (
-      <div className="flex aspect-video w-full flex-col items-center justify-center rounded-[22px] bg-[linear-gradient(145deg,#173D32,#285D4D)] px-6 text-center text-white">
-        <span aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full border border-white/40 bg-white/10 text-xl">▶</span>
-        <p className="mt-4 font-semibold">Your Buzypeezy getting-started guide</p>
-        {missing && <p role="status" className="mt-2 max-w-md text-sm leading-6 text-white/75">The video is being prepared. You can start your business now and replay it later from Help / Tutorial.</p>}
+      <div className="flex aspect-video w-full flex-col items-center justify-center rounded-[22px] bg-[#173D32] px-6 text-center text-white">
+        <span
+          aria-hidden="true"
+          className="flex h-14 w-14 items-center justify-center rounded-full border border-white/30 text-xl"
+        >
+          ▶
+        </span>
+
+        <p className="mt-4 font-semibold">
+          Your Buzypeezy getting-started guide
+        </p>
+
+        <p className="mt-2 max-w-md text-sm leading-6 text-white/75">
+          Watch a quick walkthrough of how to create and manage your business.
+        </p>
       </div>
     );
   }
+
   return (
-    <video controls playsInline preload="metadata" aria-label="How Buzypeezy turns your business vision into a complete digital business" className="aspect-video w-full rounded-[22px] bg-[#173D32]" onError={() => setMissing(true)}>
-      <source src={GETTING_STARTED_VIDEO_PATH} type="video/mp4" />
-      <track src={GETTING_STARTED_CAPTIONS_PATH} kind="captions" srcLang="en" label="English" />
-      Your browser does not support video playback. You can skip this tutorial and continue.
-    </video>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm font-semibold text-[#606A64]">
+          Choose language:
+        </span>
+
+        {TUTORIAL_LANGUAGES.map((item) => {
+          const active = language === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setLanguage(item.id);
+                setMissing(false);
+              }}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                active
+                  ? "border-[#173D32] bg-[#173D32] text-white"
+                  : "border-[#D8DCCF] bg-white text-[#173D32] hover:bg-[#F4F1E8]"
+              }`}
+              aria-pressed={active}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {missing ? (
+        <div className="flex aspect-video w-full flex-col items-center justify-center rounded-[22px] bg-[#173D32] px-6 text-center text-white">
+          <p className="font-semibold">This tutorial video could not load.</p>
+          <p className="mt-2 text-sm text-white/75">
+            Please choose another language or try again.
+          </p>
+        </div>
+      ) : (
+        <video
+          key={selectedVideo.src}
+          controls
+          playsInline
+          preload="metadata"
+          onError={() => setMissing(true)}
+          className="aspect-video w-full rounded-[22px] bg-[#173D32]"
+          aria-label={`Buzypeezy getting-started tutorial in ${selectedVideo.label}`}
+        >
+          <source src={selectedVideo.src} type="video/mp4" />
+
+          {language === "en" && (
+            <track
+              src={GETTING_STARTED_CAPTIONS_PATH}
+              kind="captions"
+              srcLang="en"
+              label="English"
+            />
+          )}
+
+          Your browser does not support video playback.
+        </video>
+      )}
+    </div>
   );
 }
 
@@ -87,7 +187,7 @@ function TutorialPanel({ entry, onClose, onComplete }: Readonly<{ entry: boolean
   );
 }
 
-export default function ProductTutorial({ area, mode = "replay", onComplete }: ProductTutorialProps) {
+export default function ProductTutorial({ area, mode = "replay", onComplete, trigger = "Help / Tutorial", triggerClassName }: ProductTutorialProps) {
   const [open, setOpen] = useState(false);
   const [checking, setChecking] = useState(mode === "entry");
 
@@ -114,7 +214,7 @@ export default function ProductTutorial({ area, mode = "replay", onComplete }: P
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-10 items-center justify-center rounded-full border border-[#A8B8A7] bg-white/80 px-4 text-sm font-semibold text-[#173D32] transition hover:border-[#173D32] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2">Help / Tutorial</button>
+      <button type="button" onClick={() => setOpen(true)} className={triggerClassName ?? "inline-flex min-h-10 items-center justify-center rounded-full border border-[#A8B8A7] bg-white/80 px-4 text-sm font-semibold text-[#173D32] transition hover:border-[#173D32] hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] focus-visible:ring-offset-2"}>{trigger}</button>
       {open && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#102A23]/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
           <div role="dialog" aria-modal="true" aria-label={`${area} getting-started tutorial`} className="w-full max-w-3xl">
