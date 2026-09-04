@@ -22,10 +22,14 @@ function configuration() {
   const appSecret = process.env.META_APP_SECRET?.trim();
   const redirectUri = process.env.META_OAUTH_REDIRECT_URI?.trim();
   const version = process.env.META_GRAPH_API_VERSION?.trim();
+  const configId = process.env.META_LOGIN_CONFIG_ID?.trim();
+  if (!configId) {
+  throw new Error("META_LOGIN_CONFIG_ID is not configured.");
+}
   if (!appId || !appSecret || !redirectUri || !version || !/^v\d+\.\d+$/.test(version)) {
     throw new MetaOAuthError("Meta connection is not configured.", "META_OAUTH_NOT_CONFIGURED");
   }
-  return { appId, appSecret, redirectUri, version };
+  return { appId, appSecret, redirectUri, version, configId };
 }
 
 async function metaJson<T>(url: URL, label: string): Promise<T> {
@@ -39,12 +43,12 @@ async function metaJson<T>(url: URL, label: string): Promise<T> {
 }
 
 export function metaAuthorizationUrl(state: string) {
-  const { appId, redirectUri, version } = configuration();
+  const { appId, redirectUri, version, configId } = configuration();
   const url = new URL(`https://www.facebook.com/${version}/dialog/oauth`);
   url.searchParams.set("client_id", appId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("state", state);
-  url.searchParams.set("scope", META_SCOPES.join(","));
+  url.searchParams.set("config_id", configId);
   url.searchParams.set("response_type", "code");
   return url.toString();
 }
