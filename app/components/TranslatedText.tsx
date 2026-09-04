@@ -36,7 +36,7 @@ keepGrowingDescription:
     hero2: "Built intelligently.",
     description:
       "Tell Buzypeezy what you do and where you want to go. We'll turn it into a complete digital business system — ready to build, grow and improve.",
-    seeHow: "See How It Works",
+    seeHow: "Watch Demo",
   },
 
   es: {
@@ -216,7 +216,7 @@ keepGrowingDescription:
     hero2: "مبني بذكاء.",
     description:
       "أخبر Buzypeezy بما تقوم به وإلى أين تريد الوصول، وسنحوّله إلى نظام أعمال رقمي متكامل.",
-    seeHow: "شاهد كيف يعمل",
+    seeHow: "شاهد العرض",
   },
 
   hi: {
@@ -252,7 +252,7 @@ keepGrowingDescription:
     hero2: "समझदारी से बनाया गया।",
     description:
       "Buzypeezy को बताएं कि आप क्या करते हैं और कहाँ पहुँचना चाहते हैं। हम इसे एक संपूर्ण डिजिटल बिज़नेस सिस्टम में बदल देंगे।",
-    seeHow: "देखें यह कैसे काम करता है",
+    seeHow: "डेमो देखें",
   },
 
   ja: {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BILLING_PLANS } from "@/app/lib/billing-plans";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
+import ProductTutorial from "./components/ProductTutorial";
 import { TranslatedText } from "./components/TranslatedText";
 const ArrowIcon = () => (
   <svg
@@ -185,12 +186,12 @@ const outcomes = [
               >
                 <TranslatedText id="startBuilding" /> <ArrowIcon />
               </Link>
-              <a
-                href="#how-it-works"
-                className="inline-flex items-center justify-center rounded-xl border border-[#173D32]/20 bg-[#FCFBF7]/70 px-6 py-3.5 text-sm font-semibold text-[#173D32] transition hover:-translate-y-0.5 hover:border-[#173D32]/35 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]"
-              >
-                <TranslatedText id="seeHow" />
-              </a>
+              <ProductTutorial
+                area="homepage"
+                mode="replay"
+                trigger={<TranslatedText id="seeHow" />}
+                triggerClassName="inline-flex items-center justify-center rounded-xl border border-[#173D32]/20 bg-[#FCFBF7]/70 px-6 py-3.5 text-sm font-semibold text-[#173D32] transition hover:-translate-y-0.5 hover:border-[#173D32]/35 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]"
+              />
             </div>
           </div>
         </div>
