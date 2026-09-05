@@ -18,10 +18,10 @@ test("public Business Idea usage is not routed through the paid ledger guard", a
   assert.doesNotMatch(contents, /startAiUsage|requirePaidEntitlement|requirePaidModule/);
 });
 
-test("allowances are server-side placeholders with no client-controlled plan", async () => {
+test("launch allowances are server-side with no client-controlled plan", async () => {
   const config = await source("app/lib/plan-config.ts");
   const guard = await source("app/lib/paid-entitlements.ts");
-  assert.match(config, /NON-COMMERCIAL PLACEHOLDERS/);
+  assert.match(config, /function launchLimits/);
   assert.match(config, /pro:/);
   assert.match(config, /business:/);
   assert.match(guard, /subscription\.status !== "active"/);
@@ -63,7 +63,7 @@ test("private beta access is server-only and limited to core testing categories"
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS_EXTRA/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_PRIVATE_BETA_UIDS_TEST/);
-  assert.match(contents, /PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>\(\["projects", "standardAiTasks", "aiManagerRuns", "imageGenerations", "videoGenerations", "presentationGenerations", "automationRuns", "assistantMessages"\]\)/);
+  assert.match(contents, /PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>\(USAGE_CATEGORIES\)/);
   assert.match(contents, /if \(!PRIVATE_BETA_CATEGORIES\.has\(category\)\) return false/);
 });
 
@@ -71,7 +71,7 @@ test("private beta bypass preserves category quotas and does not grant admin acc
   const contents = await source("app/lib/paid-entitlements.ts");
   assert.match(contents, /const limit = categoryOverride\?\.limit \?\? configuredLimit/);
   assert.match(contents, /used >= limit/);
-  assert.match(contents, /const plan = subscription\?\.status === "active" \? subscription\.plan : "pro"/);
+  assert.match(contents, /const plan = subscription\?\.status === "active" \? subscription\.plan : "business"/);
   assert.doesNotMatch(contents, /isBossAdmin\([^)]*PRIVATE_BETA|PRIVATE_BETA[^\n]*BOSS_ADMIN_UIDS/);
   assert.match(contents, /\[process\.env\.BOSS_ADMIN_UIDS, process\.env\.BOSS_ADMIN_UIDS_TEST\]/);
   assert.doesNotMatch(contents, /NEXT_PUBLIC_BOSS_ADMIN_UIDS/);

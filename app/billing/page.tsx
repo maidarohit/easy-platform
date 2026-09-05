@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
-import { BILLING_PLANS, type BillingPlanKey } from "@/app/lib/billing-plans";
+import { BILLING_PLAN, type BillingPlanKey } from "@/app/lib/billing-plans";
 
 type SubscriptionStatus =
   | "pending"
@@ -12,7 +12,7 @@ type SubscriptionStatus =
   | "expired";
 type BillingStatus = {
   subscription: {
-    plan: BillingPlanKey;
+    plan: string;
     status: SubscriptionStatus;
     cancelAtPeriodEnd: boolean;
   } | null;
@@ -20,6 +20,7 @@ type BillingStatus = {
     paidAccess: boolean;
     subscriptionPaidAccess: boolean;
   };
+  offer: { market: "india" | "international"; displayPrice: string; taxLabel: string; currency: "INR" | "USD"; amountMinor: number };
 };
 const copy: Record<SubscriptionStatus, [string, string]> = {
   pending: [
@@ -71,8 +72,7 @@ export default function BillingPage() {
               : "Unable to load billing status.";
           setAuthRequired(detail === "Authentication is required.");
           const requestedPlan = parameters.get("plan");
-          if (requestedPlan === "pro" || requestedPlan === "business")
-            setSelectedPlan(requestedPlan);
+          if (requestedPlan === "business") setSelectedPlan(requestedPlan);
           setMessage(detail);
         }
       } finally {
@@ -170,7 +170,7 @@ export default function BillingPage() {
         {status && !status.subscription && (
           <section className="mt-6 rounded-2xl border border-[#173D32]/10 bg-white p-6">
             <h2 className="text-xl font-semibold text-[#0E2C24]">Not subscribed</h2>
-            <p className="mt-2 text-[#52605A]">Choose Starter or Growth when you are ready.</p>
+            <p className="mt-2 text-[#52605A]">Subscribe to Buzypeezy Business when you are ready.</p>
           </section>
         )}
         {message && (
@@ -187,8 +187,8 @@ export default function BillingPage() {
             )}
           </div>
         )}
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          {Object.values(BILLING_PLANS).map((plan) => (
+        <div className="mx-auto mt-10 grid max-w-xl gap-5">
+          {[BILLING_PLAN].map((plan) => (
             <section
               key={plan.key}
               className={`rounded-2xl border bg-white p-6 ${selectedPlan === plan.key ? "border-[#173D32] ring-2 ring-[#A8B8A7]" : "border-[#173D32]/10"}`}
@@ -197,9 +197,10 @@ export default function BillingPage() {
                 {plan.name}
               </h2>
               <p className="mt-3 text-lg text-[#52605A]">
-                {plan.displayPrice}
+                {status?.offer.displayPrice ?? "₹1,999 / US$50"}
                 {plan.period}
               </p>
+              <p className="mt-1 text-sm text-[#626A64]">+ {status?.offer.taxLabel ?? "applicable tax"}</p>
               <p className="mt-3 text-sm leading-6 text-[#626A64]">
                 {plan.description}
               </p>

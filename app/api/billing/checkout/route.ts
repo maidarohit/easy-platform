@@ -9,6 +9,7 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscription-policy";
+import { marketForCountry } from "@/app/lib/billing-plans";
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
@@ -46,7 +47,16 @@ export async function POST(request: Request) {
   }
   const plan = validateCheckoutBody(body);
   if (!plan) {
-    return Response.json({ error: "Plan must be pro or business" }, { status: 400 });
+    return Response.json({ error: "Plan must be business" }, { status: 400 });
+  }
+
+  const market = marketForCountry(request.headers.get("x-vercel-ip-country"));
+  const providerPlanId = getRazorpayPlanId(market);
+  if (!providerPlanId) {
+    return Response.json(
+      { error: "International payments are opening shortly. Please check back soon." },
+      { status: 503 },
+    );
   }
 
   try {
@@ -69,7 +79,7 @@ export async function POST(request: Request) {
 
     let created: Awaited<ReturnType<typeof createRazorpaySubscription>>;
     try {
-      created = await createRazorpaySubscription(getRazorpayPlanId(plan), token.uid, plan);
+      created = await createRazorpaySubscription(providerPlanId, token.uid, plan, market);
     } catch (error) {
       if (error instanceof RazorpaySubscriptionCreationRejectedError) {
         const released = await db.delete(subscriptions).where(and(

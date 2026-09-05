@@ -7,6 +7,7 @@ import { applyPreviewOverrides, validatePreviewOverrides } from "@/app/lib/busin
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import { completeAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 
 const MAX_BODY_BYTES = 16_384;
 
@@ -29,6 +30,16 @@ export async function PUT(request: Request) {
   }
   const projectId = validateEasyModeProjectId((body as { projectId?: unknown }).projectId);
   if (!projectId) return Response.json({ error: "Invalid project." }, { status: 400 });
+
+  const [ownedProject] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, userId))).limit(1);
+  if (!ownedProject) return Response.json({ error: "Project not found." }, { status: 404 });
+  let usageId: string;
+  try {
+    usageId = await startAiUsage({ userId, projectId, module: "website-edit", workflow: "business-preview-edit" });
+  } catch (error) {
+    if (error instanceof Response) return error;
+    throw error;
+  }
 
   const result = await db.transaction(async (transaction) => {
     const [project] = await transaction.select().from(projects).where(and(
@@ -68,5 +79,6 @@ export async function PUT(request: Request) {
     return { preview, overrides: checked.overrides };
   });
   if ("error" in result) return Response.json({ error: result.error }, { status: result.status });
+  await completeAiUsage({ usageId, durationMs: 0 });
   return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }

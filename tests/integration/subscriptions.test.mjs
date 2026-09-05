@@ -9,7 +9,7 @@ import {
 import { verifyRazorpayWebhook } from "../../app/lib/razorpay-webhook.ts";
 
 test("only fixed self-service plans are accepted", () => {
-  assert.equal(isSubscriptionPlan("pro"), true);
+  assert.equal(isSubscriptionPlan("pro"), false);
   assert.equal(isSubscriptionPlan("business"), true);
   assert.equal(isSubscriptionPlan("enterprise"), false);
   assert.equal(isSubscriptionPlan({ plan: "business", amount: 1 }), false);

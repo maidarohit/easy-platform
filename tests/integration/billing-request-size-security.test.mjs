@@ -112,8 +112,8 @@ test("limited JSON distinguishes malformed and oversized checkout bodies", async
   await assert.rejects(readLimitedJson(oversized, 2 * 1024), RequestBodyTooLargeError);
 });
 
-test("checkout validation accepts only the two plan-only payloads", () => {
-  assert.equal(validateCheckoutBody({ plan: "pro" }), "pro");
+test("checkout validation accepts only the single plan-only payload", () => {
+  assert.equal(validateCheckoutBody({ plan: "pro" }), null);
   assert.equal(validateCheckoutBody({ plan: "business" }), "business");
   assert.equal(validateCheckoutBody({ plan: "enterprise" }), null);
   assert.equal(validateCheckoutBody({ plan: "pro", amount: 1 }), null);

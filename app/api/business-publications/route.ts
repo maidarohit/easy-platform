@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   businessPublications, businessPublicationVersions, projectBusinessDna,
-  projectOutputs, projectPreviewCustomizations, projectPublicContacts, projects,
+  projectOutputs, projectPreviewCustomizations, projectPublicContacts, projects, publishedWebsites,
 } from "@/app/db/schema";
 import { selectLatestWorkspaceOutputs, workspaceProjectPresentation } from "@/app/api/master-workspace/route";
 import { buildBusinessPreview } from "@/app/lib/business-preview";
@@ -46,6 +46,7 @@ function failure(error: unknown, action: string) {
   if (message === "NOT_FOUND") return Response.json({ error: "Project not found." }, { status: 404 });
   if (message === "PREVIEW_NOT_APPROVED") return Response.json({ error: "Approve the current preview before publishing." }, { status: 409 });
   if (message === "NO_PREVIEW") return Response.json({ error: "No completed business preview is available." }, { status: 409 });
+  if (message === "WEBSITE_LIMIT_REACHED") return Response.json({ error: "Your plan includes one active website. Unpublish the current website before publishing another." }, { status: 429 });
   const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code.slice(0, 32) : "UNKNOWN";
   console.error("Business publication request failed.", { action, code });
   return Response.json({ error: `Unable to ${action} this business.` }, { status: 500 });
@@ -83,6 +84,9 @@ export async function POST(request: Request) {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`business-publication:${projectId}`}))`);
       const [project] = await transaction.select().from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, uid))).limit(1).for("update");
       if (!project) throw new Error("NOT_FOUND");
+      const [otherActive] = await transaction.select({ id: publishedWebsites.id }).from(publishedWebsites)
+        .where(and(eq(publishedWebsites.ownerUid, uid), eq(publishedWebsites.status, "active"))).limit(1);
+      if (otherActive) throw new Error("WEBSITE_LIMIT_REACHED");
       const [dnaRows, outputRows, customRows, contactRows] = await Promise.all([
         transaction.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, uid), eq(projectBusinessDna.confirmed, true))).limit(1),
         transaction.select().from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),

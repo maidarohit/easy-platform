@@ -21,8 +21,8 @@ test("checkout authenticates and accepts only a logical plan", async () => {
 
 test("plan IDs, prices, and credentials remain server-side", async () => {
   const [subscriptions, configuration] = await Promise.all([source("app/lib/subscriptions.ts"), source("app/lib/billing-configuration.ts")]);
-  assert.match(configuration, /RAZORPAY_PRO_PLAN_ID/);
-  assert.match(configuration, /RAZORPAY_BUSINESS_PLAN_ID/);
+  assert.match(configuration, /RAZORPAY_BUSINESS_INR_PLAN_ID/);
+  assert.match(configuration, /RAZORPAY_BUSINESS_USD_PLAN_ID/);
   assert.match(configuration, /RAZORPAY_KEY_SECRET/);
   assert.match(configuration, /^import "server-only";/);
   assert.doesNotMatch(subscriptions + configuration, /NEXT_PUBLIC_RAZORPAY/);

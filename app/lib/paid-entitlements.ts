@@ -13,7 +13,7 @@ import {
 import { getUserSubscription } from "@/app/lib/subscriptions";
 
 const ACCESS_CATEGORY = "__paid_access__";
-const PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>(["projects", "standardAiTasks", "aiManagerRuns", "imageGenerations", "videoGenerations", "presentationGenerations", "automationRuns", "assistantMessages"]);
+const PRIVATE_BETA_CATEGORIES = new Set<UsageCategory>(USAGE_CATEGORIES);
 
 function enabled(name: string): boolean {
   return process.env[name]?.trim().toLowerCase() === "true";
@@ -85,7 +85,7 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
     return { ok: false as const, reason: "PAID_FEATURE_UNAVAILABLE" as const };
   }
 
-  const plan = subscription?.status === "active" ? subscription.plan : "pro";
+  const plan = subscription?.status === "active" ? subscription.plan : "business";
   const configuredLimit = PLAN_LIMITS[plan][category];
   const categoryOverride = overrides.find((item) => item.category === category);
   const limit = categoryOverride?.limit ?? configuredLimit;
@@ -99,10 +99,12 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
   }
 
   const modules = Object.entries({
-    "ai-manager": "aiManagerRuns", image: "imageGenerations", video: "videoGenerations",
-    presentation: "presentationGenerations", assistant: "assistantMessages",
+    "ai-manager": "aiManagerRuns", image: "imageGenerations", video: "videoGenerations", branding: "brandingGenerations",
+    website: "websiteGenerations", "website-edit": "websiteEdits", seo: "seoGenerations", logo: "logoGenerations",
+    presentation: "presentationGenerations", uiux: "uiuxGenerations", sales: "salesGenerations", analytics: "analyticsGenerations", assistant: "assistantMessages",
+    "automation-social": "socialPosts",
     "automation-content": "automationRuns", "automation-email": "automationRuns",
-    "automation-social": "automationRuns", "automation-workflow": "automationRuns",
+    "automation-workflow": "automationRuns",
     "automation-pipeline": "automationRuns",
   }).filter(([, mapped]) => mapped === category).map(([module]) => module);
 
@@ -120,7 +122,7 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
 }
 
 export function allowanceError(result: Exclude<Awaited<ReturnType<typeof checkUsageAllowance>>, { ok: true }>) {
-  return Response.json({ error: result.reason, ...(result.reason === "PLAN_LIMIT_REACHED" && { category: result.category }) }, { status: result.reason === "PAID_SUBSCRIPTION_REQUIRED" ? 403 : 429 });
+  return Response.json({ error: result.reason === "PLAN_LIMIT_REACHED" ? "Your monthly limit for this feature has been reached. It resets at the start of your next billing period." : result.reason, code: result.reason, ...(result.reason === "PLAN_LIMIT_REACHED" && { category: result.category, used: result.used, limit: result.limit }) }, { status: result.reason === "PAID_SUBSCRIPTION_REQUIRED" ? 403 : 429 });
 }
 
 export async function requirePaidEntitlement(userId: string, category: UsageCategory) {

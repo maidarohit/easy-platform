@@ -7,16 +7,13 @@ import {
   statusGrantsPaidAccess,
   type SubscriptionPlan,
 } from "@/app/lib/subscription-policy";
-import { BILLING_PLANS } from "@/app/lib/billing-plans";
+import { BILLING_PLAN, type BillingMarket } from "@/app/lib/billing-plans";
 import { getBillingConfiguration } from "@/app/lib/billing-configuration";
 
-export const PLAN_PRICES_PAISE: Record<SubscriptionPlan, number> = {
-  pro: BILLING_PLANS.pro.amountPaise,
-  business: BILLING_PLANS.business.amountPaise,
-};
+export const PLAN_PRICES_PAISE = { business: BILLING_PLAN.prices.india.amountMinor } as const;
 
-export function getRazorpayPlanId(plan: SubscriptionPlan): string {
-  return getBillingConfiguration().planIds[plan];
+export function getRazorpayPlanId(market: BillingMarket): string | null {
+  return getBillingConfiguration().planIds[market] || null;
 }
 
 export async function getUserSubscription(userId: string) {
@@ -59,8 +56,22 @@ export function isDefinitiveRazorpayCreationRejection(status: number): boolean {
   return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
-export async function createRazorpaySubscription(planId: string, userId: string, plan: SubscriptionPlan) {
+export async function createRazorpaySubscription(planId: string, userId: string, plan: SubscriptionPlan, market: BillingMarket) {
   const { keyId, keySecret } = getBillingConfiguration();
+
+  const expected = BILLING_PLAN.prices[market];
+  const planResponse = await fetch(`https://api.razorpay.com/v1/plans/${encodeURIComponent(planId)}`, {
+    headers: { Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}` },
+  });
+  if (!planResponse.ok) throw new Error(`Razorpay plan verification failed (${planResponse.status}).`);
+  const providerPlan: unknown = await planResponse.json();
+  const planEntity = providerPlan && typeof providerPlan === "object" ? providerPlan as { item?: unknown; period?: unknown; interval?: unknown } : null;
+  const item = planEntity?.item;
+  const verified = item && typeof item === "object" &&
+    (item as { amount?: unknown }).amount === expected.amountMinor &&
+    (item as { currency?: unknown }).currency === expected.currency &&
+    planEntity?.period === "monthly" && planEntity.interval === 1;
+  if (!verified) throw new Error("Razorpay plan price or currency does not match the authoritative billing offer.");
 
   const response = await fetch("https://api.razorpay.com/v1/subscriptions", {
     method: "POST",
@@ -73,7 +84,7 @@ export async function createRazorpaySubscription(planId: string, userId: string,
       total_count: 120,
       quantity: 1,
       customer_notify: true,
-      notes: { easy_platform_user_id: userId, easy_platform_plan: plan },
+      notes: { easy_platform_user_id: userId, easy_platform_plan: plan, easy_platform_market: market },
     }),
   });
   if (!response.ok) {

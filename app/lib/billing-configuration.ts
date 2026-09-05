@@ -1,5 +1,5 @@
 import "server-only";
-import { BILLING_PLANS, type BillingPlanKey } from "@/app/lib/billing-plans";
+import { BILLING_PLAN, type BillingMarket } from "@/app/lib/billing-plans";
 
 export type BillingMode = "test" | "live";
 const keyMode = (keyId: string): BillingMode | null =>
@@ -12,8 +12,8 @@ export function getBillingConfiguration() {
   const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
   if (!keyId || !keySecret) throw new Error("Razorpay API credentials are not configured.");
   if (keyMode(keyId) !== mode) throw new Error("Razorpay key mode does not match BILLING_MODE.");
-  const planIds = { pro: process.env.RAZORPAY_PRO_PLAN_ID ?? "", business: process.env.RAZORPAY_BUSINESS_PLAN_ID ?? "" } satisfies Record<BillingPlanKey, string>;
-  if (!planIds.pro || !planIds.business) throw new Error("Razorpay Plan IDs are not configured.");
+  const planIds = { india: process.env.RAZORPAY_BUSINESS_INR_PLAN_ID ?? "", international: process.env.RAZORPAY_BUSINESS_USD_PLAN_ID ?? "" } satisfies Record<BillingMarket, string>;
+  if (!planIds.india) throw new Error("The Razorpay India Business Plan ID is not configured.");
   return { mode, keyId, keySecret, webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? "", planIds };
 }
 
@@ -25,9 +25,9 @@ export function getSafeBillingDiagnostics() {
     mode: mode === "test" || mode === "live" ? mode : "invalid",
     keyMode: keyMode(keyId) ?? "invalid",
     webhookConfigured: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
-    plans: Object.fromEntries(Object.entries(BILLING_PLANS).map(([key, plan]) => [key, {
-      configured: Boolean(process.env[key === "pro" ? "RAZORPAY_PRO_PLAN_ID" : "RAZORPAY_BUSINESS_PLAN_ID"]),
-      expectedCurrency: plan.currency, expectedAmountPaise: plan.amountPaise,
+    plans: Object.fromEntries(Object.entries(BILLING_PLAN.prices).map(([market, price]) => [market, {
+      configured: Boolean(process.env[market === "india" ? "RAZORPAY_BUSINESS_INR_PLAN_ID" : "RAZORPAY_BUSINESS_USD_PLAN_ID"]),
+      expectedCurrency: price.currency, expectedAmountMinor: price.amountMinor,
       providerAmountVerification: "required",
     }])),
   };

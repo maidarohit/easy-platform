@@ -3,6 +3,7 @@ import { db } from "@/app/db";
 import {
   projectOutputs,
   projects,
+  businessPublications,
   projectPreviewCustomizations,
   publishedWebsites,
   websitePublicationVersions,
@@ -132,6 +133,9 @@ export async function POST(request: Request) {
       const [existing] = await transaction.select({ id: publishedWebsites.id }).from(publishedWebsites)
         .where(eq(publishedWebsites.projectId, parsed.body.projectId)).limit(1);
       if (existing) throw new Error("PUBLICATION_EXISTS");
+      const [otherActive] = await transaction.select({ id: businessPublications.id }).from(businessPublications)
+        .where(and(eq(businessPublications.userId, authorized.uid), eq(businessPublications.status, "active"))).limit(1);
+      if (otherActive) throw new Error("WEBSITE_LIMIT_REACHED");
       const [output] = await transaction.select().from(projectOutputs).where(and(
         eq(projectOutputs.projectId, parsed.body.projectId),
         eq(projectOutputs.userId, authorized.uid),
@@ -165,6 +169,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isUniqueViolation(error)) return Response.json({ error: "That website address is already in use." }, { status: 409 });
     if (error instanceof Error && error.message === "PUBLICATION_EXISTS") return Response.json({ error: "This project already has a website publication." }, { status: 409 });
+    if (error instanceof Error && error.message === "WEBSITE_LIMIT_REACHED") return Response.json({ error: "Your plan includes one active website. Unpublish the current website before publishing another." }, { status: 429 });
     if (error instanceof Error && error.message === "INVALID_WEBSITE_OUTPUT") return Response.json({ error: "Generate a valid Website AI draft before publishing." }, { status: 400 });
     console.error("Website publication failed.");
     return Response.json({ error: "Unable to publish the website." }, { status: 500 });

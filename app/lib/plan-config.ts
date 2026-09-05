@@ -6,7 +6,16 @@ export const USAGE_CATEGORIES = [
   "aiManagerRuns",
   "imageGenerations",
   "videoGenerations",
+  "brandingGenerations",
+  "websiteGenerations",
+  "websiteEdits",
+  "seoGenerations",
+  "logoGenerations",
   "presentationGenerations",
+  "uiuxGenerations",
+  "salesGenerations",
+  "analyticsGenerations",
+  "socialPosts",
   "automationRuns",
   "assistantMessages",
 ] as const;
@@ -14,23 +23,36 @@ export const USAGE_CATEGORIES = [
 export type UsageCategory = (typeof USAGE_CATEGORIES)[number];
 export type PaidPlan = "pro" | "business" | "enterprise";
 
-// NON-COMMERCIAL PLACEHOLDERS: internal cost-safety limits only. Commercial allowances require usage-cost
-// validation before public launch and must not be advertised as final quotas.
 export const PLAN_LIMITS: Record<PaidPlan, Record<UsageCategory, number>> = {
-  pro: { projects: 3, standardAiTasks: 50, aiManagerRuns: 5, imageGenerations: 10, videoGenerations: 2, presentationGenerations: 5, automationRuns: 20, assistantMessages: 100 },
-  business: { projects: 10, standardAiTasks: 200, aiManagerRuns: 20, imageGenerations: 40, videoGenerations: 3, presentationGenerations: 20, automationRuns: 100, assistantMessages: 500 },
-  enterprise: { projects: 0, standardAiTasks: 0, aiManagerRuns: 0, imageGenerations: 0, videoGenerations: 0, presentationGenerations: 0, automationRuns: 0, assistantMessages: 0 },
+  pro: launchLimits(),
+  business: launchLimits(),
+  enterprise: launchLimits(),
 };
+
+function launchLimits(): Record<UsageCategory, number> {
+  return { projects: 1, standardAiTasks: 100, aiManagerRuns: 10, imageGenerations: 50,
+    videoGenerations: 2, brandingGenerations: 10, websiteGenerations: 5, websiteEdits: 30,
+    seoGenerations: 20, logoGenerations: 10, presentationGenerations: 5, uiuxGenerations: 10,
+    salesGenerations: 20, analyticsGenerations: 20, socialPosts: 30, automationRuns: 100, assistantMessages: 100 };
+}
 
 export const MODULE_CATEGORY: Record<string, UsageCategory> = {
   "ai-manager": "aiManagerRuns",
   image: "imageGenerations",
   video: "videoGenerations",
+  branding: "brandingGenerations",
+  website: "websiteGenerations",
+  "website-edit": "websiteEdits",
+  seo: "seoGenerations",
+  logo: "logoGenerations",
   presentation: "presentationGenerations",
+  uiux: "uiuxGenerations",
+  sales: "salesGenerations",
+  analytics: "analyticsGenerations",
+  "automation-social": "socialPosts",
   assistant: "assistantMessages",
   "automation-content": "automationRuns",
   "automation-email": "automationRuns",
-  "automation-social": "automationRuns",
   "automation-workflow": "automationRuns",
   "automation-pipeline": "automationRuns",
 };

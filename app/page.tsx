@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BILLING_PLANS } from "@/app/lib/billing-plans";
+import { BILLING_PLAN } from "@/app/lib/billing-plans";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import ProductTutorial from "./components/ProductTutorial";
 import { TranslatedText } from "./components/TranslatedText";
@@ -101,14 +101,7 @@ const outcomes = [
   const benefits = [
     "benefitSecure", "benefitOrganised", "benefitControl", "benefitGrowth",
   ] as const;
-  const planFeatureKeys = {
-    pro: ["proFeatureConnected", "proFeatureAi", "proFeatureSaved"],
-    business: ["businessFeatureStarter", "businessFeatureCapacity", "businessFeatureSupport"],
-  } as const;
-  const plans = [
-    BILLING_PLANS.pro,
-    { ...BILLING_PLANS.business, featured: true },
-  ];
+  const plans = [{ ...BILLING_PLAN, featured: true }];
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#F7F4EC] text-[#1B211E] selection:bg-[#A8B8A7]/50">
@@ -343,7 +336,7 @@ const outcomes = [
               <TranslatedText id="pricingDescription" />
             </p>
           </div>
-          <div className="mx-auto mt-14 grid max-w-4xl gap-6 lg:grid-cols-2">
+          <div className="mx-auto mt-14 grid max-w-xl gap-6">
             {plans.map((plan) => (
               <article
                 key={plan.name}
@@ -355,18 +348,18 @@ const outcomes = [
                   </span>
                 )}
                 <h3 className="text-2xl font-semibold text-[#0E2C24]">
-                  <TranslatedText id={plan.key === "pro" ? "planPro" : "planBusiness"} />
+                  {plan.name}
                 </h3>
                 <div className="mt-8 flex items-end gap-1">
                   <span className="[font-size:clamp(3.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.05em] text-[#0E2C24]">
-                    {plan.price}
+                    ₹1,999 India / US$50 international
                   </span>
                   <span className="pb-1 text-base text-[#747B76]">
-                    <TranslatedText id={plan.key === "pro" ? "periodPro" : "periodBusiness"} />
+                    {plan.period}
                   </span>
                 </div>
                 <p className="mt-6 min-h-14 text-base leading-7 text-[#6F756F]">
-                  <TranslatedText id={plan.key === "pro" ? "planProDescription" : "planBusinessDescription"} />
+                  {plan.description} Taxes apply.
                 </p>
                 <ul className="mt-8 space-y-4">
                   {plan.features.map((feature, index) => (
@@ -377,7 +370,7 @@ const outcomes = [
                       <span className="text-[#173D32]">
                         <CheckIcon />
                       </span>
-                      <TranslatedText id={planFeatureKeys[plan.key][index]} />
+                      {feature}
                     </li>
                   ))}
                 </ul>
@@ -385,7 +378,7 @@ const outcomes = [
                   href={`/billing?plan=${plan.key}`}
                   className={`mt-9 inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] ${plan.featured ? "bg-[#173D32] text-white hover:bg-[#0E2C24]" : "border border-[#173D32]/20 text-[#173D32] hover:border-[#173D32]/40 hover:bg-[#EDF0E8]"}`}
                 >
-                  <TranslatedText id={plan.key === "pro" ? "choosePro" : "chooseBusiness"} />
+                  Choose Buzypeezy Business
                 </Link>
               </article>
             ))}

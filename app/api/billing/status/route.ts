@@ -2,6 +2,7 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { getUserEntitlements, getUserSubscription } from "@/app/lib/subscriptions";
 import { getSafeBillingDiagnostics } from "@/app/lib/billing-configuration";
 import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
+import { BILLING_PLAN, marketForCountry } from "@/app/lib/billing-plans";
 
 export async function GET(request: Request) {
   let token;
@@ -15,6 +16,7 @@ export async function GET(request: Request) {
     getUserEntitlements(token.uid),
     hasPaidProductAccess(token.uid),
   ]);
+  const market = marketForCountry(request.headers.get("x-vercel-ip-country"));
   return Response.json({
     subscription: subscription ? {
       plan: subscription.plan,
@@ -29,5 +31,6 @@ export async function GET(request: Request) {
       paidAccess,
     },
     billingConfiguration: getSafeBillingDiagnostics(),
+    offer: { market, ...BILLING_PLAN.prices[market] },
   });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/app/db";
 import { projectProducts, projects } from "@/app/db/schema";
@@ -159,9 +159,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const [product] = await db
-    .insert(projectProducts)
-    .values({
+  const product = await db.transaction(async (transaction) => {
+    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`store-products:${userId}:${projectId}`}))`);
+    const [row] = await transaction.select({ count: sql<number>`count(*)` }).from(projectProducts).where(and(eq(projectProducts.projectId, projectId), eq(projectProducts.userId, userId)));
+    if (Number(row?.count ?? 0) >= 100) return null;
+    const [created] = await transaction.insert(projectProducts).values({
       projectId,
       userId,
       name,
@@ -171,8 +173,10 @@ export async function POST(request: Request) {
       pricePaise,
       currency: "INR",
       isActive: true,
-    })
-    .returning();
+    }).returning();
+    return created;
+  });
+  if (!product) return NextResponse.json({ error: "Your plan includes up to 100 products or services." }, { status: 429 });
 
   return NextResponse.json(
     { product },

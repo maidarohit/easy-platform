@@ -8,16 +8,17 @@ import { isDefinitiveRazorpayCreationRejection } from "../../app/lib/subscriptio
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
-test("canonical registry owns the two INR monthly plans", () => {
-  assert.deepEqual(Object.keys(BILLING_PLANS), ["pro", "business"]);
-  assert.equal(BILLING_PLANS.pro.amountPaise, 199900);
-  assert.equal(BILLING_PLANS.business.amountPaise, 499900);
-  assert.equal(BILLING_PLANS.pro.currency, "INR");
+test("canonical registry owns the single regional Business plan", () => {
+  assert.deepEqual(Object.keys(BILLING_PLANS), ["business"]);
+  assert.equal(BILLING_PLANS.business.prices.india.amountMinor, 199900);
+  assert.equal(BILLING_PLANS.business.prices.international.amountMinor, 5000);
+  assert.equal(BILLING_PLANS.business.prices.india.currency, "INR");
+  assert.equal(BILLING_PLANS.business.prices.international.currency, "USD");
 });
 
 test("customer surfaces use the registry and stale GBP pricing is retired", async () => {
   const [home, billing] = await Promise.all([source("app/page.tsx"), source("app/billing/page.tsx")]);
-  assert.match(home, /BILLING_PLANS/); assert.match(billing, /BILLING_PLANS/);
+  assert.match(home, /BILLING_PLAN/); assert.match(billing, /BILLING_PLAN/);
   assert.doesNotMatch(home + billing, /£29|£79|Enterprise/);
   await assert.rejects(readFile(new URL("../../app/components/Pricing/Pricing.tsx", import.meta.url)), /ENOENT/);
   assert.match(home, /href={`\/billing\?plan=\$\{plan\.key\}`}/);
@@ -39,10 +40,13 @@ test("logged-out plan selection has a safe authenticated return path", async () 
 test("billing mode and key mismatch fail closed without exposing secrets", () => {
   const original = { ...process.env };
   try {
-    Object.assign(process.env, { BILLING_MODE: "test", RAZORPAY_KEY_ID: "rzp_live_redacted", RAZORPAY_KEY_SECRET: "redacted", RAZORPAY_PRO_PLAN_ID: "plan_a", RAZORPAY_BUSINESS_PLAN_ID: "plan_b" });
+    Object.assign(process.env, { BILLING_MODE: "test", RAZORPAY_KEY_ID: "rzp_live_redacted", RAZORPAY_KEY_SECRET: "redacted", RAZORPAY_BUSINESS_INR_PLAN_ID: "plan_a", RAZORPAY_BUSINESS_USD_PLAN_ID: "plan_b" });
     assert.throws(() => getBillingConfiguration(), /mode does not match/);
-    process.env.RAZORPAY_KEY_ID = "rzp_test_redacted"; delete process.env.RAZORPAY_PRO_PLAN_ID;
-    assert.throws(() => getBillingConfiguration(), /Plan IDs/);
+    process.env.RAZORPAY_KEY_ID = "rzp_test_redacted"; delete process.env.RAZORPAY_BUSINESS_INR_PLAN_ID;
+    assert.throws(() => getBillingConfiguration(), /India Business Plan ID/);
+    process.env.RAZORPAY_BUSINESS_INR_PLAN_ID = "plan_a";
+    delete process.env.RAZORPAY_BUSINESS_USD_PLAN_ID;
+    assert.doesNotThrow(() => getBillingConfiguration());
   } finally {
     for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
     Object.assign(process.env, original);
@@ -52,8 +56,11 @@ test("billing mode and key mismatch fail closed without exposing secrets", () =>
 test("checkout reserves before Razorpay and rejects pending or active duplicates", async () => {
   const route = await source("app/api/billing/checkout/route.ts");
   const reserve = route.indexOf("transaction.insert(subscriptions)");
-  const provider = route.indexOf("createRazorpaySubscription(getRazorpayPlanId(plan)");
+  const provider = route.indexOf("createRazorpaySubscription(providerPlanId");
   assert.ok(reserve >= 0 && reserve < provider);
+  const unavailable = route.indexOf("International payments are opening shortly. Please check back soon.");
+  assert.ok(unavailable >= 0 && unavailable < reserve);
+  assert.match(route, /const providerPlanId = getRazorpayPlanId\(market\)/);
   assert.match(route, /billing-checkout:/); assert.match(route, /current\?\.status === "pending"/);
   assert.match(route, /current\?\.status === "active"/); assert.match(route, /Plan changes are not available yet/);
   assert.match(route, /checkout_intent_/);
