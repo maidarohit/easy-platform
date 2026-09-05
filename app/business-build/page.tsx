@@ -4,10 +4,11 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
+import { retryBusinessBuildTask } from "@/app/lib/business-build-retry";
 
 type BuildView = {
   run: { id: string; status: string };
-  tasks: Array<{ id: string; moduleId: string; status: string; customerState: string; customerMessage: string | null }>;
+  tasks: Array<{ id: string; moduleId: string; status: string; customerState: string; customerMessage: string | null; canRetry: boolean }>;
   progress: { total: number; queued: number; completed: number; failed: number };
 };
 
@@ -23,7 +24,9 @@ function BusinessBuildContent() {
   const [view, setView] = useState<BuildView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryingTaskId, setRetryingTaskId] = useState("");
   const executionStarted = useRef(false);
+  const retryInFlight = useRef(new Set<string>());
 
   const fetchBuild = useCallback(async () => {
     if (!projectId) throw new Error("Open a valid business project.");
@@ -33,6 +36,24 @@ function BusinessBuildContent() {
     if (!data.run) throw new Error("Start your business build from the confirmed Business DNA screen.");
     return data as BuildView;
   }, [projectId]);
+
+  const handleRetry = useCallback(async (taskId: string) => {
+    if (!view || retryInFlight.current.has(taskId)) return;
+    setError("");
+    setRetryingTaskId(taskId);
+    try {
+      await retryBusinessBuildTask({
+        runId: view.run.id,
+        taskId,
+        inFlightTaskIds: retryInFlight.current,
+        refreshBuild: async () => setView(await fetchBuild()),
+      });
+    } catch {
+      setError("We could not safely retry this step. Please try again.");
+    } finally {
+      setRetryingTaskId("");
+    }
+  }, [fetchBuild, view]);
 
   useEffect(() => {
     let active = true;
@@ -65,7 +86,7 @@ function BusinessBuildContent() {
         <h1 className="mt-4 text-[clamp(2.6rem,7vw,4.8rem)] font-semibold leading-none tracking-[-0.055em] text-[#173D32]">{completed ? "Your workspace is ready." : "Building your business."}</h1>
         <p className="mt-5 text-lg leading-8 text-[#606A64]">Everything runs from your confirmed business understanding. You do not need to start individual tools.</p>
         {error && <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
-        {view && <div className="mt-9 space-y-3">{view.tasks.map((task) => <div key={task.id} className="flex items-center justify-between gap-4 rounded-2xl border border-[#D8DCCF] bg-[#FCFBF7] p-5"><span className="font-semibold text-[#173D32]">{FRIENDLY_PHASES[task.moduleId] ?? "Preparing your business"}</span><span className="text-sm text-[#606A64]">{task.customerState}</span></div>)}</div>}
+        {view && <div className="mt-9 space-y-3">{view.tasks.map((task) => <div key={task.id} className="flex items-center justify-between gap-4 rounded-2xl border border-[#D8DCCF] bg-[#FCFBF7] p-5"><div><span className="font-semibold text-[#173D32]">{FRIENDLY_PHASES[task.moduleId] ?? "Preparing your business"}</span>{task.customerMessage && <p className="mt-1 text-sm text-[#606A64]">{task.customerMessage}</p>}</div><div className="flex shrink-0 items-center gap-3"><span className="text-sm text-[#606A64]">{task.customerState}</span>{task.status === "failed" && task.canRetry && <button type="button" disabled={retryingTaskId === task.id} onClick={() => void handleRetry(task.id)} className="min-h-11 rounded-xl bg-[#173D32] px-4 text-sm font-semibold text-white transition hover:bg-[#245746] disabled:cursor-not-allowed disabled:opacity-60">{retryingTaskId === task.id ? "Trying again…" : "Try again"}</button>}</div></div>)}</div>}
         {view && !completed && !needsAttention && <p className="mt-6 text-sm font-medium text-[#606A64]">{view.progress.completed} of {view.progress.total} phases complete.</p>}
         {needsAttention && <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-5"><p className="font-semibold text-[#173D32]">Your build needs support.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">Completed work is saved. Nothing uncertain will be replayed automatically.</p></div>}
         {completed && <Link href={`/master-workspace?projectId=${encodeURIComponent(projectId)}`} className="mt-8 inline-flex min-h-13 items-center rounded-[14px] bg-[#173D32] px-7 font-semibold text-white">Open Business Workspace</Link>}
