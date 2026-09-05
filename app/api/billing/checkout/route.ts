@@ -9,7 +9,7 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscription-policy";
-import { marketForCountry } from "@/app/lib/billing-plans";
+import { billingMarketFromHeaders } from "@/app/lib/billing-market";
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Plan must be business" }, { status: 400 });
   }
 
-  const market = marketForCountry(request.headers.get("x-vercel-ip-country"));
+  const market = billingMarketFromHeaders(request.headers);
   const providerPlanId = getRazorpayPlanId(market);
   if (!providerPlanId) {
     return Response.json(

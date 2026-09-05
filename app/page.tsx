@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { BILLING_PLAN } from "@/app/lib/billing-plans";
+import { billingMarketFromHeaders } from "@/app/lib/billing-market";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import ProductTutorial from "./components/ProductTutorial";
 import { TranslatedText } from "./components/TranslatedText";
@@ -81,7 +83,7 @@ const outcomeIcons = [
     <path d="M15 7h5v5" />
   </svg>,
 ];
-export default function Home() {
+export default async function Home() {
 const outcomes = [
   ["startStrong", "startStrongDescription"],
   ["lookProfessional", "lookProfessionalDescription"],
@@ -101,7 +103,9 @@ const outcomes = [
   const benefits = [
     "benefitSecure", "benefitOrganised", "benefitControl", "benefitGrowth",
   ] as const;
-  const plans = [{ ...BILLING_PLAN, featured: true }];
+  const market = billingMarketFromHeaders(await headers());
+  const offer = BILLING_PLAN.prices[market];
+  const plans = [BILLING_PLAN];
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#F7F4EC] text-[#1B211E] selection:bg-[#A8B8A7]/50">
@@ -340,26 +344,21 @@ const outcomes = [
             {plans.map((plan) => (
               <article
                 key={plan.name}
-                className={`relative rounded-[28px] border p-8 transition hover:-translate-y-1 ${plan.featured ? "border-[#173D32] bg-[#EDF0E8] shadow-[0_24px_60px_rgba(23,61,50,0.12)]" : "border-[#173D32]/10 bg-[#FCFBF7]"}`}
+                className="relative rounded-[28px] border border-[#173D32] bg-[#EDF0E8] p-8 shadow-[0_24px_60px_rgba(23,61,50,0.12)] transition hover:-translate-y-1"
               >
-                {plan.featured && (
-                  <span className="absolute right-5 top-5 rounded-full bg-[#173D32] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-white">
-                    <TranslatedText id="mostSelected" />
-                  </span>
-                )}
                 <h3 className="text-2xl font-semibold text-[#0E2C24]">
                   {plan.name}
                 </h3>
                 <div className="mt-8 flex items-end gap-1">
                   <span className="[font-size:clamp(3.5rem,5vw,4rem)] font-semibold leading-none tracking-[-0.05em] text-[#0E2C24]">
-                    ₹1,999 India / US$50 international
+                    {offer.displayPrice}
                   </span>
                   <span className="pb-1 text-base text-[#747B76]">
                     {plan.period}
                   </span>
                 </div>
                 <p className="mt-6 min-h-14 text-base leading-7 text-[#6F756F]">
-                  {plan.description} Taxes apply.
+                  {plan.description} + {offer.taxLabel}.
                 </p>
                 <ul className="mt-8 space-y-4">
                   {plan.features.map((feature, index) => (
@@ -376,7 +375,7 @@ const outcomes = [
                 </ul>
                 <Link
                   href={`/billing?plan=${plan.key}`}
-                  className={`mt-9 inline-flex w-full items-center justify-center rounded-xl px-5 py-3.5 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] ${plan.featured ? "bg-[#173D32] text-white hover:bg-[#0E2C24]" : "border border-[#173D32]/20 text-[#173D32] hover:border-[#173D32]/40 hover:bg-[#EDF0E8]"}`}
+                  className="mt-9 inline-flex w-full items-center justify-center rounded-xl bg-[#173D32] px-5 py-3.5 text-base font-semibold text-white transition hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]"
                 >
                   Choose Buzypeezy Business
                 </Link>

@@ -22,6 +22,7 @@ type BillingStatus = {
   };
   offer: { market: "india" | "international"; displayPrice: string; taxLabel: string; currency: "INR" | "USD"; amountMinor: number };
 };
+type BillingOffer = BillingStatus["offer"];
 const copy: Record<SubscriptionStatus, [string, string]> = {
   pending: [
     "Waiting for payment confirmation",
@@ -38,6 +39,7 @@ const copy: Record<SubscriptionStatus, [string, string]> = {
 
 export default function BillingPage() {
   const [status, setStatus] = useState<BillingStatus | null>(null);
+  const [offer, setOffer] = useState<BillingOffer | null>(null);
   const [loading, setLoading] = useState<
     BillingPlanKey | "status" | "cancel" | null
   >("status");
@@ -61,7 +63,11 @@ export default function BillingPage() {
     const returning = parameters.get("checkout") === "return";
     const check = async () => {
       try {
+        const offerResponse = await fetch("/api/billing/offer", { cache: "no-store" });
+        if (!offerResponse.ok) throw new Error("Unable to load regional pricing.");
+        if (!stopped) setOffer(await offerResponse.json() as BillingOffer);
         const data = await loadStatus();
+        if (!stopped) setOffer(data.offer);
         if (!stopped && returning && data.subscription?.status === "pending")
           window.setTimeout(check, 3000);
       } catch (error) {
@@ -197,10 +203,10 @@ export default function BillingPage() {
                 {plan.name}
               </h2>
               <p className="mt-3 text-lg text-[#52605A]">
-                {status?.offer.displayPrice ?? "₹1,999 / US$50"}
+                {offer?.displayPrice ?? "Loading price…"}
                 {plan.period}
               </p>
-              <p className="mt-1 text-sm text-[#626A64]">+ {status?.offer.taxLabel ?? "applicable tax"}</p>
+              {offer && <p className="mt-1 text-sm text-[#626A64]">+ {offer.taxLabel}</p>}
               <p className="mt-3 text-sm leading-6 text-[#626A64]">
                 {plan.description}
               </p>
