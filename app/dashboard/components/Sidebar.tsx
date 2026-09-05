@@ -14,6 +14,7 @@ const PRIMARY_ITEMS: readonly MenuItem[] = [
   { label: "Preview", href: "/business-preview", icon: "◫" },
   { label: "Store", href: "/store", icon: "▣" },
   { label: "Automation", href: "/dashboard/automation", icon: "↻" },
+  { label: "Social & Content", href: "/social", icon: "◉" },
   { label: "Settings", href: "/settings", icon: "⚙" },
 ];
 
