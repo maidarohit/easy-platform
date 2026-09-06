@@ -12,6 +12,7 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { and, eq, inArray } from "drizzle-orm";
+import { after } from "next/server";
 
 const strategyKeys: Array<keyof AiManagerStrategy> = [
   "overview",
@@ -238,7 +239,16 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     transitionedJob.createdAt
   );
   const continuation = await syncEasyModeAiManagerTask(jobId);
-  if (nextStatus === "completed" && continuation) await executeEasyModeRun(continuation);
 
-  return Response.json({ jobId, status: nextStatus });
+if (nextStatus === "completed" && continuation) {
+  after(async () => {
+    try {
+      await executeEasyModeRun(continuation);
+    } catch (error) {
+      console.error("Easy Mode continuation failed after AI Manager callback:", error);
+    }
+  });
+}
+
+return Response.json({ jobId, status: nextStatus });
 }
