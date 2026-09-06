@@ -67,6 +67,7 @@ import {
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { isSubscriptionRequiredResponse } from "@/app/lib/subscription-required";
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 
@@ -77,7 +78,7 @@ export type EasyModeCustomerProgress = Readonly<{
 }>;
 
 export type ExecuteNextResult = Readonly<{
-  state: "completed" | "in_progress" | "needs_attention" | "not_available" | "disabled" | "not_found";
+  state: "completed" | "in_progress" | "subscription_required" | "needs_attention" | "not_available" | "disabled" | "not_found";
   message: string;
   progress?: EasyModeCustomerProgress;
 }>;
@@ -324,6 +325,14 @@ async function executeAiManagerTask(
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
     };
   } catch (error) {
+    if (error instanceof Response && await isSubscriptionRequiredResponse(error)) {
+      try { await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "SUBSCRIPTION_REQUIRED" }); } catch {}
+      return {
+        state: "subscription_required",
+        message: "Subscribe to continue building your business.",
+        progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      };
+    }
     const uncertain = dispatched ||
       (error instanceof SpecialistExecutionError && error.failurePoint === "uncertain");
     if (usageId) {
@@ -514,6 +523,14 @@ async function executeAdditionalSpecialistTask(
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
     };
   } catch (error) {
+    if (error instanceof Response && await isSubscriptionRequiredResponse(error)) {
+      try { await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "SUBSCRIPTION_REQUIRED" }); } catch {}
+      return {
+        state: "subscription_required",
+        message: "Subscribe to continue building your business.",
+        progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      };
+    }
     try {
       await failUsageOnce();
     } catch {

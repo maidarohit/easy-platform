@@ -47,6 +47,7 @@ export default function BillingPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<BillingPlanKey | null>(null);
+  const [returnTo, setReturnTo] = useState("/dashboard");
   const loadStatus = useCallback(async () => {
     const response = await authenticatedFetch("/api/billing/status", {
       cache: "no-store",
@@ -60,6 +61,11 @@ export default function BillingPage() {
   useEffect(() => {
     let stopped = false;
     const parameters = new URLSearchParams(window.location.search);
+    const requestedReturn = parameters.get("returnTo");
+    const safeReturn = requestedReturn?.startsWith("/") && !requestedReturn.startsWith("//")
+      ? requestedReturn
+      : sessionStorage.getItem("billing-return-to") || "/dashboard";
+    setReturnTo(safeReturn);
     const returning = parameters.get("checkout") === "return";
     const check = async () => {
       try {
@@ -105,6 +111,7 @@ export default function BillingPage() {
       };
       if (!response.ok || !data.checkoutUrl)
         throw new Error(data.error ?? "Unable to start checkout.");
+      sessionStorage.setItem("billing-return-to", returnTo);
       window.location.assign(data.checkoutUrl);
     } catch (error) {
       setMessage(
@@ -166,6 +173,7 @@ export default function BillingPage() {
               {stateCopy[0]}
             </h2>
             <p className="mt-2 text-[#52605A]">{stateCopy[1]}</p>
+            {hasActiveSubscription && <Link href={returnTo} className="mt-4 inline-flex rounded-xl bg-[#173D32] px-4 py-2 font-semibold text-white">Continue to my business</Link>}
             {status?.subscription?.cancelAtPeriodEnd && (
               <p className="mt-3 text-sm font-semibold text-amber-800">
                 Cancellation is scheduled with the payment provider.

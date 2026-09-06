@@ -51,3 +51,46 @@ test("callback retains secret/idempotency and durably syncs validated Easy Mode 
   assert.match(service, /status: job\.status === "completed" \? "completed" : "failed_uncertain"/);
   assert.doesNotMatch(service, /publishWebsite|websitePublications|publishedWebsites/);
 });
+
+test("first Easy Mode task preserves canonical onboarding goal and description", async () => {
+  const calls = [];
+  const context = createTrustedModuleExecutionContext({ userId: "fresh-user", projectId: "fresh-project", runId, taskId });
+  const input = {
+    companyName: "North Studio",
+    businessDescription: "Services: Website setup",
+    industry: "Digital services",
+    businessGoal: "Improve my online presence",
+  };
+  const result = await executeNextEasyModeTask({ runId, userId: "fresh-user" }, {
+    enabled: () => true,
+    claim: async () => ({ context, runId, taskId, attemptId, attemptNumber: 1, moduleId: "ai-manager", executionKey: "fresh-execution", leaseToken, leaseExpiresAt: new Date(Date.now() + 60_000) }),
+    loadAiManagerInput: async () => input,
+    startUsage: async () => usageId,
+    bindUsage: async () => {}, markDispatching: async () => {},
+    startAiManagerJob: async (options) => { calls.push(options.input); return { jobId }; },
+    markRunning: async () => {}, completeAttempt: async () => {}, failUsage: async () => {},
+    failBeforeDispatch: async () => assert.fail("unexpected failure"), failUncertain: async () => assert.fail("unexpected failure"),
+    progress: async () => ({ runStatus: "In progress", tasks: [] }),
+  });
+  assert.equal(result.state, "in_progress");
+  assert.deepEqual(calls, [input]);
+  assert.equal(calls[0].businessGoal, "Improve my online presence");
+});
+
+test("unpaid AI Manager execution returns subscription-required before provider dispatch", async () => {
+  let providerCalls = 0;
+  const context = createTrustedModuleExecutionContext({ userId: "unpaid-user", projectId: "free-project", runId, taskId });
+  const result = await executeNextEasyModeTask({ runId, userId: "unpaid-user" }, {
+    enabled: () => true,
+    claim: async () => ({ context, runId, taskId, attemptId, attemptNumber: 1, moduleId: "ai-manager", executionKey: "unpaid-execution", leaseToken, leaseExpiresAt: new Date(Date.now() + 60_000) }),
+    loadAiManagerInput: async () => ({ companyName: "Example", businessDescription: "Services", industry: "Services", businessGoal: "Grow" }),
+    startUsage: async () => { throw Response.json({ error: "Subscribe", code: "PAID_SUBSCRIPTION_REQUIRED" }, { status: 403 }); },
+    bindUsage: async () => {}, markDispatching: async () => {},
+    startAiManagerJob: async () => { providerCalls += 1; return { jobId }; },
+    markRunning: async () => {}, completeAttempt: async () => {}, failUsage: async () => {},
+    failBeforeDispatch: async () => {}, failUncertain: async () => assert.fail("must not be uncertain"),
+    progress: async () => ({ runStatus: "In progress", tasks: [] }),
+  });
+  assert.equal(result.state, "subscription_required");
+  assert.equal(providerCalls, 0);
+});

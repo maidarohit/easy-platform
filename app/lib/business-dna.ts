@@ -80,6 +80,18 @@ export type ProjectMemoryCompatibilityProjection = {
   additionalContext?: string;
 };
 
+export type ProjectCompatibilityProjection = {
+  companyName?: string;
+  industry?: string;
+  targetAudience?: string;
+  goal?: string;
+  location?: string;
+  businessStage?: string;
+  originalBrief?: string;
+  brandStyle?: string;
+  brandDescription?: string;
+};
+
 const MAX_SHORT_LENGTH = 500;
 const MAX_LONG_LENGTH = 4_000;
 const MAX_LIST_ITEMS = 50;
@@ -205,6 +217,28 @@ export function projectBusinessDnaToProjectMemory(
     additionalContext: context ? bounded(context, MAX_LONG_LENGTH) : undefined,
   };
   return Object.fromEntries(Object.entries(projection).filter(([, value]) => value)) as ProjectMemoryCompatibilityProjection;
+}
+
+/** Keeps the legacy project columns used by business-build consumers in sync with Business DNA. */
+export function projectBusinessDnaToProject(
+  dna: BusinessDnaContent,
+): ProjectCompatibilityProjection {
+  const memory = projectBusinessDnaToProjectMemory(dna);
+  const location = join([dna.location?.city, dna.location?.region, dna.location?.country]);
+  const projection: ProjectCompatibilityProjection = {
+    companyName: memory.businessName,
+    industry: memory.industry,
+    targetAudience: memory.targetAudience,
+    goal: dna.goals?.primaryGoal?.trim()
+      || dna.goals?.sixToTwelveMonthGoal?.trim()
+      || dna.goals?.primaryLeadObjective?.trim(),
+    location: location || undefined,
+    businessStage: dna.identity?.businessStage?.trim(),
+    originalBrief: dna.conversation?.originalVisionText?.trim(),
+    brandStyle: memory.brandStyle,
+    brandDescription: memory.businessDescription,
+  };
+  return Object.fromEntries(Object.entries(projection).filter(([, value]) => value)) as ProjectCompatibilityProjection;
 }
 
 export function materializeBusinessDna(input: {

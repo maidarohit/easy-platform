@@ -51,6 +51,10 @@ export async function POST(request: Request, { params }: RouteContext) {
   const result = await executeEasyModeRun({ runId: (await params).runId, userId });
   const status = result.state === "not_found" ? 404 :
     result.state === "not_available" ? 409 :
+      result.state === "subscription_required" ? 403 :
       result.state === "needs_attention" ? 422 : 200;
-  return Response.json(result, { status, headers: { "Cache-Control": "no-store" } });
+  return Response.json(
+    result.state === "subscription_required" ? { ...result, code: "PAID_SUBSCRIPTION_REQUIRED" } : result,
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
 }

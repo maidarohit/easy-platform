@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToProjectMemory } from "../../app/lib/business-dna.ts";
+import { validateBusinessDnaPatch, materializeBusinessDna, projectBusinessDnaToProject, projectBusinessDnaToProjectMemory } from "../../app/lib/business-dna.ts";
 import { mergeExplicitDnaWithInferences, unansweredSuggestedQuestions, validateBusinessIntakeAnalysis, BUSINESS_INTAKE_MAX_QUESTIONS } from "../../app/lib/business-intake-analysis.ts";
 import { analyzeBusinessIntakeDeterministically, extractExplicitVisionDna, planAdaptiveQuestions } from "../../app/lib/business-intake-planner.ts";
 import { buildBusinessReviewSections } from "../../app/lib/business-intake-review.ts";
@@ -402,4 +402,32 @@ test("56 current-project-equivalent seven answers survive readiness and refresh 
   assert.deepEqual(criticalBusinessIntakeQuestions(BUSINESS_INTAKE_QUESTIONS, structuredClone(dna)), []);
   assert.deepEqual(dna, before);
   assert.equal("confirmed" in (dna.conversation ?? {}), false);
+});
+
+test("57 confirmed onboarding answers project into canonical business-build fields", () => {
+  const projected = projectBusinessDnaToProject({
+    identity: { businessName: "North Studio", industry: "Digital services" },
+    customers: { targetAudience: "Independent shop owners" },
+    offer: { products: ["Templates"], services: ["Website setup"] },
+    goals: { primaryGoal: "Improve my online presence" },
+    conversation: { originalVisionText: "Help local businesses look credible online." },
+  });
+  assert.equal(projected.companyName, "North Studio");
+  assert.equal(projected.industry, "Digital services");
+  assert.equal(projected.targetAudience, "Independent shop owners");
+  assert.equal(projected.goal, "Improve my online presence");
+  assert.match(projected.brandDescription, /Products: Templates/);
+  assert.match(projected.brandDescription, /Services: Website setup/);
+  assert.equal(projected.originalBrief, "Help local businesses look credible online.");
+  assert.equal(projected.location, undefined);
+  assert.equal(projected.businessStage, undefined);
+});
+
+test("58 an answered audience and selected goal never project as blank", () => {
+  const projected = projectBusinessDnaToProject({
+    customers: { desiredCustomers: "Growing local retailers" },
+    goals: { primaryGoal: "Improve my online presence" },
+  });
+  assert.equal(projected.targetAudience, "Growing local retailers");
+  assert.equal(projected.goal, "Improve my online presence");
 });

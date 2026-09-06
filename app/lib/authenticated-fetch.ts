@@ -1,4 +1,5 @@
 import auth, { authPersistenceReady } from "@/app/lib/auth";
+import { announceSubscriptionRequired } from "@/app/lib/subscription-required";
 
 type AuthenticatedUser = {
   getIdToken(forceRefresh?: boolean): Promise<string>;
@@ -77,5 +78,7 @@ export async function authenticatedFetch(
   init: RequestInit = {}
 ) {
   await authPersistenceReady;
-  return authenticatedFetchWithAuth(auth, fetch, input, init);
+  const response = await authenticatedFetchWithAuth(auth, fetch, input, init);
+  await announceSubscriptionRequired(response, input, init);
+  return response;
 }

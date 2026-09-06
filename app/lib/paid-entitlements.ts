@@ -122,7 +122,12 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
 }
 
 export function allowanceError(result: Exclude<Awaited<ReturnType<typeof checkUsageAllowance>>, { ok: true }>) {
-  return Response.json({ error: result.reason === "PLAN_LIMIT_REACHED" ? "Your monthly limit for this feature has been reached. It resets at the start of your next billing period." : result.reason, code: result.reason, ...(result.reason === "PLAN_LIMIT_REACHED" && { category: result.category, used: result.used, limit: result.limit }) }, { status: result.reason === "PAID_SUBSCRIPTION_REQUIRED" ? 403 : 429 });
+  const error = result.reason === "PLAN_LIMIT_REACHED"
+    ? "Your monthly limit for this feature has been reached. It resets at the start of your next billing period."
+    : result.reason === "PAID_SUBSCRIPTION_REQUIRED"
+      ? "Subscribe to Buzypeezy Business to use this feature."
+      : "This paid feature is not available right now.";
+  return Response.json({ error, code: result.reason, ...(result.reason === "PLAN_LIMIT_REACHED" && { category: result.category, used: result.used, limit: result.limit }) }, { status: result.reason === "PAID_SUBSCRIPTION_REQUIRED" ? 403 : 429 });
 }
 
 export async function requirePaidEntitlement(userId: string, category: UsageCategory) {

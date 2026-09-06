@@ -130,6 +130,21 @@ export const projectOutputs = pgTable("project_outputs", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const freeWebsitePreviews = pgTable("free_website_previews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  claimToken: uuid("claim_token").notNull(),
+  status: varchar("status", { length: 16 }).$type<"claimed" | "used">().notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("free_website_previews_user_unique").on(table.userId),
+  check("free_website_previews_status_check", sql`${table.status} in ('claimed','used')`),
+]);
+
 export type SocialProvider = "meta" | "linkedin";
 export type SocialConnectionStatus = "setup_required" | "connected" | "needs_attention";
 export const socialConnections = pgTable(

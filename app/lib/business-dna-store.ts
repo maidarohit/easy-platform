@@ -7,6 +7,7 @@ import {
   BUSINESS_DNA_SCHEMA_VERSION,
   materializeBusinessDna,
   mergeBusinessDnaContent,
+  projectBusinessDnaToProject,
   projectBusinessDnaToProjectMemory,
   type BusinessDna,
   type BusinessDnaContent,
@@ -93,6 +94,16 @@ export async function updateBusinessDnaForOwner(input: {
           projectId: input.projectId, userId: input.userId, ...projection,
         });
       }
+    }
+    const projectProjection = projectBusinessDnaToProject(dna);
+    if (Object.keys(projectProjection).length > 0) {
+      await transaction.update(projects).set({
+        ...projectProjection,
+        updatedAt: now,
+      }).where(and(
+        eq(projects.id, input.projectId),
+        eq(projects.userId, input.userId),
+      ));
     }
     return materialize(saved);
   });

@@ -12,6 +12,8 @@ import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { supportedLanguageOrEnglish } from "@/app/lib/supported-languages";
+import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
+import { claimFreeWebsitePreview, persistSuccessfulFreeWebsitePreview, releaseFreeWebsitePreview, type FreeWebsitePreviewClaim } from "@/app/lib/free-website-preview";
 import { and, eq } from "drizzle-orm";
 
 const WEBSITE_AI_WORKFLOW = "website-ai";
@@ -76,16 +78,21 @@ export async function POST(request: Request) {
   const webhook = getN8nWebhookConfig("N8N_WEBSITE_AI_WEBHOOK_URL");
   if (!webhook) return n8nConfigurationErrorResponse();
 
-  let usageId: string;
+  let usageId: string | null = null;
+  let freeClaim: FreeWebsitePreviewClaim | null = null;
 
   try {
-    usageId = await startAiUsage({
-      userId: uid,
-      projectId,
-      module: "website",
-      workflow: WEBSITE_AI_WORKFLOW,
-      model: null,
-    });
+    const allowance = await checkUsageAllowance(uid, "websiteGenerations");
+    if (allowance.ok) {
+      usageId = await startAiUsage({ userId: uid, projectId, module: "website", workflow: WEBSITE_AI_WORKFLOW, model: null });
+    } else if (allowance.reason === "PAID_SUBSCRIPTION_REQUIRED") {
+      const claim = await claimFreeWebsitePreview(uid, projectId);
+      if (claim === undefined) return Response.json({ error: "Project not found." }, { status: 404 });
+      if (!claim) return allowanceError(allowance);
+      freeClaim = claim;
+    } else {
+      return allowanceError(allowance);
+    }
   } catch (error) {
     if (error instanceof Response) return error;
     console.error("Website AI usage initialization failed.");
@@ -115,7 +122,8 @@ export async function POST(request: Request) {
     const responseText = await upstream.text();
 
     if (!upstream.ok) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      if (usageId) await finalizeUsage(usageId, "failed", startedAt);
+      if (freeClaim) await releaseFreeWebsitePreview(uid, freeClaim);
       console.error("Website AI upstream request failed.", upstream.status);
       return Response.json(
         { error: "Website AI request failed." },
@@ -124,7 +132,8 @@ export async function POST(request: Request) {
     }
 
     if (!responseText.trim()) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      if (usageId) await finalizeUsage(usageId, "failed", startedAt);
+      if (freeClaim) await releaseFreeWebsitePreview(uid, freeClaim);
       return Response.json(
         { error: "Website AI returned an empty response." },
         { status: 502 }
@@ -134,15 +143,19 @@ export async function POST(request: Request) {
     try {
       JSON.parse(responseText);
     } catch {
-      await finalizeUsage(usageId, "failed", startedAt);
+      if (usageId) await finalizeUsage(usageId, "failed", startedAt);
+      if (freeClaim) await releaseFreeWebsitePreview(uid, freeClaim);
       return Response.json(
         { error: "Website AI returned invalid JSON." },
         { status: 502 }
       );
     }
 
-    const usageFinalized = await finalizeUsage(usageId, "success", startedAt, usageMetadata?.components);
-    if (n8nExecutionId) {
+    if (freeClaim && !(await persistSuccessfulFreeWebsitePreview(uid, freeClaim, responseText))) {
+      return Response.json({ error: "Your free website preview could not be finalized safely." }, { status: 409 });
+    }
+    const usageFinalized = usageId ? await finalizeUsage(usageId, "success", startedAt, usageMetadata?.components) : false;
+    if (n8nExecutionId && usageId) {
       try {
         await associateN8nExecution({ usageId, executionId: n8nExecutionId, metadataAlreadyApplied: Boolean(usageMetadata) && usageFinalized });
       } catch {
@@ -157,7 +170,8 @@ export async function POST(request: Request) {
       },
     });
   } catch {
-    await finalizeUsage(usageId, "failed", startedAt);
+    if (usageId) await finalizeUsage(usageId, "failed", startedAt);
+    if (freeClaim) await releaseFreeWebsitePreview(uid, freeClaim);
     console.error("Website AI request failed.");
     return Response.json({ error: "Website AI failed." }, { status: 500 });
   } finally {
