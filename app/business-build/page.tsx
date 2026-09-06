@@ -38,7 +38,7 @@ function BusinessBuildContent() {
     let active = true;
     void fetchBuild().then((loaded) => {
       if (active) setView(loaded);
-      if (!active || executionStarted.current || !["queued", "running"].includes(loaded.run.status)) return;
+      if (!active || executionStarted.current || !["queued", "running", "partially_completed"].includes(loaded.run.status)) return;
       executionStarted.current = true;
       void authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(loaded.run.id)}/execute-next`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
