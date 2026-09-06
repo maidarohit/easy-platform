@@ -463,7 +463,7 @@ const handleGenerateBrand = async () => {
 
 setLoading(true);
 try {
-  const response = await fetch(
+  const response = await authenticatedFetch(
     "/api/website-ai",
     {
       method: "POST",
