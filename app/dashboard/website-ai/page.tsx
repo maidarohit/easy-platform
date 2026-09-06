@@ -128,12 +128,17 @@ useEffect(() => {
     setShowGoLiveReview(false);
     setCompanyName(activeProject?.companyName || "");
     setIndustry(activeProject?.industry || "");
+    setBrandStyle(activeProject?.brandStyle || "Minimal");
     setTargetAudience(
       WEBSITE_GOALS.includes(projectGoal as (typeof WEBSITE_GOALS)[number])
         ? projectGoal
         : "",
     );
-    setBrandDescription(activeProject?.businessDescription || activeProject?.originalBrief || "");
+    setBrandDescription(
+    activeProject?.businessDescription ||
+    activeProject?.originalBrief ||
+    ""
+);
   });
 
   return () => {
@@ -411,22 +416,20 @@ const saveProject = async () => {
 
   try {
     const response = await authenticatedFetch("/api/projects", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: crypto.randomUUID(),
-        userId: user.uid,
-        name: `${companyName} Website Project`,
-        companyName,
-        industry,
-        targetAudience,
-        brandStyle,
-        brandDescription,
-        result: JSON.stringify(brandResult),
-      }),
-    });
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    projectId,
+    companyName,
+    industry,
+    goal: targetAudience,
+    brandStyle,
+    brandDescription,
+    result: JSON.stringify(brandResult),
+  }),
+});
 
     if (!response.ok) {
       throw new Error("Failed to save project");
@@ -460,7 +463,25 @@ const handleGenerateBrand = async () => {
   toast.error("Please fill in all required fields.");
   return;
 }
+const briefSaveResponse = await authenticatedFetch("/api/projects", {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    projectId,
+    companyName,
+    industry,
+    goal: targetAudience,
+    brandStyle,
+    brandDescription,
+  }),
+});
 
+if (!briefSaveResponse.ok) {
+  toast.error("Unable to save website details.");
+  return;
+}
 setLoading(true);
 try {
   const response = await authenticatedFetch(

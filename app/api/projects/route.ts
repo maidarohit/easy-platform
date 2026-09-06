@@ -180,6 +180,103 @@ export async function GET(req: Request) {
   }
 }
 
+export async function PATCH(req: Request) {
+  let userId: string;
+
+  try {
+    userId = (await verifyFirebaseIdToken(req)).uid;
+  } catch {
+    return NextResponse.json(
+      { error: "Authentication is required" },
+      { status: 401 },
+    );
+  }
+
+  try {
+    const value = await readLimitedJson(req, MAX_PROJECT_BODY_BYTES);
+
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return NextResponse.json(
+        { error: "Invalid request body" },
+        { status: 400 },
+      );
+    }
+
+    const body = value as Record<string, unknown>;
+
+    const projectId =
+      typeof body.projectId === "string" ? body.projectId.trim() : "";
+
+    const updates: Partial<typeof projects.$inferInsert> = {};
+
+if (typeof body.primaryLanguage === "string") {
+  updates.primaryLanguage = supportedLanguageOrEnglish(body.primaryLanguage);
+}
+
+if (typeof body.companyName === "string") {
+  updates.companyName = body.companyName.trim();
+}
+
+if (typeof body.industry === "string") {
+  updates.industry = body.industry.trim();
+}
+
+if (typeof body.goal === "string") {
+  updates.goal = body.goal.trim();
+}
+
+if (typeof body.brandStyle === "string") {
+  updates.brandStyle = body.brandStyle.trim();
+}
+
+if (typeof body.brandDescription === "string") {
+  updates.brandDescription = body.brandDescription.trim();
+}
+
+if (typeof body.result === "string") {
+  updates.result = body.result;
+}
+
+    if (!projectId) {
+      return NextResponse.json(
+        { error: "projectId is required" },
+        { status: 400 },
+      );
+    }
+
+    const [updatedProject] = await db
+      .update(projects)
+      .set(updates)
+      .where(
+        and(
+          eq(projects.id, projectId),
+          eq(projects.userId, userId),
+        ),
+      )
+      .returning({
+        id: projects.id,
+        primaryLanguage: projects.primaryLanguage,
+      });
+
+    if (!updatedProject) {
+      return NextResponse.json(
+        { error: "Project not found" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({
+      project: updatedProject,
+    });
+  } catch (error) {
+    console.error("Update project language error:", error);
+
+    return NextResponse.json(
+      { error: "Failed to update project language" },
+      { status: 500 },
+    );
+  }
+}
 export async function DELETE(req: Request) {
   let userId: string;
 
