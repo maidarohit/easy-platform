@@ -181,7 +181,7 @@ const outcomes = [
                 href="/signup"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#173D32] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_14px_35px_rgba(23,61,50,0.18)] transition hover:-translate-y-0.5 hover:bg-[#0E2C24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]"
               >
-                <TranslatedText id="startBuilding" /> <ArrowIcon />
+                Create My Free Website Preview <ArrowIcon />
               </Link>
               <ProductTutorial
                 area="homepage"
@@ -190,6 +190,7 @@ const outcomes = [
                 triggerClassName="inline-flex items-center justify-center rounded-xl border border-[#173D32]/20 bg-[#FCFBF7]/70 px-6 py-3.5 text-sm font-semibold text-[#173D32] transition hover:-translate-y-0.5 hover:border-[#173D32]/35 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32]"
               />
             </div>
+            <p className="mt-4 text-xs leading-5 text-[#68706B] sm:text-sm">No payment required · 1 AI website preview free · Subscribe to publish and unlock all AI tools.</p>
           </div>
         </div>
       </section>

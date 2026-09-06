@@ -221,7 +221,7 @@ function EasyModeContent() {
                   </div>
                 </fieldset>
 
-                <button type="button" onClick={handlePreflight} disabled={submitting || executing || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Building your business…" : "Build My Business"}</button>
+                <button type="button" onClick={handlePreflight} disabled={submitting || executing || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Building your business…" : <>Build My Business <span className="ml-2 rounded-full border border-white/30 px-2 py-0.5 text-[10px] uppercase tracking-wide">Business Plan</span></>}</button>
 
                 {ready && runView && (
                   <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5">

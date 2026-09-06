@@ -35,6 +35,22 @@ const languageOptions: readonly { value: BusinessDnaLanguage; label: string }[] 
   { value: "hindi", label: "हिन्दी" },
   { value: "hinglish", label: "Hinglish" },
 ];
+const websiteLanguageOptions = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "de", label: "Deutsch" },
+  { value: "pt", label: "Português" },
+  { value: "ar", label: "العربية" },
+  { value: "hi", label: "हिन्दी" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+  { value: "zh", label: "简体中文" },
+  { value: "kn", label: "ಕನ್ನಡ" },
+  { value: "ta", label: "தமிழ்" },
+  { value: "te", label: "తెలుగు" },
+  { value: "ml", label: "മലയാളം" },
+] as const;
 
 const intakeCopy = {
   english: {
@@ -122,6 +138,7 @@ function VoiceControl({ speech, label }: { speech: ReturnType<typeof useBrowserS
 export default function OnboardingPage() {
   const router = useRouter();
   const [projectId, setProjectId] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [dna, setDna] = useState<BusinessDna | null>(null);
   const [vision, setVision] = useState("");
   const [answer, setAnswer] = useState("");
@@ -131,6 +148,8 @@ export default function OnboardingPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [language, setLanguage] = useState<BusinessDnaLanguage>("english");
+  const [primaryLanguage, setPrimaryLanguage] =
+  useState<(typeof websiteLanguageOptions)[number]["value"]>("en");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [analysis, setAnalysis] = useState<BusinessIntakeAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -218,9 +237,15 @@ export default function OnboardingPage() {
             authenticatedFetch(`/api/business-dna?projectId=${encodeURIComponent(id)}`),
           ]);
           if (!projectResponse.ok || !dnaResponse.ok) throw new Error("We could not open this business safely.");
+          const projectData = await projectResponse.json();
           const data = await dnaResponse.json();
           if (!cancelled) {
             setProjectId(id);
+            setProjectName(projectData.project?.name ?? "");
+            setPrimaryLanguage(
+  (projectData.project?.primaryLanguage ?? "en") as
+    (typeof websiteLanguageOptions)[number]["value"]
+);
             setDna(data.dna ?? null);
             setVision(data.dna?.conversation?.originalVisionText ?? "");
             setLanguage(data.dna?.conversation?.preferredLanguage ?? "english");
@@ -286,13 +311,14 @@ export default function OnboardingPage() {
         const response = await authenticatedFetch("/api/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, name: `Business Vision ${id.slice(0, 8)}`, originalBrief: vision, brandDescription: vision, creationIntent: "new-business" }),
+          body: JSON.stringify({ id, name: `Business Vision ${id.slice(0, 8)}`, originalBrief: vision, brandDescription: vision, primaryLanguage, creationIntent: "new-business" }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "We could not create your business project.");
         id = data.project?.id;
         if (!id) throw new Error("Your business project could not be opened.");
         setProjectId(id);
+        setProjectName(data.project?.name ?? `Business Vision ${id.slice(0, 8)}`);
         router.replace(`/onboarding?projectId=${encodeURIComponent(id)}`);
         sessionStorage.removeItem("easy-selected-business-idea");
       }
@@ -360,7 +386,7 @@ export default function OnboardingPage() {
     setIsStartingBuild(true); setError("");
     try {
       const response = await authenticatedFetch("/api/business-build", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "We could not start your business build.");
@@ -404,6 +430,47 @@ export default function OnboardingPage() {
           <div className="flex rounded-[14px] border border-[#D8DCCF] bg-[#FCFBF7] p-1" aria-label="Choose language">
             {languageOptions.map((option) => <button key={option.value} type="button" aria-pressed={language === option.value} onClick={() => void changeLanguage(option.value)} className={`rounded-[10px] px-4 py-2 text-sm font-semibold transition ${language === option.value ? "bg-[#173D32] text-white" : "text-[#606A64] hover:bg-[#EEE9DC]"}`}>{option.label}</button>)}
           </div>
+          <div className="flex items-center gap-2">
+  <span className="text-sm font-semibold text-[#606A64]">
+    Website language
+  </span>
+
+  <select
+    value={primaryLanguage}
+    onChange={async (e) => {
+  const nextLanguage = e.target.value as
+    (typeof websiteLanguageOptions)[number]["value"];
+
+  setPrimaryLanguage(nextLanguage);
+
+  if (projectId && projectName) {
+    const response = await authenticatedFetch("/api/projects", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: projectId,
+        name: projectName,
+        primaryLanguage: nextLanguage,
+      }),
+    });
+
+    if (!response.ok) {
+      setError("Website language could not be saved. Please try again.");
+    }
+  }
+}}
+    className="rounded-[10px] border border-[#D8DCCF] bg-white px-3 py-2 text-sm font-semibold text-[#173D32] outline-none"
+    aria-label="Website language"
+  >
+    {websiteLanguageOptions.map((option) => (
+      <option key={option.value} value={option.value}>
+        {option.label}
+      </option>
+    ))}
+  </select>
+</div>
           <label className="flex items-center gap-2 text-sm text-[#606A64]"><input type="checkbox" checked={autoSpeak} onChange={(event) => { setAutoSpeak(event.target.checked); if (!event.target.checked) speech.stopSpeaking(); }} />{copy.auto}</label>
         </div>
         <section className="flex flex-1 items-center py-10 sm:py-14">
@@ -430,7 +497,7 @@ export default function OnboardingPage() {
                 <p className="mt-6 text-xs font-semibold uppercase tracking-[0.24em] text-[#173D32]">Business DNA confirmed</p>
                 <h1 className="mt-4 text-[clamp(2.6rem,6vw,4.5rem)] font-semibold leading-[1.04] tracking-[-0.05em] text-[#173D32]">Your business is understood.</h1>
                 <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-[#606A64]">Your approved business context is saved and ready for the next step.</p>
-                {isBuildEligible ? <button type="button" disabled={isStartingBuild} onClick={() => void startBusinessBuild()} className={`${primaryButtonClass} mt-8`}>{isStartingBuild ? "Starting your build…" : "Build My Business"}</button> : <p className="mt-8 text-sm font-medium text-[#606A64]">Business building is not available for this project yet.</p>}
+                {isBuildEligible ? <button type="button" disabled={isStartingBuild} onClick={() => void startBusinessBuild()} className={`${primaryButtonClass} mt-8`}>{isStartingBuild ? "Starting your build…" : <>Build My Business <span className="rounded-full border border-white/30 px-2 py-0.5 text-[10px] uppercase tracking-wide">Business Plan</span></>}</button> : <p className="mt-8 text-sm font-medium text-[#606A64]">Business building is not available for this project yet.</p>}
                 <button type="button" onClick={() => projectId && void saveDnaPatch(projectId, {}, false)} className="mt-6 block w-full text-sm font-semibold text-[#606A64] underline decoration-[#A8B8A7] underline-offset-4">Review or correct my details</button>
               </div>
             ) : complete ? (

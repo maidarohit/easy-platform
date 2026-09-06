@@ -7,7 +7,7 @@ import StatsCards from "./components/StatsCards";
 import { onAuthStateChanged } from "firebase/auth";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { customerProjectAction } from "@/app/lib/customer-navigation";
 
 type Project = {
@@ -32,8 +32,11 @@ type DashboardSummary = {
   activeAiJobs: number;
 };
 
+type BillingAccess = { entitlements?: { paidAccess?: boolean } };
+
 function DashboardPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [error, setError] = useState("");
@@ -43,6 +46,7 @@ function DashboardPageContent() {
   const [summaryError, setSummaryError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [paidAccess, setPaidAccess] = useState<boolean | null>(null);
   const [, setProjectActions] = useState<Record<string, { label: string; href: string }>>({});
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -107,14 +111,18 @@ function DashboardPageContent() {
       }
 
       try {
-        const response = await authenticatedFetch("/api/dashboard/summary");
-        const data = await response.json();
+        const [response, billingResponse] = await Promise.all([
+          authenticatedFetch("/api/dashboard/summary"),
+          authenticatedFetch("/api/billing/status", { cache: "no-store" }),
+        ]);
+        const [data, billing] = await Promise.all([response.json(), billingResponse.json() as Promise<BillingAccess>]);
 
         if (!response.ok) {
           throw new Error(data.error || "Failed to load dashboard summary");
         }
 
         setDashboardSummary(data as DashboardSummary);
+        setPaidAccess(billingResponse.ok ? billing.entitlements?.paidAccess === true : null);
       } catch (err) {
         console.error("Load dashboard summary error:", err);
         setDashboardSummary(null);
@@ -170,6 +178,7 @@ function DashboardPageContent() {
     project.industry?.toLowerCase().includes(query)
   );
 });
+  const currentProject = projects.find((project) => project.id === searchParams.get("projectId")) ?? projects[0];
 
   return (
     <main className="flex min-h-screen bg-slate-950">
@@ -215,6 +224,18 @@ function DashboardPageContent() {
       </p>
     </div>
   </div>
+
+          {paidAccess === false && currentProject && (
+            <section className="mb-8 rounded-[20px] border border-cyan-400/25 bg-cyan-400/[0.07] p-5 shadow-[0_14px_35px_rgba(34,211,238,0.08)] sm:p-6" aria-labelledby="free-account-title">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-300">Free Account</p>
+              <h2 id="free-account-title" className="mt-2 text-xl font-semibold text-white">Free Account — 1 Website Preview Included</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Create your free website preview, then subscribe to unlock Build My Business, publishing and all AI tools.</p>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button type="button" onClick={() => router.push(`/dashboard/website-ai?projectId=${encodeURIComponent(currentProject.id)}`)} className="min-h-11 rounded-xl bg-cyan-300 px-5 text-sm font-bold text-slate-950">Create Free Website Preview</button>
+                <button type="button" onClick={() => router.push("/billing?plan=business")} className="min-h-11 rounded-xl border border-slate-600 px-5 text-sm font-semibold text-white">View Business Plan</button>
+              </div>
+            </section>
+          )}
 
           <section className="mb-10 rounded-[24px] border border-emerald-400/30 bg-gradient-to-br from-emerald-950/80 to-slate-900 p-6 shadow-[0_18px_50px_rgba(16,185,129,0.12)] sm:p-8" aria-labelledby="start-new-business-heading">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">Start something new</p>

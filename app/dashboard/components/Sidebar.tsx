@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 
-type MenuItem = Readonly<{ label: string; href: string; icon: string }>;
+type MenuItem = Readonly<{ label: string; href: string; icon: string; businessPlan?: boolean }>;
 type Publication = Readonly<{ status: "unpublished" | "active" | "inactive"; publicUrl?: string }>;
 
 const PRIMARY_ITEMS: readonly MenuItem[] = [
@@ -13,21 +13,21 @@ const PRIMARY_ITEMS: readonly MenuItem[] = [
   { label: "My Business", href: "/master-workspace", icon: "◇" },
   { label: "Preview", href: "/business-preview", icon: "◫" },
   { label: "Store", href: "/store", icon: "▣" },
-  { label: "Automation", href: "/dashboard/automation", icon: "↻" },
+  { label: "Automation", href: "/dashboard/automation", icon: "↻", businessPlan: true },
   { label: "Social & Content", href: "/social", icon: "◉" },
   { label: "Settings", href: "/settings", icon: "⚙" },
 ];
 
 const ADVANCED_ITEMS: readonly MenuItem[] = [
-  { label: "AI Manager", href: "/ai-manager", icon: "✦" },
-  { label: "Branding", href: "/branding-ai", icon: "◈" },
+  { label: "AI Manager", href: "/ai-manager", icon: "✦", businessPlan: true },
+  { label: "Branding", href: "/branding-ai", icon: "◈", businessPlan: true },
   { label: "Website", href: "/dashboard/website-ai", icon: "⌘" },
-  { label: "Marketing", href: "/marketing-ai", icon: "◎" },
-  { label: "SEO", href: "/seo-ai", icon: "⌕" },
-  { label: "UI/UX", href: "/uiux-ai", icon: "▫" },
-  { label: "Sales", href: "/sales-ai", icon: "↗" },
-  { label: "Analytics", href: "/analytics-ai", icon: "◰" },
-  { label: "Creative Tools", href: "/dashboard/creative-ai", icon: "✧" },
+  { label: "Marketing", href: "/marketing-ai", icon: "◎", businessPlan: true },
+  { label: "SEO", href: "/seo-ai", icon: "⌕", businessPlan: true },
+  { label: "UI/UX", href: "/uiux-ai", icon: "▫", businessPlan: true },
+  { label: "Sales", href: "/sales-ai", icon: "↗", businessPlan: true },
+  { label: "Analytics", href: "/analytics-ai", icon: "◰", businessPlan: true },
+  { label: "Creative Tools", href: "/dashboard/creative-ai", icon: "✧", businessPlan: true },
   { label: "Logo", href: "/dashboard/logo-ai", icon: "△" },
   { label: "Images", href: "/dashboard/image-ai", icon: "▣" },
   { label: "Video", href: "/dashboard/video-ai", icon: "▶" },
@@ -46,7 +46,8 @@ function withProject(path: string, projectId: string) {
 function NavigationLink({ item, projectId, active }: { item: MenuItem; projectId: string; active: boolean }) {
   return <Link href={withProject(item.href, projectId)} aria-label={item.label} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61] ${active ? "bg-[#DDE3D8] text-[#173D32]" : "text-[#AEB8B2] hover:bg-white/10 hover:text-white"}`}>
     <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10">{item.icon}</span>
-    <span className="hidden sm:inline">{item.label}</span>
+    <span className="hidden min-w-0 flex-1 sm:inline">{item.label}</span>
+    {item.businessPlan && <span title="Business Plan" aria-label="Business Plan" className="ml-auto rounded-full border border-[#B89A61]/35 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[#D8C28F]"><span className="sm:hidden">🔒</span><span className="hidden sm:inline">Business Plan</span></span>}
   </Link>;
 }
 
