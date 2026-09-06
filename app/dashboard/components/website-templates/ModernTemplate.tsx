@@ -36,15 +36,32 @@ export default function ModernTemplate({
   const businessName = companyName || industry || "—";
 
   const headline =
-    brandResult?.heroHeadline ||
-    brandResult?.websiteGoal ||
-    businessName;
+  brandResult?.heroHeadline ||
+  `${businessName}${industry ? ` — ${industry}` : ""}`;
 
-  const description =
-    brandResult?.websiteOverview ||
-    brandResult?.designRecommendations ||
-    headline;
+  const overview = brandResult?.websiteOverview?.trim() || "";
 
+const description =
+  overview.split(/(?<=[.!?])\s+/)[0] ||
+  `${businessName} provides professional ${industry || "services"} with a clear, modern and customer-focused experience.`;
+
+  const primaryCta =
+  websiteGoal === "Generate Leads"
+    ? "Get a Quote"
+    : websiteGoal === "Book Appointments"
+      ? "Book a Consultation"
+      : websiteGoal === "Sell Products"
+        ? "Shop Now"
+        : websiteGoal === "Showcase Portfolio"
+          ? "View Our Work"
+          : labels.contact;
+          const aboutCopy = description;
+
+const servicesCopy =
+  `Explore ${businessName}'s ${industry || "professional"} services and find the right solution for your needs.`;
+
+const contactCopy =
+  `Have a project in mind? Contact ${businessName} to discuss your requirements and next steps.`;
   return (
     <div className="overflow-hidden rounded-[28px] bg-white text-slate-950">
       <nav className="flex items-center justify-between border-b border-slate-200 px-8 py-5 lg:px-12">
@@ -58,7 +75,7 @@ export default function ModernTemplate({
         </div>
 
         <button className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:scale-105">
-          {websiteGoal || labels.contact}
+          {primaryCta}
         </button>
       </nav>
 
@@ -87,29 +104,14 @@ export default function ModernTemplate({
             <ScaleIn delay={0.6}>
 <div className="mt-8 flex flex-wrap gap-4">
     <AnimatedButton className="rounded-full bg-cyan-500 px-6 py-3 font-semibold text-slate-950 transition">
-  {websiteGoal || labels.contact}
+  {primaryCta}
 </AnimatedButton>
 <AnimatedButton className="rounded-full border border-slate-300 bg-white px-6 py-3 font-semibold transition hover:bg-slate-50">
   {labels.services}
 </AnimatedButton>
             </div>
 
-            <div className="mt-10 flex flex-wrap gap-8 text-sm text-slate-500">
-              <div>
-                <p className="text-2xl font-bold text-slate-950">120+</p>
-                <p>{labels.services}</p>
-              </div>
-
-              <div>
-                <p className="text-2xl font-bold text-slate-950">98%</p>
-                <p>{labels.about}</p>
-              </div>
-
-              <div>
-                <p className="text-2xl font-bold text-slate-950">24/7</p>
-                <p>{labels.contact}</p>
-              </div>
-            </div>
+    
           </ScaleIn>
           </SlideUp>
 
@@ -142,12 +144,10 @@ export default function ModernTemplate({
         <div className="mt-7 rounded-3xl bg-slate-950 p-5 text-white">
           <div className="flex items-center justify-between">
             <p className="text-xs text-white/60">{labels.howWeCanHelp}</p>
-            <span className="rounded-full bg-emerald-400/20 px-2 py-1 text-[10px] text-emerald-300">
-              +16.7%
-            </span>
+            
           </div>
 
-          <p className="mt-3 text-3xl font-bold">$98,642</p>
+          <p className="mt-3 text-xl font-bold">{businessName}</p>
 
           <div className="mt-6 flex h-28 items-end gap-2">
             {[36, 52, 44, 68, 58, 84, 72, 100].map((height, index) => (
@@ -163,12 +163,12 @@ export default function ModernTemplate({
         <div className="mt-5 grid grid-cols-2 gap-3">
           <AnimatedCard className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs text-slate-400">{labels.about}</p>
-            <p className="mt-2 text-xl font-bold text-slate-950">842</p>
+            <p className="mt-2 text-xl font-bold text-slate-950">{labels.about}</p>
           </AnimatedCard>
 
           <AnimatedCard className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs text-slate-400">{labels.services}</p>
-            <p className="mt-2 text-xl font-bold text-slate-950">+42%</p>
+            <p className="mt-2 text-xl font-bold text-slate-950">{labels.services}</p>
           </AnimatedCard>
         </div>
 
@@ -181,7 +181,7 @@ export default function ModernTemplate({
               </p>
             </div>
 
-            <span className="font-bold text-emerald-500">+$4,250</span>
+            <span className="font-bold text-emerald-500">{labels.contact}</span>
           </div>
         </div>
       </div>
@@ -197,23 +197,23 @@ export default function ModernTemplate({
     </div>
 
     <p className="mt-10 text-sm tracking-[0.24em] text-white/90">
-      4589 1246 7890
-    </p>
+  {industry || labels.services}
+</p>
 
     <div className="mt-6 flex items-end justify-between">
       <div>
         <p className="text-[10px] uppercase text-white/40">{labels.about}</p>
-        <p className="text-sm">06/28</p>
+        <p className="text-sm">{labels.services}</p>
       </div>
 
-      <p className="text-xl font-bold italic">VISA</p>
+      <p className="text-xl font-bold italic">{labels.contact}</p>
     </div>
   </AnimatedCard>
 
   {/* Spending card */}
   <AnimatedCard className="absolute right-0 top-24 z-30 w-52 rounded-[26px] border border-white/30 bg-slate-950/95 p-5 text-white shadow-2xl backdrop-blur-xl">
     <p className="text-xs text-white/60">{labels.howWeCanHelp}</p>
-    <p className="mt-2 text-2xl font-bold">$6,420</p>
+    <p className="mt-2 text-xl font-bold">{businessName}</p>
 
     <div className="mt-5 flex items-center justify-center">
       <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[conic-gradient(#22d3ee_0_45%,#8b5cf6_45%_75%,#2563eb_75%_100%)]">
@@ -224,15 +224,15 @@ export default function ModernTemplate({
     <div className="mt-5 space-y-2 text-xs text-white/70">
       <div className="flex justify-between">
         <span>{labels.services}</span>
-        <span>48%</span>
+        <span>•</span>
       </div>
       <div className="flex justify-between">
         <span>{labels.contact}</span>
-        <span>28%</span>
+        <span>•</span>
       </div>
       <div className="flex justify-between">
         <span>{labels.about}</span>
-        <span>24%</span>
+        <span>•</span>
       </div>
     </div>
   </AnimatedCard>
@@ -241,8 +241,7 @@ export default function ModernTemplate({
   <AnimatedCard className="absolute bottom-20 right-4 z-30 w-56 rounded-[26px] border border-white/70 bg-white/90 p-5 shadow-2xl backdrop-blur-xl">
     <p className="text-xs font-medium text-slate-400">{labels.howWeCanHelp}</p>
     <div className="mt-2 flex items-end justify-between">
-      <p className="text-3xl font-bold text-slate-950">98.6%</p>
-      <span className="text-xs font-semibold text-emerald-500">+2.4%</span>
+      <p className="text-xl font-bold text-slate-950">{primaryCta}</p>
     </div>
 
     <div className="mt-6 flex h-16 items-end gap-1">
@@ -272,10 +271,10 @@ export default function ModernTemplate({
 
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {[
-            [labels.about, brandResult?.designRecommendations || description],
-            [labels.services, brandResult?.websiteFeatures || description],
-            [labels.contact, description],
-          ].map(([title, text]) => (
+  [labels.about, aboutCopy],
+  [labels.services, servicesCopy],
+  [labels.contact, contactCopy],
+].map(([title, text]) => (
             <AnimatedCard
               key={title}
               className="rounded-3xl border border-white/10 bg-white/5 p-7 backdrop-blur"
@@ -287,37 +286,20 @@ export default function ModernTemplate({
           ))}
         </div>
       </section>
-      <section className="border-y border-slate-200 bg-white px-8 py-10 lg:px-12">
-        <p className="text-center text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">
-          {labels.about}
-        </p>
-
-        <div className="mt-8 grid grid-cols-2 items-center gap-8 text-center sm:grid-cols-3 lg:grid-cols-6">
-          {["NOVA", "VERTEX", "LUMEN", "ORBIT", "AXIOM", "NEXUS"].map(
-            (company) => (
-              <div
-                key={company}
-                className="text-sm font-bold tracking-[0.18em] text-slate-400 transition hover:text-slate-950"
-              >
-                {company}
-              </div>
-            )
-          )}
-        </div>
-      </section>
+      
       <section className="px-8 py-20 text-center lg:px-12">
-        <h2 className="text-4xl font-bold tracking-tight">
-          {headline}
-        </h2>
+  <h2 className="text-4xl font-bold tracking-tight">
+    Ready to work with {businessName}?
+  </h2>
 
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
-          {description}
-        </p>
+  <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
+    {contactCopy}
+  </p>
 
-        <button className="mt-8 rounded-full bg-slate-950 px-8 py-4 font-semibold text-white transition hover:scale-105">
-          {websiteGoal || labels.contact}
-        </button>
-      </section>
+  <button className="mt-8 rounded-full bg-slate-950 px-8 py-4 font-semibold text-white transition hover:scale-105">
+    {primaryCta}
+  </button>
+</section>
     </div>
   );
 }
