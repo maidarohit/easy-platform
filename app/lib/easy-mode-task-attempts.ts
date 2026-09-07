@@ -1,7 +1,7 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   aiUsage,
@@ -545,6 +545,59 @@ export async function prepareEasyModeTaskRetry(input: Readonly<{ attemptId: stri
     if (!task) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
     await transaction.update(easyModeRuns).set({ status: "running", completedAt: null, failedAt: null })
       .where(and(eq(easyModeRuns.id, attempt.runId), eq(easyModeRuns.userId, input.userId)));
+    return Object.freeze({ taskId: task.id, retryReady: true as const });
+  });
+}
+
+export async function prepareUncertainEasyModeTaskRetry(input: Readonly<{ attemptId: string; userId: string }>) {
+  const attemptId = validateUuid(input.attemptId);
+  if (!attemptId || !input.userId || input.userId.length > 128) throw new EasyModeAttemptError("INVALID_REQUEST");
+  return db.transaction(async (transaction) => {
+    const [candidate] = await transaction.select({ runId: easyModeTaskAttempts.runId })
+      .from(easyModeTaskAttempts).where(and(
+        eq(easyModeTaskAttempts.id, attemptId), eq(easyModeTaskAttempts.userId, input.userId),
+      )).limit(1);
+    if (!candidate) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const [run] = await transaction.select().from(easyModeRuns).where(and(
+      eq(easyModeRuns.id, candidate.runId), eq(easyModeRuns.userId, input.userId),
+    )).limit(1).for("update");
+    if (!run || run.status !== "partially_completed") throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const [ownedProject] = await transaction.select({ id: projects.id }).from(projects).where(and(
+      eq(projects.id, run.projectId), eq(projects.userId, input.userId),
+    )).limit(1);
+    if (!ownedProject) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const tasks = await transaction.select({
+      id: easyModeTasks.id, status: easyModeTasks.status, projectOutputId: easyModeTasks.projectOutputId,
+    }).from(easyModeTasks).where(eq(easyModeTasks.runId, run.id));
+    const failedTasks = tasks.filter((task) => task.status === "failed");
+    if (failedTasks.length !== 1 || failedTasks[0].projectOutputId !== null) {
+      throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    }
+    const [attempt] = await transaction.select().from(easyModeTaskAttempts).where(and(
+      eq(easyModeTaskAttempts.id, attemptId), eq(easyModeTaskAttempts.runId, run.id),
+      eq(easyModeTaskAttempts.taskId, failedTasks[0].id), eq(easyModeTaskAttempts.projectId, run.projectId),
+      eq(easyModeTaskAttempts.userId, input.userId), eq(easyModeTaskAttempts.status, "failed_uncertain"),
+      eq(easyModeTaskAttempts.safeErrorCode, "DELIVERY_UNCERTAIN"),
+    )).limit(1).for("update");
+    if (!attempt) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const [latestAttempt] = await transaction.select({ id: easyModeTaskAttempts.id })
+      .from(easyModeTaskAttempts).where(eq(easyModeTaskAttempts.taskId, attempt.taskId))
+      .orderBy(desc(easyModeTaskAttempts.attemptNumber)).limit(1);
+    if (latestAttempt?.id !== attempt.id) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const [activeAttempt] = await transaction.select({ id: easyModeTaskAttempts.id })
+      .from(easyModeTaskAttempts).where(and(
+        eq(easyModeTaskAttempts.runId, run.id), inArray(easyModeTaskAttempts.status, [...ACTIVE_ATTEMPT_STATUSES]),
+      )).limit(1);
+    if (activeAttempt) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    const [task] = await transaction.update(easyModeTasks).set({
+      status: "queued", startedAt: null, completedAt: null, failedAt: null, safeErrorCode: null,
+    }).where(and(
+      eq(easyModeTasks.id, attempt.taskId), eq(easyModeTasks.runId, run.id),
+      eq(easyModeTasks.status, "failed"), isNull(easyModeTasks.projectOutputId),
+    )).returning({ id: easyModeTasks.id });
+    if (!task) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
+    await transaction.update(easyModeRuns).set({ status: "running", completedAt: null, failedAt: null })
+      .where(and(eq(easyModeRuns.id, run.id), eq(easyModeRuns.status, "partially_completed")));
     return Object.freeze({ taskId: task.id, retryReady: true as const });
   });
 }

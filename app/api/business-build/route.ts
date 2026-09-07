@@ -45,9 +45,15 @@ async function findBusinessBuildRun(userId: string, projectId: string, idempoten
 
 async function responseForBusinessBuild(run: BuildRun) {
   const tasks = await db.select().from(easyModeTasks).where(eq(easyModeTasks.runId, run.id)).orderBy(asc(easyModeTasks.position));
+  const taskViews = await customerTaskViews(run.id, tasks, { allowUncertainRecovery: true });
+  const retryableTasks = taskViews.filter((task) => task.canRetry);
+  const failedTasks = tasks.filter((task) => task.status === "failed");
   return {
     run: { id: run.id, projectId: run.projectId, status: run.status, createdAt: run.createdAt },
-    tasks: await customerTaskViews(run.id, tasks),
+    tasks: taskViews.map((task) => ({
+      ...task,
+      canRetry: failedTasks.length === 1 && retryableTasks.length === 1 && task.canRetry,
+    })),
     progress: {
       total: tasks.length, queued: tasks.filter((task) => task.status === "queued").length,
       completed: tasks.filter((task) => task.status === "completed").length,

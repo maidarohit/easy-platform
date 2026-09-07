@@ -130,7 +130,8 @@ test("7 UI exposes one build action, friendly phases, and the real workspace", a
   assert.doesNotMatch(onboarding, /coming in Task 5/);
   for (const label of ["Understanding your direction", "Creating your brand", "Building your online presence", "Preparing your marketing", "Setting up growth foundations", "Finalizing your business workspace"]) assert.match(progress, new RegExp(label));
   assert.match(progress, /\/master-workspace\?projectId=/);
-  assert.doesNotMatch(progress, /Retry|Start (?:Branding|Website|Marketing|SEO|Sales)/);
+  assert.match(progress, /Retry final phase/);
+  assert.doesNotMatch(progress, /Start (?:Branding|Website|Marketing|SEO|Sales)/);
 });
 
 test("8 existing durable execution preserves output reuse and uncertainty policy", async () => {

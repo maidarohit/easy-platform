@@ -6,7 +6,10 @@ import {
   canExplicitlyRetryAttempt,
   EasyModeAttemptError,
   prepareEasyModeTaskRetry,
+  prepareUncertainEasyModeTaskRetry,
+  reconcileUncertainEasyModeAttempt,
 } from "@/app/lib/easy-mode-task-attempts";
+import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
 import { validateEasyModeRunId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readOptionalLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
@@ -40,6 +43,8 @@ export async function POST(request: Request, { params }: RouteContext) {
   const [ownedTask] = await db.select({
     id: easyModeTasks.id,
     projectId: easyModeRuns.projectId,
+    status: easyModeTasks.status,
+    projectOutputId: easyModeTasks.projectOutputId,
   }).from(easyModeTasks).innerJoin(easyModeRuns, eq(easyModeTasks.runId, easyModeRuns.id)).where(and(
     eq(easyModeTasks.id, taskId),
     eq(easyModeTasks.runId, runId),
@@ -61,19 +66,34 @@ export async function POST(request: Request, { params }: RouteContext) {
     eq(easyModeTaskAttempts.userId, userId),
     eq(easyModeTaskAttempts.projectId, ownedTask.projectId),
   )).orderBy(desc(easyModeTaskAttempts.attemptNumber)).limit(1);
-  if (!attempt || !canExplicitlyRetryAttempt(attempt.status)) {
+  if (!attempt) {
     return Response.json({ error: "This step cannot be retried safely." }, { status: 409 });
   }
 
   try {
-    await prepareEasyModeTaskRetry({ attemptId: attempt.id, userId });
+    if (attempt.status === "failed_uncertain") {
+      const reconciliation = await reconcileUncertainEasyModeAttempt({ attemptId: attempt.id, userId });
+      if (reconciliation.state !== "completed") {
+        if (ownedTask.status !== "failed" || ownedTask.projectOutputId !== null) {
+          return Response.json({ error: "This step cannot be retried safely." }, { status: 409 });
+        }
+        await prepareUncertainEasyModeTaskRetry({ attemptId: attempt.id, userId });
+      }
+    } else if (canExplicitlyRetryAttempt(attempt.status)) {
+      await prepareEasyModeTaskRetry({ attemptId: attempt.id, userId });
+    } else {
+      return Response.json({ error: "This step cannot be retried safely." }, { status: 409 });
+    }
   } catch (error) {
     if (error instanceof EasyModeAttemptError && error.code === "RETRY_NOT_ALLOWED") {
       return Response.json({ error: "This step is already being handled." }, { status: 409 });
     }
     throw error;
   }
-  return Response.json({ state: "ready", message: "This step is ready to try again." }, {
+  const result = await executeEasyModeRun({ runId, userId });
+  const status = result.state === "needs_attention" ? 422 : 200;
+  return Response.json({ ...result, recovery: attempt.status === "failed_uncertain" ? "explicit_uncertain" : "safe_retry" }, {
+    status,
     headers: { "Cache-Control": "no-store" },
   });
 }

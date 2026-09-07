@@ -21,6 +21,7 @@ export type EasyModeCustomerTask = Readonly<{
 export async function customerTaskViews(
   runId: string,
   tasks: readonly (typeof easyModeTasks.$inferSelect)[],
+  options: Readonly<{ allowUncertainRecovery?: boolean }> = {},
 ): Promise<EasyModeCustomerTask[]> {
   const attempts = await db.select({
     taskId: easyModeTaskAttempts.taskId,
@@ -35,8 +36,11 @@ export async function customerTaskViews(
 
   return tasks.map((task) => {
     const attempt = latestAttempt.get(task.id);
-    const canRetry = task.status === "failed" && Boolean(attempt && canExplicitlyRetryAttempt(attempt.status));
     const uncertain = task.status === "failed" && attempt?.status === "failed_uncertain";
+    const canRetry = task.status === "failed" && Boolean(attempt && (
+      canExplicitlyRetryAttempt(attempt.status) ||
+        (options.allowUncertainRecovery === true && uncertain && task.projectOutputId === null)
+    ));
     const customerState: EasyModeCustomerTaskState = task.status === "completed" ? "Completed" :
       task.status === "running" ? "In progress" :
         task.status === "skipped" ? "Not needed" :
@@ -44,7 +48,9 @@ export async function customerTaskViews(
     const customerMessage = canRetry
       ? "This step could not start. You can safely try again."
       : uncertain
-        ? "We could not confirm whether this step finished. Please contact support before trying again."
+        ? options.allowUncertainRecovery === true && task.projectOutputId === null
+          ? "We could not confirm whether this step finished. You can safely retry this final phase."
+          : "We could not confirm whether this step finished. Please contact support before trying again."
         : task.status === "failed"
           ? "This step needs attention before it can continue."
           : null;
