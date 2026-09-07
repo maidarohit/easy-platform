@@ -13,9 +13,9 @@ import { billingMarketFromHeaders } from "@/app/lib/billing-market";
 import {
   createRazorpaySubscription,
   getRazorpayPlanId,
+  getRazorpaySubscription,
   RazorpaySubscriptionCreationRejectedError,
 } from "@/app/lib/subscriptions";
-
 const MAX_CHECKOUT_BODY_BYTES = 2 * 1024;
 
 export function validateCheckoutBody(body: unknown): SubscriptionPlan | null {
@@ -67,6 +67,14 @@ export async function POST(request: Request) {
         .where(eq(subscriptions.userId, token.uid))
         .orderBy(desc(subscriptions.updatedAt)).limit(1);
       if (current?.status === "active") return { error: "Plan changes are not available yet." } as const;
+      if (
+  current?.status === "pending" &&
+  current.providerSubscriptionId.startsWith("sub_")
+) {
+  return current.plan === plan
+    ? { resumeId: current.providerSubscriptionId } as const
+    : { error: "Another payment setup is already in progress." } as const;
+}
       const recentPending = current?.status === "pending" && current.createdAt >= new Date(Date.now() - 30 * 60 * 1000);
       const unresolvedReservation = current?.status === "pending" && current.providerSubscriptionId.startsWith("checkout_intent_");
       if (recentPending || unresolvedReservation) return { error: current.plan === plan
@@ -75,6 +83,49 @@ export async function POST(request: Request) {
       await transaction.insert(subscriptions).values({ userId: token.uid, plan, providerSubscriptionId: reservationId, status: "pending" });
       return { reserved: true } as const;
     });
+
+    if ("resumeId" in reservation) {
+      const resumeId = reservation.resumeId;
+
+if (typeof resumeId !== "string") {
+  return Response.json(
+    { error: "Unable to resume payment setup." },
+    { status: 409 },
+  );
+}
+  const existing = await getRazorpaySubscription(resumeId);
+
+  if (existing?.status === "created" && existing.checkoutUrl) {
+    return Response.json({
+      checkoutUrl: existing.checkoutUrl,
+      returnUrl: "/billing?checkout=return",
+      resumed: true,
+    });
+  }
+
+  if (
+    existing?.status === "authenticated" ||
+    existing?.status === "active"
+  ) {
+    return Response.json(
+      { error: "Payment confirmation is being processed. Please wait a moment." },
+      { status: 409 },
+    );
+  }
+
+  // Razorpay no longer has a resumable checkout.
+  // Remove only this user's matching local pending record.
+  await db.delete(subscriptions).where(and(
+    eq(subscriptions.userId, token.uid),
+    eq(subscriptions.providerSubscriptionId, resumeId),
+    eq(subscriptions.status, "pending"),
+  ));
+
+  return Response.json(
+    { error: "The previous payment session has expired. Please click Subscribe again." },
+    { status: 409 },
+  );
+}
     if ("error" in reservation) return Response.json({ error: reservation.error }, { status: 409 });
 
     let created: Awaited<ReturnType<typeof createRazorpaySubscription>>;

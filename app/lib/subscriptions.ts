@@ -16,6 +16,52 @@ export function getRazorpayPlanId(market: BillingMarket): string | null {
   return getBillingConfiguration().planIds[market] || null;
 }
 
+export async function getRazorpaySubscription(providerSubscriptionId: string) {
+  if (!providerSubscriptionId.startsWith("sub_")) {
+    throw new Error("Invalid Razorpay subscription ID.");
+  }
+
+  const { keyId, keySecret } = getBillingConfiguration();
+
+  const response = await fetch(
+    `https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(providerSubscriptionId)}`,
+    {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (response.status === 404) return null;
+
+  if (!response.ok) {
+    throw new Error(`Razorpay subscription lookup failed (${response.status}).`);
+  }
+
+  const data: unknown = await response.json();
+
+  if (!data || typeof data !== "object") {
+    throw new Error("Razorpay returned an invalid subscription response.");
+  }
+
+  const entity = data as Record<string, unknown>;
+
+  if (
+    entity.id !== providerSubscriptionId ||
+    typeof entity.status !== "string"
+  ) {
+    throw new Error("Razorpay returned an incomplete subscription.");
+  }
+
+  return {
+    id: providerSubscriptionId,
+    status: entity.status,
+    checkoutUrl:
+      typeof entity.short_url === "string" ? entity.short_url : null,
+  };
+}
+
 export async function getUserSubscription(userId: string) {
   return (await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).orderBy(desc(subscriptions.updatedAt)).limit(1))[0] ?? null;
 }
