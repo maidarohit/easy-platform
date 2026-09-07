@@ -458,6 +458,7 @@ const visualOpacity =
         </section>}
 
         {website && <section id="website" className="scroll-mt-6 py-14">
+          <div className="mb-6 rounded-2xl border border-[#B8CDBF] bg-[#EEF7F0] p-4"><p className="font-semibold text-[#173D32]">This is what your customers will see.</p><p className="mt-1 text-sm text-[#606A64]">Only this website preview and approved contact details are public when you publish. Your detailed Marketing, SEO and Sales sections are a private business plan — only you can see them.</p></div>
           <div className="flex flex-wrap items-end justify-between gap-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Website</p><h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-[#173D32]">Homepage direction</h2></div><div className="flex rounded-xl border border-[#D8DCCF] bg-white p-1" aria-label="Preview viewport">{(["desktop", "tablet", "mobile"] as Viewport[]).map((mode) => <button key={mode} type="button" aria-pressed={viewport === mode} onClick={() => setViewport(mode)} className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] ${viewport === mode ? "bg-[#173D32] text-white" : "text-[#606A64]"}`}>{mode}</button>)}</div></div>
           <div className="mt-6 rounded-[24px] border border-[#D8DCCF] bg-white p-5 sm:p-6">
   <div>

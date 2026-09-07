@@ -6,6 +6,7 @@ import WebsitePreview from "@/app/dashboard/components/WebsitePreview";
 import {
   validateWebsitePublicationSnapshot,
   validateWebsiteSlug,
+  publicWebsitePublicationView,
 } from "@/app/lib/website-publication";
 import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 
@@ -34,8 +35,9 @@ export default async function PublishedWebsitePage({
     .limit(1);
 
   if (!row || !await hasPaidProductAccess(row.userId)) notFound();
-  const snapshot = validateWebsitePublicationSnapshot(row.snapshot);
-  if (!snapshot) notFound();
+  const storedSnapshot = validateWebsitePublicationSnapshot(row.snapshot);
+  if (!storedSnapshot) notFound();
+  const snapshot = publicWebsitePublicationView(storedSnapshot);
 
   return (
     <main className="min-h-screen bg-white">

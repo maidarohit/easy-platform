@@ -204,6 +204,43 @@ export function validateWebsitePublicationSnapshot(value: unknown): WebsitePubli
   });
 }
 
+const PRIVATE_OR_PLACEHOLDER_TEXT = /(?:\$\s*[xX]\b|\bTBD\b|\b(?:primary objective|segmentation|lead scoring|content calendar|keyword research|sales script|campaign timeline|implementation notes?|recommended tech stack|seo recommendations?)\b|\btestimonials?\b|\b\d+(?:\.\d+)?%\b|\b\d+\+?\s+(?:customers?|clients?|years?)\b|(?:\.\.\.|…|â€¦)\s*$)/i;
+
+function publicWebsiteText(value: string | undefined, maximum: number) {
+  const candidate = value?.trim();
+  return candidate && candidate.length <= maximum && !PRIVATE_OR_PLACEHOLDER_TEXT.test(candidate) ? candidate : "";
+}
+
+export function publicWebsitePublicationView(snapshot: WebsitePublicationSnapshot): WebsitePublicationSnapshot {
+  const overview = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, MAX_LONG);
+  const edits = snapshot.websiteEdits ? {
+    ...snapshot.websiteEdits,
+    companyName: publicWebsiteText(snapshot.websiteEdits.companyName, MAX_SHORT) || snapshot.companyName,
+    heroHeadline: publicWebsiteText(snapshot.websiteEdits.heroHeadline, MAX_SHORT),
+    heroDescription: overview,
+    aboutText: publicWebsiteText(snapshot.websiteEdits.aboutText, MAX_LONG),
+    servicesText: publicWebsiteText(snapshot.websiteEdits.servicesText, MAX_LONG),
+    phone: "", email: "", address: "", whatsapp: "",
+    primaryCtaLabel: publicWebsiteText(snapshot.websiteEdits.primaryCtaLabel, MAX_SHORT) || "Contact",
+    primaryCtaLink: "#contact",
+  } : undefined;
+  return {
+    ...snapshot,
+    industry: publicWebsiteText(snapshot.industry, MAX_SHORT),
+    websiteGoal: edits?.primaryCtaLabel || "Contact",
+    websiteRequirements: "",
+    websiteOutput: {
+      websiteOverview: overview,
+      websiteGoal: publicWebsiteText(snapshot.websiteOutput.websiteGoal, MAX_LONG),
+      recommendedPages: "", siteStructure: "",
+      websiteFeatures: publicWebsiteText(snapshot.websiteOutput.websiteFeatures, MAX_LONG),
+      designRecommendations: overview,
+      colourScheme: "", typography: "", recommendedTechStack: "", seoRecommendations: "",
+    },
+    ...(edits ? { websiteEdits: edits } : { websiteEdits: undefined }),
+  };
+}
+
 type PublicationMutationBody = { projectId: string; slug?: string; template?: WebsiteTemplate };
 
 export function validatePublicationMutationBody(

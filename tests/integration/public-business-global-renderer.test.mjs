@@ -18,10 +18,10 @@ const snapshot = (overrides = {}) => buildPublishedBusinessSnapshot({
   approval: { approved: true, outputIds: ["one"] }, ...overrides,
 });
 
-test("artist/service presentation exposes saved offers, audiences, portfolio treatment and process", () => {
+test("artist/service presentation exposes saved website offers and portfolio treatment without private audience strategy", () => {
   const value = snapshot({ business: { name: "3D Artist", industry: "Painting artist", goal: "Commissions", description: "Custom portraits, canvas artwork and wall murals for homes and commercial spaces." }, website: { heroHeadline: "Art made personal", supportingText: "Commission distinctive artwork for your space.", primaryCta: "Start a commission", services: "Custom portraits; Canvas artwork; Wall murals", serviceCards: [], trust: "Collaborative creative process", about: "An independent artist creating meaningful work.", features: null, contact: null }, marketing: { positioning: null, campaign: null, audience: "Families; Homeowners; Interior designers; Commercial spaces", socialCards: [], campaignCards: [] }, search: null, journey: { leadAction: null, enquiryPath: "Discover → Share your idea → Approve direction → Receive artwork", primaryCta: null, customerJourney: "Discover → Share your idea → Approve direction → Receive artwork", audience: "Families; Homeowners; Interior designers; Commercial spaces" } });
   assert.deepEqual(publicServices(value).map((item) => item.title), ["Custom portraits", "Canvas artwork", "Wall murals"]);
-  assert.equal(publicAudience(value).length, 4);
+  assert.equal(publicAudience(value).length, 0);
   assert.equal(publicBusinessKind(value).workLabel, "Selected work");
   assert.ok(publicProcess(value).length >= 3);
 });

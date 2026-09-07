@@ -149,10 +149,10 @@ export function resolveWebsiteMedia(input: Readonly<{
   const used = new Set<string>();
 
   const resolveSlot = (slot: WebsiteMediaSlot): WebsiteMediaVisual[] => {
-    // Only media explicitly assigned to a semantic slot is eligible. Legacy
-    // secondary/gallery uploads have no subject metadata, so they remain saved
-    // but are not auto-promoted into Work or About.
-    const uploaded = slot === "hero" || slot === "services"
+    // Only media explicitly assigned to a semantic slot is eligible. A saved
+    // secondary photo is mapped to Work by the publication adapters; uploads
+    // are never guessed into unrelated About or service slots.
+    const uploaded = slot === "hero" || slot === "work" || slot === "services"
       ? uploadedMediaValues(input.uploaded?.[slot])
       : [];
     const candidates: WebsiteMediaVisual[] = uploaded.map((src) => ({

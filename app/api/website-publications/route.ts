@@ -105,6 +105,7 @@ function snapshotFor(
     ...(websiteEdits && { websiteEdits }),
     media: overrides && typeof overrides === "object" && !Array.isArray(overrides) ? {
       hero: (overrides as Record<string, unknown>).heroImage,
+      work: (overrides as Record<string, unknown>).secondaryImage,
     } : undefined,
   });
 }

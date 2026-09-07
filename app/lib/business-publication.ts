@@ -31,9 +31,12 @@ export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact
     business: preview.business,
     brand: preview.brand,
     website: preview.website,
-    marketing: preview.marketing,
-    search: preview.search,
-    journey: preview.journey,
+    // Strategy stays in the authenticated workspace. Public snapshots retain
+    // only the two search fields used by Next.js metadata.
+    marketing: null,
+    search: preview.search ? { positioning: null, keywords: null, keywordTags: [], localFocus: null,
+      title: preview.search.title, description: preview.search.description } : null,
+    journey: null,
     contact,
   });
   const validated = validatePublishedBusinessSnapshot(snapshot);
