@@ -3,7 +3,7 @@ import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projects, socialConnections, socialDailyPosts } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
-import { recommendationFromSavedData, selectLatestSavedMarketing, SOCIAL_MARKETING_MODULES, socialLocalDate, validateEditedContent } from "@/app/lib/social-content";
+import { recommendationFromSavedData, selectLatestSavedMarketing, shouldRefreshProposedRecommendation, SOCIAL_MARKETING_MODULES, socialLocalDate, validateEditedContent } from "@/app/lib/social-content";
 import { SOCIAL_PROVIDERS, socialProviderSetup } from "@/app/lib/social-provider";
 
 const MAX_BODY_BYTES = 8 * 1024;
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
       await db.insert(socialDailyPosts).values({ projectId, userId: access.userId, localDate, sourceHash: recommendation.sourceHash, originalContent: recommendation.content, theme: recommendation.theme, recommendedAction: "Review and approve before publishing." }).onConflictDoNothing({ target: [socialDailyPosts.projectId, socialDailyPosts.localDate] });
     }
     let [dailyPost] = await db.select().from(socialDailyPosts).where(and(eq(socialDailyPosts.projectId, projectId), eq(socialDailyPosts.userId, access.userId), eq(socialDailyPosts.localDate, localDate))).limit(1);
-    if (dailyPost && recommendation && dailyPost.status === "proposed" && !dailyPost.originalContent.trim() && !dailyPost.editedContent?.trim()) {
+    if (dailyPost && recommendation && shouldRefreshProposedRecommendation(dailyPost, recommendation.sourceHash)) {
       [dailyPost] = await db.update(socialDailyPosts).set({ sourceHash: recommendation.sourceHash, originalContent: recommendation.content, theme: recommendation.theme, recommendedAction: "Review and approve before publishing.", updatedAt: new Date() }).where(and(eq(socialDailyPosts.id, dailyPost.id), eq(socialDailyPosts.userId, access.userId), eq(socialDailyPosts.status, "proposed"))).returning();
     }
     return Response.json({

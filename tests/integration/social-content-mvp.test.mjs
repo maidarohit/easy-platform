@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { recommendationFromSavedData, selectLatestSavedMarketing, socialLocalDate, validateEditedContent } from "../../app/lib/social-content.ts";
+import { recommendationFromSavedData, selectLatestSavedMarketing, shouldRefreshProposedRecommendation, socialLocalDate, validateEditedContent } from "../../app/lib/social-content.ts";
 import { createSocialOAuthState, verifySocialOAuthState } from "../../app/lib/social-oauth-state.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -43,6 +43,15 @@ test("confirmed DNA fields are deterministic fallback and internal strategy is n
   assert.equal(fallback.source, "dna:primaryGoal");
   assert.equal(recommendationFromSavedData(internalOnly, null), null);
   assert.equal(recommendationFromSavedData(null, null), null);
+});
+
+test("a new Marketing source replaces only an untouched proposed DNA fallback", () => {
+  const fallback = { status: "proposed", sourceHash: "dna-hash", originalContent: "Improve my online presence", editedContent: null };
+  assert.equal(shouldRefreshProposedRecommendation(fallback, "marketing-hash"), true);
+  assert.equal(shouldRefreshProposedRecommendation({ ...fallback, editedContent: "Customer edit" }, "marketing-hash"), false);
+  assert.equal(shouldRefreshProposedRecommendation({ ...fallback, status: "approved" }, "marketing-hash"), false);
+  assert.equal(shouldRefreshProposedRecommendation({ ...fallback, status: "skipped" }, "marketing-hash"), false);
+  assert.equal(shouldRefreshProposedRecommendation({ ...fallback, sourceHash: "marketing-hash" }, "marketing-hash"), false);
 });
 
 test("daily date and edit validation are deterministic and bounded", () => {
@@ -89,7 +98,7 @@ test("refresh is idempotent and edits never mutate project outputs", async () =>
   assert.match(route, /projectBusinessDna\.confirmed, true/);
   assert.match(route, /eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, access\.userId\)/);
   assert.match(route, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\)\)/);
-  assert.match(route, /dailyPost\.status === "proposed"[\s\S]*!dailyPost\.originalContent\.trim\(\)[\s\S]*!dailyPost\.editedContent\?\.trim\(\)/);
+  assert.match(route, /shouldRefreshProposedRecommendation\(dailyPost, recommendation\.sourceHash\)/);
   assert.match(schema, /social_daily_posts_project_date_unique/);
   assert.match(migration, /social_daily_posts_project_date_unique/);
   const patch = route.slice(route.indexOf("export async function PATCH"));

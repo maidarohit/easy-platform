@@ -76,6 +76,14 @@ export function socialLocalDate(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
+export function shouldRefreshProposedRecommendation(
+  current: Readonly<{ status: string; sourceHash: string; originalContent: string; editedContent: string | null }>,
+  nextSourceHash: string,
+) {
+  return current.status === "proposed" && !current.editedContent?.trim() &&
+    (!current.originalContent.trim() || current.sourceHash !== nextSourceHash);
+}
+
 export function validateEditedContent(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const content = value.trim();
