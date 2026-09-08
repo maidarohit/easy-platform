@@ -100,6 +100,34 @@ test("saved hydration catches percentage ranges, reversed visit credits, reserva
   assert.match(text, /Use urgency only when/);
 });
 
+test("all Sales modules normalize unverified facts without duplicate boilerplate", () => {
+  const saved = {
+    executiveSummary: "We have strong conversion and growing revenue.",
+    targetCustomerProfile: "Developers and B2B buyers are primary.",
+    salesFunnel: "HubSpot CRM automatically scores every lead. HubSpot CRM automatically scores every lead.",
+    leadGenerationStrategy: "Our referral partnership supplies qualified leads.",
+    salesChannels: "Instagram is already active and publishing. LinkedIn is already connected and running.",
+    outreachStrategy: "Every customer receives a free audit and dedicated manager.",
+    pricingRecommendations: "Our premium package has a fixed fee.",
+    salesKPIs: "Expect improved close rates and increased pipeline.",
+    actionPlan: "Use Calendly and an automated follow-up system.",
+    salesScript: "We guarantee satisfaction and unlimited revisions.",
+    proposal: "Testimonials prove our successful outcomes.",
+    closingStrategy: "Our affiliate program pays referral commissions.",
+  };
+  const result = readStoredSalesInsights(JSON.stringify(saved), salesContext);
+  const text = JSON.stringify(result);
+  assert.doesNotMatch(text, /strong conversion|growing revenue|automatically scores|supplies qualified|already active|already connected|free audit|dedicated manager|fixed fee|improved close|increased pipeline|Calendly|automated follow-up|guarantee satisfaction|unlimited revisions|Testimonials prove|affiliate program|referral commissions/i);
+  assert.match(text, /optional sales tool or system/);
+  assert.match(text, /Consider partnerships only after/);
+  assert.match(text, /No social-channel activity is verified/);
+  assert.match(text, /customer offer only if/);
+  assert.match(text, /pricing, fees, discounts, and packages as optional/);
+  assert.match(text, /strategy objective, not a verified outcome/);
+  assert.match(text, /approved testimonials or case studies/);
+  assert.equal((result.salesFunnel.match(/optional sales tool or system/g) ?? []).length, 1);
+});
+
 test("saved Sales output is normalized on authenticated GET without generation", async () => {
   const restored = readStoredSalesInsights(JSON.stringify({ output: { executiveSummary: "Use the 2 verified enquiries. Forecast 100 sales." } }), metrics);
   assert.match(restored.executiveSummary, /^Use the 2 verified enquiries\./);
