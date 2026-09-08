@@ -403,7 +403,13 @@ const visualOpacity =
   const renderedSections = renderedBusinessPreviewSections(preview);
   const visualContext = { industry: preview.business.industry, description: preview.business.description };
   const showVisuals = visualIntensity !== "none";
-  const media = resolveWebsiteMedia({ ...visualContext, uploaded: { hero: uploadedSrcFromRecord(website, "hero") } });
+  const media = resolveWebsiteMedia({
+    ...visualContext,
+    uploaded: {
+      hero: uploadedSrcFromRecord(website, "hero"),
+      work: uploadedSrcFromRecord(website, "showcase"),
+    },
+  });
   const heroVisual = media.hero;
   const aboutVisual = media.about;
   const showcaseVisuals = media.work;
