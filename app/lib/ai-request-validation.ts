@@ -43,7 +43,7 @@ const schemas = {
   marketing: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],
     long: ["brandDescription"],
-    optionalShort: ["regenerateSection", "mode"],
+    optionalShort: ["regenerateSection", "mode", "marketingGoal", "requestId"],
     optionalLong: ["editInstruction"],
     optionalNested: ["currentResult"],
   },

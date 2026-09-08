@@ -1,42 +1,53 @@
 import { db } from "@/app/db";
-import { projects } from "@/app/db/schema";
+import { projectOutputs } from "@/app/db/schema";
 import {
-  completeAiUsage,
-  failAiUsage,
-  startAiUsage,
+  claimIdempotentAiUsage,
+  releaseFailedAiUsage,
 } from "@/app/lib/ai-usage";
 import {
   parseAiUsageMetadata,
-  type AiUsageComponent,
 } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
+import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context";
+import { persistCompletedMarketingGeneration } from "@/app/lib/marketing-generation-persistence";
+import { sanitizeMarketingInsights } from "@/app/lib/marketing-insight-safety";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 const MARKETING_AI_WORKFLOW = "marketing-ai";
 
 async function finalizeUsage(
   usageId: string,
-  status: "success" | "failed",
   startedAt: number,
-  usageComponents?: readonly AiUsageComponent[]
 ) {
   try {
     const durationMs = Date.now() - startedAt;
 
-    if (status === "success") {
-      await completeAiUsage({ usageId, durationMs, usageComponents });
-    } else {
-      await failAiUsage({ usageId, durationMs });
-    }
+    await releaseFailedAiUsage({ usageId, durationMs });
     return true;
   } catch {
     console.error("Marketing AI usage finalization failed.");
     return false;
+  }
+}
+
+export async function GET(request: Request) {
+  let uid: string;
+  try { uid = (await verifyFirebaseIdToken(request)).uid; }
+  catch { return NextResponse.json({ error: "Authentication is required." }, { status: 401 }); }
+  const projectId = new URL(request.url).searchParams.get("projectId")?.trim() || "";
+  if (!projectId) return NextResponse.json({ error: "projectId is required." }, { status: 400 });
+  try {
+    const context = await loadOwnedMarketingContext(uid, projectId);
+    return context ? NextResponse.json({ connectedBusinessContext: context }, { headers: { "Cache-Control": "private, no-store" } })
+      : NextResponse.json({ error: "Project not found." }, { status: 404 });
+  } catch {
+    console.error("Marketing business context load failed.");
+    return NextResponse.json({ error: "Unable to load connected business context." }, { status: 500 });
   }
 }
 
@@ -65,16 +76,10 @@ export async function POST(request: Request) {
     );
   }
 
+  let context: Awaited<ReturnType<typeof loadOwnedMarketingContext>>;
   try {
-    const [ownedProject] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(and(eq(projects.id, projectId), eq(projects.userId, uid)))
-      .limit(1);
-
-    if (!ownedProject) {
-      return NextResponse.json({ error: "Project not found." }, { status: 404 });
-    }
+    context = await loadOwnedMarketingContext(uid, projectId);
+    if (!context) return NextResponse.json({ error: "Project not found." }, { status: 404 });
   } catch {
     console.error("Marketing AI project authorization failed.");
     return NextResponse.json(
@@ -86,16 +91,25 @@ export async function POST(request: Request) {
   const webhook = getN8nWebhookConfig("N8N_MARKETING_AI_WEBHOOK_URL");
   if (!webhook) return n8nConfigurationErrorResponse();
 
+  const suppliedRequestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+  const requestId = /^[a-zA-Z0-9-]{8,128}$/.test(suppliedRequestId) ? suppliedRequestId : crypto.randomUUID();
   let usageId: string;
 
   try {
-    usageId = await startAiUsage({
+    const claim = await claimIdempotentAiUsage({
       userId: uid,
       projectId,
       module: "marketing",
-      workflow: MARKETING_AI_WORKFLOW,
+      workflow: `${MARKETING_AI_WORKFLOW}--request-${requestId}`,
       model: null,
     });
+    usageId = claim.usageId;
+    if (!claim.created) {
+      if (claim.status !== "success") return NextResponse.json({ error: "This Marketing request is already being processed or did not complete." }, { status: 409 });
+      const [saved] = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "marketing"))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(1);
+      if (!saved) return NextResponse.json({ error: "The completed Marketing result could not be restored." }, { status: 500 });
+      return NextResponse.json({ connectedBusinessContext: context, marketingStrategy: typeof saved.result === "string" ? JSON.parse(saved.result) : saved.result });
+    }
   } catch (error) {
     if (error instanceof Response) return error;
     console.error("Marketing AI usage initialization failed.");
@@ -105,8 +119,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const marketingPayload = { ...body };
-  delete marketingPayload.projectId;
+  const marketingPayload = {
+    connectedBusinessContext: context,
+    marketingGoal: body.marketingGoal || null,
+    regenerateSection: body.regenerateSection || null,
+    editInstruction: body.editInstruction || null,
+    mode: body.mode || null,
+    currentResult: body.currentResult || null,
+    rules: [
+      "Use only connectedBusinessContext as customer fact.",
+      "Use the exact live URL for website CTAs when published; do not invent a URL when unpublished.",
+      "A channel is usable only when its status is connected. WhatsApp approved_contact means contact only, not automated publishing.",
+      "Never claim content was posted or published.",
+      "Do not invent discounts, free consultations, testimonials, experience, locations, pricing, guarantees, visitors, engagement, CTR, ROI, CAC, conversion rates, or projections.",
+    ],
+  };
   const controller = new AbortController();
   const startedAt = Date.now();
   const timeout = setTimeout(() => controller.abort(), 120_000);
@@ -128,7 +155,7 @@ export async function POST(request: Request) {
     console.log("N8N STATUS:", response.status);
 
     if (!response.ok) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      await finalizeUsage(usageId, startedAt);
       return NextResponse.json(
         {
           error: "Marketing AI request failed.",
@@ -138,7 +165,7 @@ export async function POST(request: Request) {
     }
 
     if (!text.trim()) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      await finalizeUsage(usageId, startedAt);
       return NextResponse.json(
         {
           error: "n8n returned an empty response",
@@ -148,31 +175,43 @@ export async function POST(request: Request) {
     }
 
     try {
-      const data = JSON.parse(text);
-      const usageFinalized = await finalizeUsage(
-        usageId, "success", startedAt, usageMetadata?.components
-      );
+      const parsed = JSON.parse(text);
+      let raw: unknown = parsed;
+      while (typeof raw === "string") raw = JSON.parse(raw);
+      if (raw && typeof raw === "object" && !Array.isArray(raw) && "text" in raw) raw = (raw as Record<string, unknown>).text;
+      if (raw && typeof raw === "object" && !Array.isArray(raw) && "output" in raw) raw = (raw as Record<string, unknown>).output;
+      while (typeof raw === "string") raw = JSON.parse(raw);
+      const cleaned = sanitizeMarketingInsights(raw, context);
+      if (!cleaned) throw new Error("Invalid Marketing result.");
+      const current = sanitizeMarketingInsights(body.currentResult, context) ?? {};
+      const marketingStrategy = { ...current, ...cleaned };
+      try {
+        await persistCompletedMarketingGeneration({ usageId, userId: uid, projectId, result: marketingStrategy, durationMs: Date.now() - startedAt, usageComponents: usageMetadata?.components });
+      } catch {
+        await finalizeUsage(usageId, startedAt);
+        return NextResponse.json({ error: "Generated Marketing strategy could not be saved. Your allowance was restored." }, { status: 500 });
+      }
       if (n8nExecutionId) {
         try {
           await associateN8nExecution({
             usageId,
             executionId: n8nExecutionId,
-            metadataAlreadyApplied: Boolean(usageMetadata) && usageFinalized,
+            metadataAlreadyApplied: Boolean(usageMetadata),
           });
         } catch {
           console.error("Marketing AI execution association failed.");
         }
       }
-      return NextResponse.json(data);
+      return NextResponse.json({ connectedBusinessContext: context, marketingStrategy });
     } catch {
-      await finalizeUsage(usageId, "failed", startedAt);
+      await finalizeUsage(usageId, startedAt);
       return NextResponse.json(
         { error: "Marketing AI returned invalid JSON." },
         { status: 502 }
       );
     }
   } catch {
-    await finalizeUsage(usageId, "failed", startedAt);
+    await finalizeUsage(usageId, startedAt);
     console.error("Marketing AI request failed.");
 
     return NextResponse.json(

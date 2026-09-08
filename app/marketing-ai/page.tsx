@@ -51,6 +51,12 @@ type MarketingResult = Record<string, unknown> & {
   typography?: string;
 };
 
+type ConnectedBusinessContext = {
+  website: { published: boolean; url: string | null };
+  channels: { meta: "connected" | "not_connected"; linkedin: "connected" | "not_connected"; whatsapp: "approved_contact" | "not_connected" };
+  savedEnquiries: number;
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object";
 
@@ -64,6 +70,7 @@ function MarketingAIPageContent() {
   const [marketingGoal, setMarketingGoal] = useState("Sell Products");
   const [loading, setLoading] = useState(false);
   const [brandResult, setBrandResult] = useState<MarketingResult | null>(null);
+  const [connectedContext, setConnectedContext] = useState<ConnectedBusinessContext | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
 const [editInstruction, setEditInstruction] = useState("");
 const [isEditing, setIsEditing] = useState(false);
@@ -76,7 +83,6 @@ const [isEditing, setIsEditing] = useState(false);
       const activeProject = project?.id === projectId ? project : null;
       const projectGoal = activeProject?.goal || "";
 
-      setBrandResult(null);
       setCompanyName(activeProject?.companyName || "");
       setIndustry(activeProject?.industry || "");
       setTargetAudience(activeProject?.targetAudience || "");
@@ -93,6 +99,11 @@ const [isEditing, setIsEditing] = useState(false);
     };
   }, [project, projectId]);
   useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) { setBrandResult(null); setConnectedContext(null); } });
+    return () => { active = false; };
+  }, [projectId]);
+  useEffect(() => {
   if (!projectId || !project?.userId) return;
 
   let active = true;
@@ -100,7 +111,7 @@ const [isEditing, setIsEditing] = useState(false);
   const loadSavedMarketingOutput = async () => {
     try {
       const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=marketing`,
+        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&module=marketing`,
         { cache: "no-store" }
       );
 
@@ -129,36 +140,23 @@ const [isEditing, setIsEditing] = useState(false);
     active = false;
   };
 }, [projectId, project?.userId]);
-  const channelPerformance =
-  brandResult?.marketingDashboard?.channels?.map((item) => ({
-    label: item.label,
-    value: Number(item.value) || 0,
-  })) || [];
-const kpiCards = [
-  {
-    title: "Estimated Monthly Leads",
-    value: brandResult?.marketingDashboard?.projectedLeads || "0",
-  },
-  {
-    title: "Marketing Score",
-    value: brandResult?.marketingDashboard?.marketingScore || "0",
-  },
-  {
-    title: "Conversion Rate",
-    value: brandResult?.marketingDashboard?.conversionRate || "0%",
-  },
-  {
-    title: "Monthly Traffic",
-    value: brandResult?.marketingDashboard?.monthlyTraffic || "0",
-  },
-];
-const funnelStages = [
-  { label: "Awareness", value: 100 },
-  { label: "Interest", value: 76 },
-  { label: "Consideration", value: 54 },
-  { label: "Conversion", value: 31 },
-];
-
+  useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    const loadConnectedContext = async () => {
+      try {
+        const response = await authenticatedFetch(`/api/marketing-ai?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load connected business context");
+        if (active) setConnectedContext(data.connectedBusinessContext ?? null);
+      } catch (error) {
+        console.error("Failed to load connected business context:", error);
+        if (active) setConnectedContext(null);
+      }
+    };
+    loadConnectedContext();
+    return () => { active = false; };
+  }, [projectId]);
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied!`);
@@ -401,7 +399,7 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
     }
     setLoading(true);
     try {
-      const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
+      const { idToken } = await getAuthenticatedMarketingRequest();
       const response = await fetch(
         "/api/marketing-ai",
         {
@@ -416,7 +414,9 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
             targetAudience,
             brandStyle,
             brandDescription,
+            marketingGoal,
             projectId,
+            requestId: crypto.randomUUID(),
           }),
         }
       );
@@ -444,7 +444,7 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
 
       console.log("PARSED:", parsed);
 
-      let result: unknown = parsed;
+let result: unknown = isRecord(parsed) && "marketingStrategy" in parsed ? parsed.marketingStrategy : parsed;
 
 while (true) {
   if (typeof result === "string") {
@@ -479,30 +479,12 @@ while (true) {
 
 console.log("FINAL RESULT:", result);
 
-const finalMarketingResult = isRecord(result)
+      const finalMarketingResult = isRecord(result)
   ? (result as MarketingResult)
   : null;
 
 setBrandResult(finalMarketingResult);
 
-if (projectId && currentUser && finalMarketingResult) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: currentUser.uid,
-      module: "marketing",
-      result: finalMarketingResult,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save Marketing AI output");
-  }
-}
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");
@@ -519,7 +501,7 @@ const regenerateSection = async (section: string) => {
   });
 
   try {
-   const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
+   const { idToken } = await getAuthenticatedMarketingRequest();
    const response = await fetch("/api/marketing-ai", {
   method: "POST",
   headers: {
@@ -535,6 +517,7 @@ const regenerateSection = async (section: string) => {
     regenerateSection: section,
     currentResult: brandResult,
     projectId,
+    requestId: crypto.randomUUID(),
   }),
 });
 
@@ -544,7 +527,7 @@ if (!response.ok) {
 
 const data = await response.json();
 
-let regenerated: unknown = data.output ?? data;
+let regenerated: unknown = data.marketingStrategy ?? data.output ?? data;
 
 if (typeof regenerated === "string") {
   regenerated = JSON.parse(regenerated);
@@ -570,24 +553,6 @@ const updatedMarketingResult = {
 
 setBrandResult(updatedMarketingResult);
 
-if (projectId && currentUser) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: currentUser.uid,
-      module: "marketing",
-      result: updatedMarketingResult,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save regenerated Marketing AI output");
-  }
-}
 
     toast.success(`${section} regenerated successfully`, {
       id: "regen",
@@ -606,7 +571,7 @@ const editWithAI = async () => {
   setIsEditing(true);
 
   try {
-    const { currentUser, idToken } = await getAuthenticatedMarketingRequest();
+    const { idToken } = await getAuthenticatedMarketingRequest();
     const response = await fetch("/api/marketing-ai", {
       method: "POST",
       headers: {
@@ -624,6 +589,7 @@ const editWithAI = async () => {
         editInstruction: editInstruction.trim(),
         mode: "edit",
         projectId,
+        requestId: crypto.randomUUID(),
       }),
     });
 
@@ -633,7 +599,7 @@ const editWithAI = async () => {
 
     const data = await response.json();
 
-    let updated: unknown = data.output ?? data;
+    let updated: unknown = data.marketingStrategy ?? data.output ?? data;
 
     if (typeof updated === "string") {
       updated = JSON.parse(updated);
@@ -653,24 +619,6 @@ const editWithAI = async () => {
 
 setBrandResult(editedMarketingResult);
 
-if (projectId && currentUser) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: currentUser.uid,
-      module: "marketing",
-      result: editedMarketingResult,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save edited Marketing AI output");
-  }
-}
 
     toast.success("Section updated!");
 
@@ -764,6 +712,16 @@ return (
             <button type="button" onClick={handleNewStrategy} className="flex min-h-10 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-red-400/35 bg-gradient-to-r from-red-500/15 to-cyan-400/[0.05] px-4 py-2.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-red-300/55 hover:shadow-[0_0_22px_rgba(239,68,68,0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 sm:w-auto"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M10 3v14M3 10h14"/><circle cx="10" cy="10" r="7.5"/></svg>New Strategy</button>
           </header>
 
+          <section className="relative mb-6 rounded-[22px] border border-cyan-400/15 bg-slate-900/75 p-5">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.24em] text-cyan-300">Connected business context</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div><p className="text-xs text-slate-500">Website</p><p className="mt-1 text-sm font-semibold">{!connectedContext ? "Loading…" : connectedContext.website.published ? "Published" : "Not published"}</p>{connectedContext?.website.url && <a href={connectedContext.website.url} target="_blank" rel="noopener noreferrer" className="mt-1 block break-all text-xs text-cyan-300 hover:underline">{connectedContext.website.url}</a>}</div>
+              <div><p className="text-xs text-slate-500">Meta (Facebook / Instagram)</p><p className="mt-1 text-sm font-semibold">{connectedContext?.channels.meta === "connected" ? "Connected" : "Not connected"}</p></div>
+              <div><p className="text-xs text-slate-500">LinkedIn / WhatsApp</p><p className="mt-1 text-sm font-semibold">LinkedIn: {connectedContext?.channels.linkedin === "connected" ? "Connected" : "Not connected"}</p><p className="mt-1 text-xs text-slate-400">WhatsApp: {connectedContext?.channels.whatsapp === "approved_contact" ? "Approved contact" : "Not connected"}</p></div>
+              <div><p className="text-xs text-slate-500">Saved website enquiries</p><p className="mt-1 text-sm font-semibold">{connectedContext ? connectedContext.savedEnquiries : "Loading…"}</p><p className="mt-1 text-xs text-slate-500">Visitors and campaign metrics are not measured.</p></div>
+            </div>
+          </section>
+
           <section className="group relative overflow-hidden rounded-[26px] border border-red-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/90 to-red-950/15 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.3),0_0_35px_rgba(239,68,68,0.05)] sm:p-7">
             <div className="pointer-events-none absolute left-0 top-0 h-[2px] w-full bg-gradient-to-r from-transparent via-red-500/75 to-transparent"/>
             <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-red-500/10 blur-3xl transition-colors duration-500 group-hover:bg-red-500/15"/>
@@ -815,18 +773,6 @@ return (
                 })}
               </div>
 
-              {brandResult.marketingDashboard && (
-                <section className="relative mt-6 overflow-hidden rounded-2xl border border-white/[0.07] bg-slate-950/60 p-5 sm:p-6">
-                  <div><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">PERFORMANCE SYSTEM</span><h3 className="mt-1 text-xl font-semibold text-white">Marketing Performance Overview</h3></div>
-                  <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    {kpiCards.map((item, index) => <div key={item.title} className="rounded-xl border border-red-500/15 bg-slate-900/70 p-5"><div className="flex items-center justify-between"><span className="font-mono text-[9px] text-red-300">KPI / {String(index + 1).padStart(2, "0")}</span><span className="h-1.5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(34,211,238,0.8)]"/></div><p className="mt-4 text-sm text-slate-400">{item.title}</p><p className="mt-2 text-3xl font-semibold text-white">{item.value}</p></div>)}
-                  </div>
-                  <div className="mt-6 grid gap-5 lg:grid-cols-2">
-                    <div className="rounded-xl border border-white/[0.07] bg-slate-900/60 p-5"><h4 className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-300">Channel Performance</h4><div className="mt-5 space-y-5">{channelPerformance.map((item: { label: string; value: number }) => <div key={item.label}><div className="mb-2 flex justify-between text-sm text-slate-300"><span>{item.label}</span><span>{item.value}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-red-500 to-cyan-300" style={{ width: Math.min(100, Math.max(0, item.value)) + "%" }}/></div></div>)}</div></div>
-                    <div className="rounded-xl border border-white/[0.07] bg-slate-900/60 p-5"><h4 className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-300">Marketing Funnel</h4><div className="mt-5 space-y-5">{funnelStages.map((item) => <div key={item.label}><div className="mb-2 flex justify-between text-sm text-slate-300"><span>{item.label}</span><span>{item.value}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-red-500 to-cyan-300" style={{ width: item.value + "%" }}/></div></div>)}</div></div>
-                  </div>
-                </section>
-              )}
             </section>
           )}
 
