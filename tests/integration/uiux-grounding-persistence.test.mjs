@@ -72,6 +72,26 @@ test("UI/UX page hydrates through its authenticated API and preserves projectId"
   assert.doesNotMatch(page, /\/api\/project-outputs|userId: project\.userId|RAW RESPONSE|PARSED:|STATUS:/);
 });
 
+test("hard refresh keeps authenticated saved output after project memory initializes", async () => {
+  const page = await source("app/uiux-ai/page.tsx");
+  const firstEffect = page.slice(page.indexOf("useEffect(() => {"), page.indexOf("useEffect(() => {", page.indexOf("useEffect(() => {") + 1));
+  const hydrationEffect = page.slice(page.indexOf("useEffect(() => {", page.indexOf("useEffect(() => {") + 1), page.indexOf("const copyToClipboard"));
+  assert.doesNotMatch(firstEffect, /setBrandResult\(null\)/);
+  assert.match(hydrationEffect, /setBrandResult\(null\)/);
+  assert.match(hydrationEffect, /authenticatedFetch\([\s\S]*\/api\/uiux-ai\?projectId=/);
+  assert.match(hydrationEffect, /setBrandResult\(\(data\.output \?\? null\)/);
+});
+
+test("authenticated UI/UX GET hydrates latest valid owned output without usage", async () => {
+  const route = await source("app/api/uiux-ai/route.ts");
+  const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
+  assert.match(get, /verifyFirebaseIdToken/);
+  assert.match(get, /eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, uid\)[\s\S]*eq\(projectOutputs\.module, "uiux"\)/);
+  assert.match(get, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\)\)/);
+  assert.match(get, /readStoredUiuxOutput/);
+  assert.doesNotMatch(get, /claimIdempotentAiUsage|releaseFailedAiUsage|persistCompletedUiuxGeneration|fetch\(/);
+});
+
 test("Easy Mode applies the shared UI/UX sanitizer before persistence", async () => {
   const executor = await source("app/lib/easy-mode-executor.ts");
   assert.match(executor, /module === "uiux"[\s\S]*sanitizeUiuxOutput\(output, uiuxContext\)[\s\S]*insertProjectOutput/);

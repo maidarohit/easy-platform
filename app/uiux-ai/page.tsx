@@ -38,9 +38,8 @@ function UIUXAIPageContent() {
   useEffect(() => {
   if (!projectId) return;
 
-  // Prevent results/fields from the previous project appearing.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset stale project data when the selected project changes
-  setBrandResult(null);
+  // Prevent form fields from the previous project appearing.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale form data when the selected project changes
   setCompanyName("");
   setIndustry("");
   setTargetAudience("");
@@ -60,6 +59,9 @@ useEffect(() => {
   if (!projectId) return;
 
   let active = true;
+  queueMicrotask(() => {
+    if (active) setBrandResult(null);
+  });
 
   const loadSavedUIUXOutput = async () => {
     try {
