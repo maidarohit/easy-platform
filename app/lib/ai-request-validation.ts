@@ -26,8 +26,10 @@ type Schema = {
 
 const schemas = {
   analytics: {
-    short: ["companyName", "industry", "monthlyVisitors", "monthlyLeads", "monthlySales", "monthlyRevenue", "marketingBudget", "businessGoal"],
-    long: ["businessDescription"],
+    short: [],
+    long: [],
+    optionalShort: ["companyName", "industry", "monthlyVisitors", "monthlyLeads", "monthlySales", "monthlyRevenue", "marketingBudget", "businessGoal", "offlineSales", "offlineRevenue", "externalMarketingSpend", "requestId"],
+    optionalLong: ["businessDescription"],
     optionalNested: ["salesContext"],
   },
   branding: {
