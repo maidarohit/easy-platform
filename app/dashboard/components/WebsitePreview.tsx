@@ -13,6 +13,7 @@ import MinimalTemplate from "./website-templates/MinimalTemplate";
 import DarkTemplate from "./website-templates/DarkTemplate";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { showcaseGridClass } from "@/app/lib/public-website-presentation";
+import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 
 type WebsitePreviewProps = {
   companyName: string;
@@ -248,6 +249,9 @@ const ui =
             </div>
           </section>
         )}
+        <footer className="border-t border-slate-200 bg-white px-8 py-5 text-center text-slate-500">
+          <PoweredByBuzypeezy className="text-xs" />
+        </footer>
       </div>
     );
   }
@@ -426,9 +430,7 @@ const ui =
         <div>
           <p className="font-medium tracking-[-0.02em]">{businessName}</p>
 
-          <p className="mt-2 text-sm text-slate-500">
-            Built with Buzypeezy
-          </p>
+          <PoweredByBuzypeezy className="mt-2 text-sm text-slate-500" />
         </div>
 
         <p className="text-sm text-slate-400">

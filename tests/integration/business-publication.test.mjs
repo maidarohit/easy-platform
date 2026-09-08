@@ -99,10 +99,10 @@ test("Preview and Master Workspace expose customer publication flow without gene
   assert.match(previewPage, /View Live Business/);
   assert.match(previewPage, /Unpublish/);
   assert.match(previewPage, /Back to Business Workspace/);
-  assert.match(workspace, /Not published/);
+  assert.match(workspace, /Not Published/);
   assert.match(workspace, /Published/);
   assert.match(workspace, /Changes awaiting approval/);
-  assert.match(workspace, /View Live Business/);
+  assert.match(workspace, /View Live Website/);
   assert.doesNotMatch(`${previewPage}\n${workspace}`, /\/api\/business-build|\/api\/easy-mode|OpenAI|N8N_/);
 });
 
