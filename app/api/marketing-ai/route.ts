@@ -12,6 +12,7 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context";
 import { persistCompletedMarketingGeneration } from "@/app/lib/marketing-generation-persistence";
 import { sanitizeMarketingInsights } from "@/app/lib/marketing-insight-safety";
+import { unwrapMarketingProviderResponse } from "@/app/lib/marketing-provider-response";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
@@ -120,6 +121,11 @@ export async function POST(request: Request) {
   }
 
   const marketingPayload = {
+    companyName: context.business.name,
+    industry: context.business.industry,
+    targetAudience: context.business.targetAudience,
+    brandStyle: context.business.brandStyle,
+    brandDescription: context.business.description,
     connectedBusinessContext: context,
     marketingGoal: body.marketingGoal || null,
     regenerateSection: body.regenerateSection || null,
@@ -175,12 +181,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const parsed = JSON.parse(text);
-      let raw: unknown = parsed;
-      while (typeof raw === "string") raw = JSON.parse(raw);
-      if (raw && typeof raw === "object" && !Array.isArray(raw) && "text" in raw) raw = (raw as Record<string, unknown>).text;
-      if (raw && typeof raw === "object" && !Array.isArray(raw) && "output" in raw) raw = (raw as Record<string, unknown>).output;
-      while (typeof raw === "string") raw = JSON.parse(raw);
+      const raw = unwrapMarketingProviderResponse(text);
       const cleaned = sanitizeMarketingInsights(raw, context);
       if (!cleaned) throw new Error("Invalid Marketing result.");
       const current = sanitizeMarketingInsights(body.currentResult, context) ?? {};

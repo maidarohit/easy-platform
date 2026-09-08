@@ -421,73 +421,16 @@ doc.save(`${companyName}-Marketing-Strategy.pdf`);
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
-
-      const text = await response.text();
-
-      console.log("RAW RESPONSE:", text);
-      console.log("STATUS:", response.status);
-
-      if (!text.trim()) {
-        throw new Error("n8n returned EMPTY response");
-      }
-
-      let parsed;
-
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
-      }
-
-      console.log("PARSED:", parsed);
-
-let result: unknown = isRecord(parsed) && "marketingStrategy" in parsed ? parsed.marketingStrategy : parsed;
-
-while (true) {
-  if (typeof result === "string") {
-    result = JSON.parse(result);
-    continue;
-  }
-
-  if (
-    isRecord(result) &&
-    "text" in result &&
-    isRecord(result.text)
-  ) {
-    result = result.text;
-    continue;
-  }
-
-  if (
-  isRecord(result) &&
-  "output" in result
-) {
-  if (typeof result.output === "string") {
-    result = JSON.parse(result.output);
-  } else {
-    result = result.output;
-  }
-  continue;
-}
-
-  break;
-}
-
-
-console.log("FINAL RESULT:", result);
-
-      const finalMarketingResult = isRecord(result)
-  ? (result as MarketingResult)
-  : null;
-
-setBrandResult(finalMarketingResult);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || `Marketing request failed (${response.status}).`);
+      if (!isRecord(data.marketingStrategy)) throw new Error("Marketing returned no usable strategy.");
+      setBrandResult(data.marketingStrategy as MarketingResult);
+      if (data.connectedBusinessContext) setConnectedContext(data.connectedBusinessContext as ConnectedBusinessContext);
+      toast.success("Marketing strategy generated.");
 
     } catch (error) {
       console.error(error);
-      toast.error("Something went wrong.");
+      toast.error(error instanceof Error ? error.message : "Marketing generation failed.");
     } finally {
       setLoading(false);
     }
@@ -521,11 +464,8 @@ const regenerateSection = async (section: string) => {
   }),
 });
 
-if (!response.ok) {
-  throw new Error(`HTTP Error: ${response.status}`);
-}
-
 const data = await response.json();
+if (!response.ok) throw new Error(data?.error || `Marketing request failed (${response.status}).`);
 
 let regenerated: unknown = data.marketingStrategy ?? data.output ?? data;
 
@@ -593,11 +533,8 @@ const editWithAI = async () => {
       }),
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status}`);
-    }
-
     const data = await response.json();
+    if (!response.ok) throw new Error(data?.error || `Marketing request failed (${response.status}).`);
 
     let updated: unknown = data.marketingStrategy ?? data.output ?? data;
 
