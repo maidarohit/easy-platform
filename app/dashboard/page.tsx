@@ -179,6 +179,11 @@ function DashboardPageContent() {
   );
 });
   const currentProject = projects.find((project) => project.id === searchParams.get("projectId")) ?? projects[0];
+  const openPrimaryBusinessAction = () => {
+    if (currentProject) return continueBusiness(currentProject);
+    sessionStorage.removeItem("easy-selected-business-idea");
+    router.push("/onboarding");
+  };
 
   return (
     <main className="flex min-h-screen bg-slate-950">
@@ -237,18 +242,18 @@ function DashboardPageContent() {
             </section>
           )}
 
-          <section className="mb-10 rounded-[24px] border border-emerald-400/30 bg-gradient-to-br from-emerald-950/80 to-slate-900 p-6 shadow-[0_18px_50px_rgba(16,185,129,0.12)] sm:p-8" aria-labelledby="start-new-business-heading">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">Start something new</p>
+          {!loadingProjects && <section className="mb-10 rounded-[24px] border border-emerald-400/30 bg-gradient-to-br from-emerald-950/80 to-slate-900 p-6 shadow-[0_18px_50px_rgba(16,185,129,0.12)] sm:p-8" aria-labelledby="primary-business-action-heading">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">{currentProject ? "Your workspace" : "Start something new"}</p>
             <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 id="start-new-business-heading" className="text-2xl font-semibold text-white sm:text-3xl">Create a fresh business</h2>
-                <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">Tell us what you do or what you want to build. You don&apos;t need a business plan.</p>
+                <h2 id="primary-business-action-heading" className="text-2xl font-semibold text-white sm:text-3xl">{currentProject ? "Continue your existing business" : "Create a fresh business"}</h2>
+                <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">{currentProject ? "Return to your saved workspace and continue from where you left off." : <>Tell us what you do or what you want to build. You don&apos;t need a business plan.</>}</p>
               </div>
-              <button type="button" onClick={() => { sessionStorage.removeItem("easy-selected-business-idea"); router.push("/onboarding"); }} className="inline-flex min-h-14 w-full shrink-0 items-center justify-center rounded-xl bg-emerald-400 px-6 text-base font-bold text-slate-950 shadow-[0_12px_30px_rgba(52,211,153,0.22)] transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 lg:w-auto">
-                + Start a New Business
+              <button type="button" onClick={openPrimaryBusinessAction} className="inline-flex min-h-14 w-full shrink-0 items-center justify-center rounded-xl bg-emerald-400 px-6 text-base font-bold text-slate-950 shadow-[0_12px_30px_rgba(52,211,153,0.22)] transition hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200 lg:w-auto">
+                {currentProject ? "Continue Business" : "+ Start a New Business"}
               </button>
             </div>
-          </section>
+          </section>}
 
           <StatsCards
             projectCount={projects.length}

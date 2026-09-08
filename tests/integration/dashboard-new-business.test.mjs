@@ -4,18 +4,21 @@ import test from "node:test";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
-test("logged-in customers get an obvious mobile-first new business action", async () => {
+test("customers without a workspace get an obvious mobile-first new business action", async () => {
   const dashboard = await source("app/dashboard/page.tsx");
+  assert.match(dashboard, /!loadingProjects && <section/);
+  assert.match(dashboard, /currentProject \? "Continue Business" : "\+ Start a New Business"/);
   assert.match(dashboard, /Start something new/i);
   assert.match(dashboard, /\+ Start a New Business/);
   assert.match(dashboard, /Tell us what you do or what you want to build\. You don&apos;t need a business plan\./);
   assert.match(dashboard, /w-full[\s\S]*lg:w-auto/);
 });
 
-test("new business routing never carries the currently selected projectId", async () => {
+test("the primary action starts onboarding only without a workspace and otherwise resumes it", async () => {
   const dashboard = await source("app/dashboard/page.tsx");
+  assert.match(dashboard, /if \(currentProject\) return continueBusiness\(currentProject\)/);
   assert.match(dashboard, /router\.push\("\/onboarding"\)/);
-  assert.doesNotMatch(dashboard, /Start a New Business[\s\S]{0,300}projectId/);
+  assert.match(dashboard, /continueBusiness = \(project: Project\) => router\.push\(`\/master-workspace\?projectId=\$\{encodeURIComponent\(project\.id\)\}`\)/);
 });
 
 test("new intake creates a create-only UUID project and cannot overwrite by name", async () => {
@@ -41,7 +44,6 @@ test("existing businesses are separated and Continue preserves their own project
   assert.match(dashboard, /Your Businesses/);
   assert.match(dashboard, /Continue Business/);
   assert.match(dashboard, /continueBusiness\(project\)/);
-  assert.match(dashboard, /projectActions\[project\.id\]/);
   assert.match(dashboard, /encodeURIComponent\(project\.id\)/);
   assert.match(dashboard, /Open Advanced Tools/);
 });
