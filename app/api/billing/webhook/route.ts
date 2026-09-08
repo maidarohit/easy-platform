@@ -89,6 +89,14 @@ export function subscriptionEventOutcome(
   latestProcessedAt: Date | null,
 ): RazorpayWebhookEventOutcome {
   if (latestProcessedAt && providerCreatedAt < latestProcessedAt) return "ignored_stale";
+  if (
+    latestProcessedAt &&
+    providerCreatedAt.getTime() === latestProcessedAt.getTime() &&
+    currentStatus === "active" &&
+    incomingStatus === "pending"
+  ) {
+    return "ignored_stale";
+  }
 
   const currentIsTerminal = currentStatus === "cancelled" || currentStatus === "expired";
   const incomingIsTerminal = incomingStatus === "cancelled" || incomingStatus === "expired";

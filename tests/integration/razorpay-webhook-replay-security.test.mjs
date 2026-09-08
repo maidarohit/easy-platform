@@ -194,6 +194,12 @@ test("strictly older nonterminal events are stale", () => {
   assert.equal(subscriptionEventOutcome("active", "pending", older, newer), "ignored_stale");
 });
 
+test("same-timestamp authenticated delivery cannot downgrade an active subscription", () => {
+  const timestamp = new Date("2026-09-08T08:54:41.000Z");
+  assert.equal(subscriptionEventOutcome("active", "pending", timestamp, timestamp), "ignored_stale");
+  assert.equal(subscriptionEventOutcome("pending", "active", timestamp, timestamp), "processed");
+});
+
 test("terminal subscriptions cannot reactivate", () => {
   const oldEvent = new Date("2026-08-23T12:00:00.000Z");
   const latest = new Date("2026-08-23T12:00:01.000Z");
