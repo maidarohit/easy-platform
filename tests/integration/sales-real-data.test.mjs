@@ -64,6 +64,26 @@ test("approved saved commercial facts remain available", () => {
   assert.match(result.proposal, /five-year warranty/);
 });
 
+test("final Sales hydration softens payment, booking, pipeline and upsell policies", () => {
+  const saved = {
+    pricingRecommendations: "Collect 50% upfront. Charge a paid site visit credited against the final fee.",
+    actionPlan: "Open three booking slots. Use a pre-visit checklist. Promise a 2x pipeline lift. Add staging as an upsell service. Pay a 10% referral commission.",
+    targetCustomerProfile: "Developers, NRIs and B2B commercial clients are the primary audience.",
+    salesChannels: "Use Instagram outreach now. Message prospects on LinkedIn.",
+  };
+  const result = readStoredSalesInsights(JSON.stringify(saved), salesContext);
+  const text = JSON.stringify(result);
+  assert.doesNotMatch(text, /50% upfront|credited against|three booking slots|pre-visit checklist|2x pipeline|upsell service|10% referral commission/i);
+  assert.match(text, /Confirm all percentages, deposits, credits/);
+  assert.match(text, /booking process or checklist only after/);
+  assert.match(text, /planning goal, not a guaranteed outcome/);
+  assert.match(text, /add-on services or referral arrangements only when/);
+  assert.match(result.targetCustomerProfile, /^Primary B2C customers: Homeowners\./);
+  assert.match(result.targetCustomerProfile, /Potential secondary audience hypothesis/);
+  assert.match(text, /connect Meta before publishing/);
+  assert.match(text, /connect LinkedIn before publishing/);
+});
+
 test("saved Sales output is normalized on authenticated GET without generation", async () => {
   const restored = readStoredSalesInsights(JSON.stringify({ output: { executiveSummary: "Use the 2 verified enquiries. Forecast 100 sales." } }), metrics);
   assert.match(restored.executiveSummary, /^Use the 2 verified enquiries\./);

@@ -13,6 +13,11 @@ const PROMOTION = /\b(?:discounts?|incentives?|special offers?|free consultation
 const DELIVERY_PROMISE = /\b(?:deliver(?:y)?|complete|ready|turnaround)[^.!?\n]{0,60}\b(?:within|in)\s+\d+\s*(?:hours?|days?|weeks?|months?)\b/i;
 const CUSTOMER_PROOF = /\b(?:testimonials?|case stud(?:y|ies))\b/i;
 const SCARCITY = /\b(?:limited (?:slots?|availability|time)|only \d+ (?:slots?|places?)|act now|last chance|selling fast)\b/i;
+const PAYMENT_POLICY = /(?:\b\d+(?:\.\d+)?\s*%\s*(?:upfront|advance|deposit|balance|on (?:booking|completion))\b|\bsite visit[^.!?\n]{0,80}\b(?:credit|credited|refund|refundable|fee|payment|paid)\b)/i;
+const BOOKING_OPERATIONS = /\b(?:booking slots?|book (?:a|your) slot|booking checklist|site[- ]visit checklist|pre[- ]visit checklist)\b/i;
+const PIPELINE_PROMISE = /\b(?:pipeline lift|double (?:the )?pipeline|\d+x (?:the )?pipeline)\b/i;
+const UNVERIFIED_UPSELL = /\b(?:upsell|cross[- ]sell|add[- ]on services?|referral commissions?|commission per referral)\b/i;
+const SECONDARY_B2C = /\b(?:developers?|nris?|non[- ]resident indians?|b2b|commercial clients?|business clients?|builders?)\b/i;
 
 type SalesSafetyContext = {
   metrics: BusinessAnalyticsMetrics;
@@ -51,8 +56,12 @@ function containsOnlyVerifiedNumbers(text: string, metrics: BusinessAnalyticsMet
 
 function sanitizeSentence(sentence: string, context: SalesSafetyContext, corpus: string) {
   const verified = (pattern: RegExp) => pattern.test(corpus);
-  if (context.channels.meta !== "connected" && /\b(?:meta|facebook|instagram)\b/i.test(sentence) && /\b(?:post|publish|schedule|launch|run|campaign|active|connected)\b/i.test(sentence)) return "Consider Meta as an optional channel; connect Meta before publishing through Buzypeezy.";
-  if (context.channels.linkedin !== "connected" && /\blinkedin\b/i.test(sentence) && /\b(?:post|publish|schedule|launch|run|campaign|active|connected)\b/i.test(sentence)) return "Consider LinkedIn as an optional channel; connect LinkedIn before publishing through Buzypeezy.";
+  if (context.channels.meta !== "connected" && /\b(?:meta|facebook|instagram)\b/i.test(sentence) && /\b(?:post|publish|schedule|launch|run|campaign|active|connected|use|outreach|message|dm|advertise)\b/i.test(sentence)) return "Consider Meta as an optional channel; connect Meta before publishing through Buzypeezy.";
+  if (context.channels.linkedin !== "connected" && /\blinkedin\b/i.test(sentence) && /\b(?:post|publish|schedule|launch|run|campaign|active|connected|use|outreach|message|advertise)\b/i.test(sentence)) return "Consider LinkedIn as an optional channel; connect LinkedIn before publishing through Buzypeezy.";
+  if (PAYMENT_POLICY.test(sentence)) return "Confirm all percentages, deposits, credits, and site-visit payment terms with the business owner.";
+  if (BOOKING_OPERATIONS.test(sentence) && !verified(BOOKING_OPERATIONS)) return "Consider a booking process or checklist only after the business owner approves the workflow.";
+  if (PIPELINE_PROMISE.test(sentence)) return "Treat pipeline improvement as a planning goal, not a guaranteed outcome.";
+  if (UNVERIFIED_UPSELL.test(sentence) && !verified(UNVERIFIED_UPSELL)) return "Consider add-on services or referral arrangements only when the business owner explicitly approves them.";
   if (FINANCING.test(sentence) && !verified(FINANCING)) return "Consider financing partnerships only if the business owner establishes and approves them.";
   if (WARRANTY.test(sentence) && !verified(WARRANTY)) return "Consider a warranty only if its exact terms are approved by the business owner.";
   if (SITE_VISIT.test(sentence) && !verified(SITE_VISIT)) return "Consider offering site visits only if the business owner approves the availability and terms.";
@@ -73,13 +82,20 @@ function sanitizeText(value: string, context: SalesSafetyContext) {
   return sentences.map((sentence) => sanitizeSentence(sentence, context, corpus)).join("\n").trim() || "Use the verified business context above; confirm commercial terms with the business owner.";
 }
 
+function alignHomeownerAudience(value: string) {
+  const demoted = value.split("\n").map((line) => SECONDARY_B2C.test(line)
+    ? `Potential secondary audience hypothesis (not the primary B2C customer): ${line}`
+    : line).join("\n");
+  return `Primary B2C customers: Homeowners. Other audience details are potential segments, not verified facts.\n${demoted}`;
+}
+
 export function sanitizeSalesInsights(value: unknown, source: BusinessAnalyticsMetrics | SalesSafetyContext): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const context = normalizeContext(source);
   const clean = (item: unknown, key = ""): unknown => {
     if (typeof item === "string") {
       const safe = sanitizeText(item, context);
-      if (key === "targetCustomerProfile" && /\bhomeowners?\b/i.test(context.business.targetAudience ?? "") && !/^Primary B2C customers: Homeowners\./i.test(safe)) return `Primary B2C customers: Homeowners. Other audience details are potential segments, not verified facts.\n${safe}`;
+      if (key === "targetCustomerProfile" && /\bhomeowners?\b/i.test(context.business.targetAudience ?? "") && !/^Primary B2C customers: Homeowners\./i.test(safe)) return alignHomeownerAudience(safe);
       return safe;
     }
     if (Array.isArray(item)) return item.map((nested) => clean(nested, key));
