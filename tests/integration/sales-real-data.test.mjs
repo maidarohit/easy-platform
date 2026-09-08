@@ -10,6 +10,11 @@ const metrics = {
   paidOrders: 1, fulfilledOrders: 1, paidRevenuePaise: 199900,
   currency: "INR", enquiryToPaidOrderRate: 50,
 };
+const salesContext = {
+  metrics,
+  business: { description: "Interior design services in Bengaluru.", targetAudience: "Homeowners", services: ["Interior Design"] },
+  channels: { meta: "not_connected", linkedin: "not_connected", whatsapp: "approved_contact" },
+};
 
 test("Sales context reuses owned publication, services, location, enquiry and order facts", async () => {
   const context = await source("app/lib/sales-business-context.ts");
@@ -29,9 +34,41 @@ test("Sales safety keeps verified results and removes fabricated commercial clai
   assert.doesNotMatch(result.summary, /increase by 40|Guarantee|Target 50|25,000/);
 });
 
+test("unsupported Sales claims become optional recommendations during generation and hydration", () => {
+  const unsafe = {
+    executiveSummary: "Partner with financing companies. Include a 10-year warranty. Offer free site visits. Give a 20% discount. Deliver every project within 30 days. Publish testimonials and case studies. Only 2 slots remain. Launch an Instagram campaign. Publish on LinkedIn.",
+    pricingRecommendations: "Charge 10% upfront and guarantee the lowest price.",
+    targetCustomerProfile: "Affluent investors and commercial developers.",
+  };
+  const generated = sanitizeSalesInsights(unsafe, salesContext);
+  const hydrated = readStoredSalesInsights(JSON.stringify(unsafe), salesContext);
+  assert.deepEqual(hydrated, generated);
+  const text = JSON.stringify(generated);
+  assert.match(text, /Consider financing partnerships only if/);
+  assert.match(text, /Consider a warranty only if/);
+  assert.match(text, /Consider offering site visits only if/);
+  assert.match(text, /Consider a promotional offer only if/);
+  assert.match(text, /Confirm delivery timelines/);
+  assert.match(text, /approved testimonials or case studies/);
+  assert.match(text, /Use urgency only when/);
+  assert.match(text, /connect Meta before publishing/);
+  assert.match(text, /connect LinkedIn before publishing/);
+  assert.doesNotMatch(text, /10-year|20%|within 30 days|Only 2 slots|Charge 10%|lowest price/i);
+  assert.match(generated.targetCustomerProfile, /^Primary B2C customers: Homeowners\./);
+});
+
+test("approved saved commercial facts remain available", () => {
+  const approved = { ...salesContext, business: { ...salesContext.business, description: "Approved site visits and a five-year warranty are available." } };
+  const result = sanitizeSalesInsights({ proposal: "Offer approved site visits. Include the five-year warranty." }, approved);
+  assert.match(result.proposal, /approved site visits/);
+  assert.match(result.proposal, /five-year warranty/);
+});
+
 test("saved Sales output is normalized on authenticated GET without generation", async () => {
   const restored = readStoredSalesInsights(JSON.stringify({ output: { executiveSummary: "Use the 2 verified enquiries. Forecast 100 sales." } }), metrics);
-  assert.equal(restored.executiveSummary, "Use the 2 verified enquiries.");
+  assert.match(restored.executiveSummary, /^Use the 2 verified enquiries\./);
+  assert.match(restored.executiveSummary, /planning hypotheses, not verified outcomes/);
+  assert.doesNotMatch(restored.executiveSummary, /100 sales/);
   const route = await source("app/api/sales-ai/route.ts");
   const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
   assert.match(get, /verifyFirebaseIdToken/);

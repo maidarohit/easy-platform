@@ -47,7 +47,7 @@ export async function GET(request: Request) {
     const rows = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
       eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "sales"),
     )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(20);
-    const salesStrategy = rows.map((row) => readStoredSalesInsights(row.result, context.metrics)).find(Boolean) ?? null;
+    const salesStrategy = rows.map((row) => readStoredSalesInsights(row.result, context)).find(Boolean) ?? null;
     return NextResponse.json({ salesContext: context, salesStrategy }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     console.error("Sales context load failed.");
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
       const [saved] = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
         eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "sales"),
       )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(1);
-      const salesStrategy = saved ? readStoredSalesInsights(saved.result, context.metrics) : null;
+      const salesStrategy = saved ? readStoredSalesInsights(saved.result, context) : null;
       return salesStrategy ? NextResponse.json({ salesContext: context, salesStrategy })
         : NextResponse.json({ error: "The completed Sales result could not be restored." }, { status: 500 });
     }
@@ -136,6 +136,7 @@ export async function POST(request: Request) {
       website: context.website,
       location: context.business.location,
       services: context.business.services,
+      channels: context.channels,
       enquiries: context.metrics.enquiries,
       orders: context.metrics.orders,
       paidOrders: context.metrics.paidOrders,
@@ -185,7 +186,7 @@ export async function POST(request: Request) {
 
     const raw = unwrapSalesProviderResponse(text);
     const validated = validateSalesOutput(raw);
-    const salesStrategy = sanitizeSalesInsights(validated, context.metrics);
+    const salesStrategy = sanitizeSalesInsights(validated, context);
     if (!salesStrategy) {
       await finalizeUsage(usageId, startedAt);
       return NextResponse.json({ error: "Sales AI returned invalid JSON." }, { status: 502 });

@@ -13,6 +13,7 @@ export async function loadOwnedSalesContext(userId: string, projectId: string) {
     project: analytics.project,
     website: presentation.website,
     business: presentation.business,
+    channels: presentation.channels,
     metrics: analytics.metrics,
   };
 }
