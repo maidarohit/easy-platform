@@ -77,21 +77,24 @@ export function publicServicesSummary(snapshot: PublishedBusinessSnapshot) { ret
 export function publicCallToAction(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.primaryCta, 80) || "Get in Touch"; }
 export function publicHeroCopy(snapshot: PublishedBusinessSnapshot) { return concisePublicCopy(clean(snapshot.website?.supportingText, 650)) || concisePublicCopy(clean(snapshot.business.description, 650)); }
 function seoSnippet(value: string | null | undefined) {
-  const candidate = clean(value, 180);
+  const candidate = clean(value, 650)?.replace(/\s+/g, " ").trim();
   if (!candidate) return null;
   if (candidate.length <= 165) return candidate;
   const sentence = candidate.match(/^.{70,160}?[.!?](?=\s|$)/)?.[0];
-  return sentence ?? null;
+  if (sentence) return sentence;
+  const shortened = candidate.slice(0, 161).replace(/\s+\S*$/, "").replace(/[,;:\s]+$/, "");
+  return shortened.length >= 50 ? `${shortened}.` : null;
 }
 export function publicSeoTitle(snapshot: PublishedBusinessSnapshot) {
   const businessName = clean(snapshot.business.name, 70) || "Business";
   const savedTitle = clean(snapshot.search?.title, 70);
-  if (savedTitle && normalizedLabel(savedTitle).includes(normalizedLabel(businessName))) return savedTitle;
-  const context = clean(snapshot.business.industry, 38);
+  const internalTitlePrefix = /^(?:small|medium|large|micro|enterprise|startup|start up|early stage|established|existing|generate leads|book appointments|sell products|showcase portfolio)(?:\s+in\b|\s*\|)/i;
+  if (savedTitle && !internalTitlePrefix.test(savedTitle) && normalizedLabel(savedTitle).includes(normalizedLabel(businessName))) return savedTitle;
+  const context = publicIndustryLabel(clean(snapshot.business.industry, 38));
   const location = clean(snapshot.contact?.location, 38);
-  const qualifier = [context, location ? `in ${location}` : null].filter(Boolean).join(" ");
-  const contextualTitle = qualifier && normalizedLabel(qualifier) !== normalizedLabel(businessName)
-    ? `${qualifier} | ${businessName}` : businessName;
+  const contextualTitle = context
+    ? `${context}${location ? ` in ${location}` : ""} | ${businessName}`
+    : location ? `${businessName} | ${location}` : businessName;
   return contextualTitle.length <= 70 ? contextualTitle : businessName;
 }
 export function publicSeoDescription(snapshot: PublishedBusinessSnapshot) {

@@ -40,6 +40,25 @@ test("unsafe SEO output falls back only to approved business copy and missing co
   assert.equal(publicSeoDescription(missing), undefined);
 });
 
+test("internal segmentation never becomes metadata while trustworthy industries and locations do", () => {
+  const internal = buildPublishedBusinessSnapshot({ ...preview(), business: { ...preview().business, industry: "small" } }, { location: "Bangalore, India" });
+  assert.equal(publicSeoTitle(internal), "Strongest Interiors | Bangalore, India");
+  assert.doesNotMatch(publicSeoTitle(internal), /\bsmall\b/i);
+
+  const unrelated = buildPublishedBusinessSnapshot({ ...preview(), business: { ...preview().business, name: "Northfield Legal", industry: "Legal" }, brand: { ...preview().brand, name: "Northfield Legal" } }, { location: "Pune" });
+  assert.equal(publicSeoTitle(unrelated), "Legal in Pune | Northfield Legal");
+});
+
+test("approved long customer descriptions produce bounded factual metadata", () => {
+  const description = "Strongest Interiors provides residential interior design, space planning, three-dimensional visualization, renovation, modular kitchen design, and turnkey interior execution for customer projects.";
+  const value = buildPublishedBusinessSnapshot({ ...preview(), business: { ...preview().business, description }, website: { ...preview().website, supportingText: null } });
+  const metadata = publicSeoDescription(value);
+  assert.ok(metadata);
+  assert.ok(metadata.length <= 165);
+  assert.match(metadata, /^Strongest Interiors provides residential interior design/);
+  assert.doesNotMatch(metadata, /guaranteed|award-winning|affordable/i);
+});
+
 test("private keyword, audit, KPI, growth, marketing, and sales strategy never enters the public view", () => {
   const value = published({ positioning: "SEO audit and growth recommendations with KPI targets", keywords: "keyword research table" });
   const view = publicBusinessView(value);

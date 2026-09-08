@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { findLatestValidSeoOutput, readStoredSeoOpportunities } from "../../app/lib/seo-opportunity-safety.ts";
+import { findLatestValidSeoOutput, normalizeSeoOpportunities, readStoredSeoOpportunities } from "../../app/lib/seo-opportunity-safety.ts";
 
 test("old and new stored SEO shapes rehydrate as recommendations", () => {
   const oldShape = JSON.stringify({ keywordResearch: "Relevant service topics", metaTitles: "A factual title", seoScore: "58/100", seoAudit: "Unverified audit" });
@@ -23,6 +23,17 @@ test("multiple rows select the latest valid recommendation result", () => {
     { id: "oldest-valid", result: JSON.stringify({ blogTopics: "Customer guides" }) },
   ];
   assert.equal(findLatestValidSeoOutput(rows)?.id, "older-valid");
+});
+
+test("SEO placeholders use verified facts or disappear without invented locations", () => {
+  const verified = normalizeSeoOpportunities(
+    { keywordResearch: "Promote [service] in [city]. Add a page for [location]." },
+    { services: ["Interior design"], location: "Bengaluru, India" },
+  );
+  assert.equal(verified.keywordResearch, "Promote Interior design in Bengaluru.\nAdd a page for Bengaluru, India.");
+  const missing = normalizeSeoOpportunities({ keywordResearch: "Promote [service] in [city]. Serve [location] and [neighborhood]." });
+  assert.doesNotMatch(String(missing.keywordResearch), /\[[^\]]+\]|\{[^}]+\}|<[^>]+>/);
+  assert.doesNotMatch(String(missing.keywordResearch), /\bin\s*[.,]|\bserve\s*[.,]/i);
 });
 
 test("refresh loads saved output and deterministic audit without generation", async () => {

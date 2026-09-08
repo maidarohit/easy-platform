@@ -218,10 +218,13 @@ export function publicWebsiteSeoTitle(snapshot: WebsitePublicationSnapshot) {
 }
 
 export function publicWebsiteSeoDescription(snapshot: WebsitePublicationSnapshot) {
-  const candidate = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, 180);
+  const candidate = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, 650).replace(/\s+/g, " ").trim();
   if (!candidate) return undefined;
   if (candidate.length <= 165) return candidate;
-  return candidate.match(/^.{70,160}?[.!?](?=\s|$)/)?.[0];
+  const sentence = candidate.match(/^.{70,160}?[.!?](?=\s|$)/)?.[0];
+  if (sentence) return sentence;
+  const shortened = candidate.slice(0, 161).replace(/\s+\S*$/, "").replace(/[,;:\s]+$/, "");
+  return shortened.length >= 50 ? `${shortened}.` : undefined;
 }
 
 export function publicWebsitePublicationView(snapshot: WebsitePublicationSnapshot): WebsitePublicationSnapshot {
