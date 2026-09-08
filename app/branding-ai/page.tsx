@@ -157,47 +157,8 @@ const downloadPDF = () => {
 
   toast.success("PDF downloaded!");
 };
-const saveProject = async () => {
-  if (!brandResult) {
-    toast.error("Generate a brand first.");
-    return;
-  }
-
-  const user = auth.currentUser;
-
-  if (!user) {
-    toast.error("Please log in first.");
-    return;
-  }
-
-  try {
-    const response = await authenticatedFetch("/api/projects", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: crypto.randomUUID(),
-        userId: user.uid,
-        name: `${companyName} Branding Project`,
-        companyName,
-        industry,
-        targetAudience,
-        brandStyle,
-        brandDescription,
-        result: JSON.stringify(brandResult),
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to save project");
-    }
-
-    toast.success("Project saved successfully!");
-  } catch (error) {
-    console.error("Project save error:", error);
-    toast.error("Failed to save project.");
-  }
+const saveProject = () => {
+  toast.success("Branding is already saved automatically.");
 };
 const handleGenerateBrand = async () => {
   if (

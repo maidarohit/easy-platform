@@ -519,8 +519,8 @@ ${styleGuide}`
           </div>
 
           <div className="mt-5 flex items-center justify-between text-sm text-slate-400">
-            <span className="flex items-center gap-1.5"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.4"><path d="M8 13.5 2.7 8.4A3.5 3.5 0 0 1 7.6 3.5L8 4l.4-.5a3.5 3.5 0 0 1 4.9 4.9z"/></svg>2,408 likes</span>
-            <span>Save · Share</span>
+            <span>Preview / Example — no live social metrics</span>
+            <span>Example post</span>
           </div>
         </motion.div>
       </motion.div>
@@ -534,6 +534,7 @@ ${styleGuide}`
   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
     Business Card Preview
   </p>
+  <p className="mt-2 text-xs text-slate-400">Preview / Example — replace with approved business details</p>
 
   <div className="mt-6 grid gap-6 lg:grid-cols-2">
     <div
@@ -572,9 +573,9 @@ ${styleGuide}`
       </div>
 
       <div className="space-y-2 text-sm" style={{ color: darkColor }}>
-        <p>hello@yourbrand.com</p>
-        <p>www.yourbrand.com</p>
-        <p>+91 00000 00000</p>
+        <p>Approved email</p>
+        <p>Verified live website</p>
+        <p>Approved phone</p>
       </div>
     </div>
   </div>
@@ -589,6 +590,7 @@ ${styleGuide}`
   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
     Letterhead Preview
   </p>
+  <p className="mt-2 text-xs text-slate-400">Preview / Example — replace with approved business details</p>
 
   <div
     className="mt-6 min-h-[520px] overflow-hidden rounded-[28px] border border-slate-200 p-10 shadow-2xl"
@@ -625,9 +627,9 @@ ${styleGuide}`
         className="text-right text-sm leading-6"
         style={{ color: darkColor }}
       >
-        <p>hello@yourbrand.com</p>
-        <p>www.yourbrand.com</p>
-        <p>+91 00000 00000</p>
+        <p>Approved email</p>
+        <p>Verified live website</p>
+        <p>Approved phone</p>
       </div>
     </div>
 
@@ -700,6 +702,7 @@ ${styleGuide}`
   <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">
     Invoice Preview
   </p>
+  <p className="mt-2 text-xs text-slate-400">Preview / Example — replace with owner-approved client, pricing, dates and payment details</p>
 
   <div
     className="mt-6 overflow-hidden rounded-[28px] border border-slate-200 p-10 shadow-2xl"
@@ -735,11 +738,11 @@ ${styleGuide}`
         </p>
 
         <p className="mt-3 text-sm" style={{ color: darkColor }}>
-          Invoice No: INV-001
+          Invoice number: Owner-provided
         </p>
 
         <p className="mt-1 text-sm" style={{ color: darkColor }}>
-          Date: 04 August 2026
+          Date: Owner-provided
         </p>
       </div>
     </div>
@@ -755,11 +758,11 @@ ${styleGuide}`
         </p>
 
         <p className="mt-1 text-sm" style={{ color: darkColor }}>
-          hello@yourbrand.com
+          Approved email
         </p>
 
         <p className="mt-1 text-sm" style={{ color: darkColor }}>
-          www.yourbrand.com
+          Verified live website
         </p>
       </div>
 
@@ -769,11 +772,11 @@ ${styleGuide}`
         </p>
 
         <p className="mt-3 font-bold" style={{ color: darkColor }}>
-          Client Name
+          Approved client name
         </p>
 
         <p className="mt-1 text-sm" style={{ color: darkColor }}>
-          client@example.com
+          Approved client contact
         </p>
       </div>
     </div>
@@ -794,16 +797,16 @@ ${styleGuide}`
         className="grid grid-cols-[1fr_auto] gap-4 border-b border-slate-200 px-5 py-4 text-sm"
         style={{ color: darkColor }}
       >
-        <span>Brand Strategy & Identity Package</span>
-        <span>₹25,000</span>
+        <span>Owner-approved service</span>
+        <span>Approved amount</span>
       </div>
 
       <div
         className="grid grid-cols-[1fr_auto] gap-4 border-b border-slate-200 px-5 py-4 text-sm"
         style={{ color: darkColor }}
       >
-        <span>Visual Design Services</span>
-        <span>₹15,000</span>
+        <span>Owner-approved service</span>
+        <span>Approved amount</span>
       </div>
 
       <div
@@ -811,7 +814,7 @@ ${styleGuide}`
         style={{ color: darkColor }}
       >
         <span>Total</span>
-        <span>₹40,000</span>
+        <span>Approved total</span>
       </div>
     </div>
 
@@ -822,7 +825,7 @@ ${styleGuide}`
         </p>
 
         <p className="mt-2 text-sm" style={{ color: primaryColor }}>
-          Bank / UPI / Online Payment
+          Owner-approved payment instructions
         </p>
       </div>
 
@@ -841,6 +844,7 @@ ${styleGuide}`
   <p className="mb-6 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
     Email Signature Preview
   </p>
+  <p className="mb-5 text-xs text-slate-500">Preview / Example — replace with approved business details</p>
 
   <div className="flex items-start gap-6">
     <div
@@ -874,9 +878,9 @@ ${styleGuide}`
         className="mt-4 space-y-1 text-sm"
         style={{ color: darkColor }}
       >
-        <p className="flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="m3 5 5 4 5-4"/></svg>hello@yourbrand.com</p>
-        <p className="flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.4"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2a10 10 0 0 1 0 12M8 2a10 10 0 0 0 0 12"/></svg>www.yourbrand.com</p>
-        <p className="flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.4"><path d="M5 2.5 3 3.8c-.6.4-.8 1.2-.5 1.9 1.5 3.4 4.4 6.3 7.8 7.8.7.3 1.5.1 1.9-.5l1.3-2-3-1.5-1 1.3a9.3 9.3 0 0 1-4.3-4.3l1.3-1z"/></svg>+91 90000 00000</p>
+        <p>Approved email</p>
+        <p>Verified live website</p>
+        <p>Approved phone</p>
       </div>
     </div>
   </div>

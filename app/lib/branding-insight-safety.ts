@@ -8,6 +8,10 @@ const FOUNDER_HISTORY = /\b(?:founder|founded by|family[- ]owned|generations? of
 const TESTIMONIAL = /\b(?:testimonials?|customer reviews?|client stories|case stud(?:y|ies))\b/i;
 const GUARANTEE = /\b(?:guarantee|guaranteed|warranty|risk[- ]free|money[- ]back|assured results?)\b/i;
 const SUPERLATIVE = /\b(?:#\s*1|number one|best[- ]in[- ]class|industry[- ]leading|market leader|leading provider|renowned|trusted by|proven track record|global presence)\b/i;
+const INVENTED_ORIGIN = /\b(?:we|the business|the company|our (?:brand|business|company))\s+(?:started|began|launched|grew|evolved)\b/i;
+const SOCIAL_METRIC = /\b(?:\d[\d,.]*\+?\s*(?:likes?|followers?|shares?|views?|comments?|impressions?|engagements?)|engagement rate|social reach)\b/i;
+const CONTACT_ARTIFACT = /(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:https?:\/\/|www\.)\S+|\+?\d[\d\s().-]{6,}\d)/i;
+const FINANCIAL_ARTIFACT = /\b(?:invoice(?:\s*(?:no|number|#))?|bill(?:ed)? to|client name|subtotal|total|payment details?|bank|upi|account number|price|fee)\b|(?:₹|\$|€|£)\s*\d/i;
 
 function corpus(input: ModuleExecutionInput) {
   return [input.companyName, input.industry, input.targetAudience, input.brandStyle, input.brandDescription]
@@ -20,6 +24,10 @@ function supported(sentence: string, context: string, pattern: RegExp) {
 }
 
 function sanitizeSentence(sentence: string, context: string) {
+  if (INVENTED_ORIGIN.test(sentence) && !supported(sentence, context, INVENTED_ORIGIN)) return "Develop an origin story only from business history approved by the owner.";
+  if (SOCIAL_METRIC.test(sentence)) return "Use social proof metrics only when verified channel data is available.";
+  if (CONTACT_ARTIFACT.test(sentence)) return "Use only approved business contact details and the verified live website URL.";
+  if (FINANCIAL_ARTIFACT.test(sentence)) return "Use financial document examples only with owner-approved client, pricing, date and payment details.";
   if (AWARD.test(sentence) && !supported(sentence, context, AWARD)) return "Mention awards only when the business owner provides verified award details.";
   if (FOUNDER_HISTORY.test(sentence) && !supported(sentence, context, FOUNDER_HISTORY)) return "Include founder history only when it is present in the approved business description.";
   if (OPERATING_HISTORY.test(sentence) && !supported(sentence, context, OPERATING_HISTORY)) return "Describe operating history only when the business owner provides verified dates or experience.";

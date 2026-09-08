@@ -28,6 +28,25 @@ test("approved saved facts survive hydration while unsupported facts are normali
   assert.doesNotMatch(result.story, /Award-winning studio/);
 });
 
+test("Branding removes invented origin, social, contact and financial artifacts", () => {
+  const unsafe = "We started as a small family studio. 2,408 likes and 10,000 followers. Email hello@fake.example or call +91 90000 00000. Invoice INV-001 totals ₹40,000 with bank payment details.";
+  const result = sanitizeBrandingOutput(output(unsafe), input);
+  assert.doesNotMatch(result.story, /we started|2,408|10,000|hello@fake|90000|INV-001|₹40,000|bank payment/i);
+  assert.match(result.story, /origin story only|social proof metrics only|approved business contact|financial document examples only/i);
+});
+
+test("Branding previews label examples and contain no fabricated records", async () => {
+  const preview = await source("app/branding-ai/components/BrandVisualPreview.tsx");
+  assert.match(preview, /Preview \/ Example — replace with approved business details/);
+  assert.doesNotMatch(preview, /2,408 likes|hello@yourbrand\.com|client@example\.com|INV-001|04 August 2026|₹25,000|₹40,000|90000 00000/);
+});
+
+test("Branding page does not repeat client-side persistence", async () => {
+  const page = await source("app/branding-ai/page.tsx");
+  assert.doesNotMatch(page, /authenticatedFetch\("\/api\/projects"/);
+  assert.match(page, /Branding is already saved automatically/);
+});
+
 test("shared Branding execution sanitizes output for standalone and Easy Mode", async () => {
   const execution = await source("app/lib/branding-execution.ts");
   assert.match(execution, /sanitizeBrandingOutput\(validatedOutput, input\)/);
