@@ -12,12 +12,8 @@ test("Branding removes unsupported history, proof and reputation claims", () => 
   const unsafe = "An award-winning firm. Founded in 2001 with 25 years of experience. Trusted by 500 clients. ISO 9001 certified. Founded by a celebrated architect. Testimonials prove our success. Guaranteed results. The number one industry-leading studio.";
   const result = sanitizeBrandingOutput(output(unsafe), input);
   assert.doesNotMatch(result.story, /award-winning|2001|25 years|500 clients|ISO 9001|celebrated architect|Testimonials prove|Guaranteed results|number one|industry-leading/i);
-  assert.match(result.story, /verified award details/);
-  assert.match(result.story, /verified dates or experience/);
-  assert.match(result.story, /verified figures/);
-  assert.match(result.story, /verified credentials/);
-  assert.match(result.story, /approved business description/);
-  assert.match(result.story, /approved customer proof/);
+  assert.match(result.story, /Acme Design brings a modern brand direction to interior design/);
+  assert.doesNotMatch(result.story, /only when|verified|business owner|approved customer proof/i);
 });
 
 test("approved saved facts survive hydration while unsupported facts are normalized", () => {
@@ -32,7 +28,17 @@ test("Branding removes invented origin, social, contact and financial artifacts"
   const unsafe = "We started as a small family studio. 2,408 likes and 10,000 followers. Email hello@fake.example or call +91 90000 00000. Invoice INV-001 totals ₹40,000 with bank payment details.";
   const result = sanitizeBrandingOutput(output(unsafe), input);
   assert.doesNotMatch(result.story, /we started|2,408|10,000|hello@fake|90000|INV-001|₹40,000|bank payment/i);
-  assert.match(result.story, /origin story only|social proof metrics only|approved business contact|financial document examples only/i);
+  assert.match(result.story, /Acme Design brings a modern brand direction to interior design/);
+  assert.doesNotMatch(result.story, /only when|verified channel data|approved business contact|financial document examples/i);
+});
+
+test("saved safety instructions, promises and client films hydrate as customer-ready copy", () => {
+  const legacy = "Describe operating history only when the business owner provides verified dates or experience. We deliver on time, on budget and built to last. Share client films as customer proof.";
+  const result = readStoredBrandingOutput(JSON.stringify(output(legacy)), input);
+  assert.doesNotMatch(result.story, /describe operating history|only when|on time|on budget|built to last|client films|customer proof/i);
+  assert.match(result.story, /Acme Design brings a modern brand direction to interior design/);
+  assert.match(result.story, /quality and clarity of the approved services/);
+  assert.match(result.story, /project approach and service process/);
 });
 
 test("Branding previews label examples and contain no fabricated records", async () => {
