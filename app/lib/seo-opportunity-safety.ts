@@ -43,3 +43,18 @@ export const SEO_GROUNDING_RULES = [
   "Do not recommend WordPress, hosting changes, Cloudflare, BunnyCDN, FID, meta keywords, or keyword density.",
   "LCP, INP, and CLS are not measured and must not be described as passing or failing.",
 ] as const;
+
+export function readStoredSeoOpportunities(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return null; }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const candidate = record.seoOpportunities && typeof record.seoOpportunities === "object" && !Array.isArray(record.seoOpportunities)
+    ? record.seoOpportunities
+    : record;
+  const normalized = normalizeSeoOpportunities(candidate);
+  return Object.values(normalized).some((item) => typeof item === "string" ? item.trim() : Array.isArray(item) && item.length > 0)
+    ? normalized
+    : null;
+}

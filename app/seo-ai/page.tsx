@@ -9,6 +9,7 @@ import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import type { SeoSiteAudit } from "../lib/seo-site-audit";
+import { readStoredSeoOpportunities } from "../lib/seo-opportunity-safety";
 
 const SEO_GOALS = [
   "Generate Leads",
@@ -85,8 +86,6 @@ function SEOAIPageContent() {
       const activeProject = project?.id === projectId ? project : null;
       const projectGoal = activeProject?.goal || "";
 
-      setBrandResult(null);
-      setSiteAudit(null);
       setCompanyName(activeProject?.companyName || "");
       setIndustry(activeProject?.industry || "");
       setTargetAudience(
@@ -106,30 +105,39 @@ function SEOAIPageContent() {
 
   let active = true;
 
+  queueMicrotask(() => {
+    if (!active) return;
+    setBrandResult(null);
+    setSiteAudit(null);
+  });
+
   const loadSavedSEOOutput = async () => {
-    try {
-      const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=seo`,
-        { cache: "no-store" }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load SEO AI output");
+    const loadOutput = async () => {
+      try {
+        const response = await authenticatedFetch(`/api/project-outputs?projectId=${encodeURIComponent(projectId)}&module=seo`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load SEO AI output");
+        return readStoredSeoOpportunities(data.output?.result) as SEOResult | null;
+      } catch (error) {
+        console.error("Failed to restore SEO AI output:", error);
+        return null;
       }
-
-      if (!active || !data.output?.result) return;
-
-      const savedResult =
-        typeof data.output.result === "string"
-          ? JSON.parse(data.output.result)
-          : data.output.result;
-
-      setBrandResult(savedResult as SEOResult);
-    } catch (error) {
-      console.error("Failed to restore SEO AI output:", error);
-    }
+    };
+    const loadAudit = async () => {
+      try {
+        const response = await authenticatedFetch(`/api/seo-ai?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load website check");
+        return isRecord(data.siteAudit) ? data.siteAudit as SeoSiteAudit : null;
+      } catch (error) {
+        console.error("Failed to restore SEO website check:", error);
+        return null;
+      }
+    };
+    const [savedResult, refreshedAudit] = await Promise.all([loadOutput(), loadAudit()]);
+    if (!active) return;
+    setBrandResult(savedResult);
+    setSiteAudit(refreshedAudit);
   };
 
   loadSavedSEOOutput();

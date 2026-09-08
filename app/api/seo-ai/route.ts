@@ -43,6 +43,61 @@ async function finalizeUsage(
   }
 }
 
+async function loadOwnedSiteAudit(uid: string, projectId: string) {
+  const [ownedProject] = await db.select({ id: projects.id }).from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, uid))).limit(1);
+  if (!ownedProject) return null;
+
+  const [[businessRow], [websiteRow]] = await Promise.all([
+    db.select({ slug: businessPublications.publicSlug, snapshot: businessPublicationVersions.snapshot })
+      .from(businessPublications)
+      .innerJoin(businessPublicationVersions, and(eq(businessPublicationVersions.publicationId, businessPublications.id), eq(businessPublicationVersions.versionNumber, businessPublications.currentVersion)))
+      .where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, uid), eq(businessPublications.status, "active"))).limit(1),
+    db.select({ slug: publishedWebsites.slug, snapshot: websitePublicationVersions.snapshot })
+      .from(publishedWebsites)
+      .innerJoin(websitePublicationVersions, and(eq(websitePublicationVersions.publishedWebsiteId, publishedWebsites.id), eq(websitePublicationVersions.versionNumber, publishedWebsites.currentVersion)))
+      .where(and(eq(publishedWebsites.projectId, projectId), eq(publishedWebsites.ownerUid, uid), eq(publishedWebsites.status, "active"))).limit(1),
+  ]);
+  const origin = canonicalApplicationOrigin();
+  const businessSnapshot = businessRow ? validatePublishedBusinessSnapshot(businessRow.snapshot) : null;
+  if (businessSnapshot) {
+    const url = origin ? `${origin}/business/${encodeURIComponent(businessRow.slug)}` : null;
+    const services = publicServices(businessSnapshot);
+    const publicSections = [businessSnapshot.website?.supportingText, services.length, businessSnapshot.website?.about, businessSnapshot.website?.features, businessSnapshot.contact].filter(Boolean).length;
+    const imageCount = [businessSnapshot.website?.heroImage, businessSnapshot.website?.secondaryImage].filter(Boolean).length;
+    return buildSeoSiteAudit({ published: true, publishedUrl: url, title: publicSeoTitle(businessSnapshot), metaDescription: publicSeoDescription(businessSnapshot), hasH1: true, hasOrderedHeadings: true, publicSectionCount: publicSections, internalLinkCount: 3 + publicSections, imageCount, imagesHaveAltText: true, hasStructuredData: false });
+  }
+  const websiteSnapshot = websiteRow ? validateWebsitePublicationSnapshot(websiteRow.snapshot) : null;
+  if (websiteSnapshot) {
+    const url = origin ? `${origin}/published-sites/${encodeURIComponent(websiteRow.slug)}` : null;
+    const edits = websiteSnapshot.websiteEdits;
+    const publicSections = [edits?.heroDescription || websiteSnapshot.websiteOutput.websiteOverview, edits?.servicesText, edits?.aboutText].filter(Boolean).length;
+    const imageCount = Object.values(websiteSnapshot.media ?? {}).flatMap((item) => Array.isArray(item) ? item : item ? [item] : []).length;
+    return buildSeoSiteAudit({ published: true, publishedUrl: url, title: publicWebsiteSeoTitle(websiteSnapshot), metaDescription: publicWebsiteSeoDescription(websiteSnapshot), hasH1: true, hasOrderedHeadings: true, publicSectionCount: publicSections, internalLinkCount: 3 + publicSections, imageCount, imagesHaveAltText: true, hasStructuredData: false });
+  }
+  return buildSeoSiteAudit({ published: false });
+}
+
+export async function GET(request: Request) {
+  let uid: string;
+  try {
+    uid = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
+    return NextResponse.json({ error: "Authentication is required." }, { status: 401 });
+  }
+  const projectId = new URL(request.url).searchParams.get("projectId")?.trim() || "";
+  if (!projectId) return NextResponse.json({ error: "projectId is required." }, { status: 400 });
+  try {
+    const siteAudit = await loadOwnedSiteAudit(uid, projectId);
+    return siteAudit
+      ? NextResponse.json({ siteAudit }, { headers: { "Cache-Control": "private, no-store" } })
+      : NextResponse.json({ error: "Project not found." }, { status: 404 });
+  } catch {
+    console.error("SEO site audit load failed.");
+    return NextResponse.json({ error: "Unable to load website check." }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   let uid: string;
 
