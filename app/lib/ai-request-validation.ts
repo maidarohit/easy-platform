@@ -59,6 +59,7 @@ const schemas = {
   sales: {
     short: ["companyName", "industry", "salesGoal", "targetAudience"],
     long: ["businessDescription"],
+    optionalShort: ["requestId"],
   },
   content: {
     short: ["contentType", "tone", "audience", "length", "keywords"],

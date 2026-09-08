@@ -55,14 +55,14 @@ setBusinessDescription("");
   );
 }, [projectId, project]);
 useEffect(() => {
-  if (!projectId || !project?.userId) return;
+  if (!projectId) return;
 
   let active = true;
 
   const loadSavedSalesOutput = async () => {
     try {
       const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=sales`,
+        `/api/sales-ai?projectId=${encodeURIComponent(projectId)}`,
         { cache: "no-store" }
       );
 
@@ -72,14 +72,7 @@ useEffect(() => {
         throw new Error(data.error || "Failed to load Sales AI output");
       }
 
-      if (!active || !data.output?.result) return;
-
-      const savedResult =
-        typeof data.output.result === "string"
-          ? JSON.parse(data.output.result)
-          : data.output.result;
-
-      setSalesResult(savedResult);
+      if (active) setSalesResult(data.salesStrategy ?? null);
     } catch (error) {
       console.error("Failed to restore Sales AI output:", error);
     }
@@ -90,7 +83,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [projectId, project?.userId]);
+}, [projectId]);
 
   const handleGenerate = async () => {
     const currentUser = auth.currentUser;
@@ -121,6 +114,7 @@ useEffect(() => {
           targetAudience,
           businessDescription,
           projectId,
+          requestId: crypto.randomUUID(),
         }),
       });
       const data = await response.json();
@@ -131,27 +125,7 @@ useEffect(() => {
 }
       console.log("Sales AI Response:", data);
       console.log(data);
-      setSalesResult(data.output ?? data);
-      const finalSalesResult = data.output ?? data;
-
-if (projectId && project?.userId && finalSalesResult) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: project.userId,
-      module: "sales",
-      result: finalSalesResult,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save Sales AI output");
-  }
-}
+      setSalesResult(data.salesStrategy ?? null);
     } catch (error) {
       console.error(error);
     } finally {
