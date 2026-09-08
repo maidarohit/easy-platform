@@ -7,8 +7,30 @@ export const SOCIAL_DATE_TIMEZONE = "UTC";
 export const SOCIAL_MARKETING_MODULES = ["marketing", "marketing-ai"] as const;
 const CUSTOMER_USABLE_MARKETING_FIELDS = ["contentIdeas", "adCopy"] as const;
 
+function safeSavedMarketingText(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\r\n?/g, "\n").trim();
+  if (!normalized || normalized.length > 20_000 || /<\s*\/?\s*[a-z][^>]*>|javascript\s*:|on[a-z]+\s*=|\u0000/i.test(normalized)) return null;
+  return normalized;
+}
+
+function currentSavedMarketingOutput(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const nested = record.marketingStrategy;
+  const candidate = nested && typeof nested === "object" && !Array.isArray(nested) ? nested as Record<string, unknown> : record;
+  const usable = Object.fromEntries(CUSTOMER_USABLE_MARKETING_FIELDS.flatMap((field) => {
+    const text = safeSavedMarketingText(candidate[field]);
+    return text ? [[field, text]] : [];
+  }));
+  return Object.keys(usable).length ? usable : null;
+}
+
 export function parseSavedOutput(result: string): Record<string, unknown> | null {
-  try { return validateMarketingOutput(JSON.parse(result)) ?? null; } catch { return null; }
+  try {
+    const parsed = JSON.parse(result);
+    return validateMarketingOutput(parsed) ?? currentSavedMarketingOutput(parsed);
+  } catch { return null; }
 }
 
 export function selectLatestSavedMarketing(rows: readonly Readonly<{ module: string; result: string }>[]) {

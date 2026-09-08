@@ -28,6 +28,14 @@ test("latest valid canonical or legacy marketing output supplies customer-usable
   assert.equal(recommendationFromSavedData(marketing, null).content, "Show a saved client transformation");
 });
 
+test("latest owned current Marketing shape hydrates without requiring every legacy field", () => {
+  const marketing = selectLatestSavedMarketing([
+    { module: "marketing", result: JSON.stringify({ marketingStrategy: { contentIdeas: "1. Share the latest saved service insight", adCopy: "Saved campaign copy" } }) },
+    { module: "marketing", result: JSON.stringify({ contentIdeas: "Older saved idea" }) },
+  ]);
+  assert.equal(recommendationFromSavedData(marketing, null).content, "Share the latest saved service insight");
+});
+
 test("confirmed DNA fields are deterministic fallback and internal strategy is not leaked", () => {
   const internalOnly = { marketingStrategy: "Internal implementation plan", socialMediaStrategy: "Internal channel strategy", kpis: "Private KPI plan" };
   const fallback = recommendationFromSavedData(internalOnly, { goals: { primaryGoal: "Attract more qualified enquiries" } });
@@ -79,6 +87,8 @@ test("refresh is idempotent and edits never mutate project outputs", async () =>
   const [route, schema, migration] = await Promise.all([source("app/api/social/route.ts"), source("app/db/schema.ts"), source("drizzle/0019_add-social-content-loop.sql")]);
   assert.match(route, /onConflictDoNothing/);
   assert.match(route, /projectBusinessDna\.confirmed, true/);
+  assert.match(route, /eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, access\.userId\)/);
+  assert.match(route, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\)\)/);
   assert.match(route, /dailyPost\.status === "proposed"[\s\S]*!dailyPost\.originalContent\.trim\(\)[\s\S]*!dailyPost\.editedContent\?\.trim\(\)/);
   assert.match(schema, /social_daily_posts_project_date_unique/);
   assert.match(migration, /social_daily_posts_project_date_unique/);
