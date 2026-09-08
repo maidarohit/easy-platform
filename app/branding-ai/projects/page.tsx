@@ -81,10 +81,15 @@ export default function BrandingProjectsPage() {
     router.push(`/branding-ai?projectId=${encodeURIComponent(project.id)}`);
   };
 
-  const deleteProject = async (id: string) => {
+  const deleteProject = async (project: BrandingProject) => {
+    const businessName = project.companyName.trim() || project.name.trim();
+    const confirmationName = window.prompt(`Type ${businessName} to permanently delete this business.`);
+    if (confirmationName !== businessName) return;
     try {
-      const response = await authenticatedFetch(`/api/projects?id=${id}`, {
+      const response = await authenticatedFetch("/api/projects", {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, confirmationName }),
       });
 
       if (!response.ok) {
@@ -92,7 +97,7 @@ export default function BrandingProjectsPage() {
       }
 
       setProjects((current) =>
-        current.filter((project) => project.id !== id)
+        current.filter((item) => item.id !== project.id)
       );
     } catch (error) {
       console.error("Delete project error:", error);
@@ -156,7 +161,7 @@ export default function BrandingProjectsPage() {
                   </button>
 
                   <button
-                    onClick={() => deleteProject(project.id)}
+                    onClick={() => deleteProject(project)}
                     className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300"
                   >
                     Delete

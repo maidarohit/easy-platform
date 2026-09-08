@@ -38,7 +38,7 @@ test("Projects scope every operation to the verified UID", async () => {
   assert.match(contents, /eq\(projects\.userId, userId\)/);
   assert.match(
     contents,
-    /\.delete\(projects\)[\s\S]*and\(eq\(projects\.id, id\), eq\(projects\.userId, userId\)\)/
+    /\.delete\(projects\)[\s\S]*and\(eq\(projects\.id, projectId\), eq\(projects\.userId, userId\)\)/
   );
   assert.match(
     contents,

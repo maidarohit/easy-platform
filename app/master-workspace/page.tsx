@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Sidebar from "../dashboard/components/Sidebar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
@@ -41,6 +42,7 @@ const MODULE_DETAILS: Readonly<Record<string, { number: string; title: string; d
 const fieldLabel = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 
 function MasterWorkspaceContent() {
+  const router = useRouter();
   const {
     project,
     projectId,
@@ -56,6 +58,10 @@ function MasterWorkspaceContent() {
   const [primaryLanguage, setPrimaryLanguage] = useState("en");
   const [languageSaving, setLanguageSaving] = useState(false);
   const [languageMessage, setLanguageMessage] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
   const savedLanguage =
@@ -156,6 +162,25 @@ const savePrimaryLanguage = async () => {
     setLanguageSaving(false);
   }
 };
+  const deleteBusiness = async () => {
+    if (!projectId || !businessName || deleteConfirmation !== businessName || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await authenticatedFetch("/api/projects", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId, confirmationName: deleteConfirmation }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to delete this business.");
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (deleteFailure) {
+      setDeleteError(deleteFailure instanceof Error ? deleteFailure.message : "Unable to delete this business.");
+      setDeleting(false);
+    }
+  };
   const projectLink = (path: string) =>
     projectId
       ? `${path}?projectId=${encodeURIComponent(projectId)}`
@@ -164,6 +189,7 @@ const savePrimaryLanguage = async () => {
   const modules = workspace?.sections.map((section) => ({ ...MODULE_DETAILS[section.module], ...section }))
     .filter((module) => Boolean(module.number)) ?? [];
   const displayedProject = workspace?.project ?? project;
+  const businessName = displayedProject?.companyName?.trim() || displayedProject?.name?.trim() || "";
 
   if (loading || workspaceLoading) {
     return (
@@ -512,8 +538,59 @@ const savePrimaryLanguage = async () => {
               </div>
             </Link>
           </section>
+
+          {projectId && businessName && (
+            <section className="mt-12 rounded-[24px] border border-red-200 bg-white/60 p-5 md:p-6">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-red-700">Danger Zone</p>
+              <div className="mt-3 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="text-lg font-semibold text-[#103c32]">Delete this business</h2>
+                  <p className="mt-1 text-sm leading-6 text-[#66756f]">Permanently remove this business workspace and its public website.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setDeleteError(""); setDeleteConfirmation(""); setDeleteDialogOpen(true); }}
+                  className="min-h-11 self-start rounded-xl border border-red-300 px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 sm:self-auto"
+                >
+                  Delete Business
+                </button>
+              </div>
+            </section>
+          )}
         </div>
       </main>
+
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deleting) setDeleteDialogOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-business-title" className="w-full max-w-lg rounded-[24px] bg-white p-6 shadow-2xl md:p-8">
+            <h2 id="delete-business-title" className="text-2xl font-semibold text-[#103c32]">Delete Business Permanently</h2>
+            <p className="mt-3 text-sm leading-6 text-[#66756f]">This permanently deletes this business and its saved workspace data. This does not cancel your Buzypeezy subscription.</p>
+            <label className="mt-6 block text-sm font-semibold text-[#103c32]" htmlFor="delete-business-confirmation">
+              Type <span className="font-bold">{businessName}</span> to confirm
+            </label>
+            <input
+              id="delete-business-confirmation"
+              value={deleteConfirmation}
+              onChange={(event) => { setDeleteConfirmation(event.target.value); setDeleteError(""); }}
+              disabled={deleting}
+              autoComplete="off"
+              className="mt-2 min-h-12 w-full rounded-xl border border-[#d8d2c6] px-4 text-[#103c32] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            />
+            {deleteError && <p className="mt-3 text-sm font-medium text-red-700" role="alert">{deleteError}</p>}
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" disabled={deleting} onClick={() => setDeleteDialogOpen(false)} className="min-h-11 rounded-xl px-5 text-sm font-semibold text-[#103c32] disabled:opacity-50">Cancel</button>
+              <button
+                type="button"
+                disabled={deleting || deleteConfirmation !== businessName}
+                onClick={() => void deleteBusiness()}
+                className="min-h-11 rounded-xl bg-red-700 px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {deleting ? "Deleting..." : "Delete Business Permanently"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

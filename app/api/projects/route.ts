@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/app/db";
 import { projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
 import {
   MalformedJsonBodyError,
@@ -11,6 +11,22 @@ import {
 } from "@/app/lib/request-body";
 import { validateProjectMutationBody } from "@/app/lib/project-request-validation";
 import { supportedLanguageOrEnglish } from "@/app/lib/supported-languages";
+import {
+  aiManagerJobs,
+  businessPublications,
+  businessPublicationVersions,
+  projectMemory,
+  projectOutputs,
+  publicBusinessInquiries,
+  publicBusinessOrderItems,
+  publicBusinessOrderPayments,
+  publicBusinessOrders,
+  publicBusinessPaymentEvents,
+  publishedWebsites,
+  websitePublicationVersions,
+} from "@/app/db/schema";
+import { handleProjectDelete } from "@/app/lib/project-deletion";
+import { deleteBusinessProjectStorage } from "@/app/lib/firebase-admin-storage";
 
 const MAX_PROJECT_BODY_BYTES = 32 * 1024;
 
@@ -278,38 +294,55 @@ if (typeof body.result === "string") {
   }
 }
 export async function DELETE(req: Request) {
-  let userId: string;
+  return handleProjectDelete(req, {
+    verify: verifyFirebaseIdToken,
+    deleteProjectStorage: deleteBusinessProjectStorage,
+    deleteOwnedProject: async ({ userId, projectId, confirmationName }) => db.transaction(async (transaction) => {
+      await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`${userId}:projects`}))`);
+      const [project] = await transaction.select({ id: projects.id, name: projects.name, companyName: projects.companyName })
+        .from(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+        .limit(1)
+        .for("update");
+      if (!project) return "not_found" as const;
+      const businessName = project.companyName?.trim() || project.name.trim();
+      if (businessName !== confirmationName) return "confirmation_mismatch" as const;
 
-  try {
-    userId = (await verifyFirebaseIdToken(req)).uid;
-  } catch {
-    return NextResponse.json({ error: "Authentication is required" }, { status: 401 });
-  }
+      const orders = await transaction.select({ id: publicBusinessOrders.id })
+        .from(publicBusinessOrders)
+        .where(eq(publicBusinessOrders.projectId, projectId));
+      const orderIds = orders.map((order) => order.id);
+      if (orderIds.length > 0) {
+        await transaction.delete(publicBusinessPaymentEvents).where(inArray(publicBusinessPaymentEvents.orderId, orderIds));
+        await transaction.delete(publicBusinessOrderPayments).where(inArray(publicBusinessOrderPayments.orderId, orderIds));
+        await transaction.delete(publicBusinessOrderItems).where(inArray(publicBusinessOrderItems.orderId, orderIds));
+        await transaction.delete(publicBusinessOrders).where(inArray(publicBusinessOrders.id, orderIds));
+      }
 
-  try {
-    const { searchParams } = new URL(req.url);
-    const id = searchParams.get("id");
+      const publications = await transaction.select({ id: businessPublications.id })
+        .from(businessPublications).where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, userId)));
+      const publicationIds = publications.map((publication) => publication.id);
+      if (publicationIds.length > 0) {
+        await transaction.delete(publicBusinessInquiries).where(inArray(publicBusinessInquiries.publicationId, publicationIds));
+        await transaction.delete(businessPublicationVersions).where(inArray(businessPublicationVersions.publicationId, publicationIds));
+        await transaction.delete(businessPublications).where(inArray(businessPublications.id, publicationIds));
+      }
 
-    if (!id) {
-      return NextResponse.json(
-        { error: "Project id is required" },
-        { status: 400 }
-      );
-    }
+      const websites = await transaction.select({ id: publishedWebsites.id })
+        .from(publishedWebsites).where(and(eq(publishedWebsites.projectId, projectId), eq(publishedWebsites.ownerUid, userId)));
+      const websiteIds = websites.map((website) => website.id);
+      if (websiteIds.length > 0) {
+        await transaction.delete(websitePublicationVersions).where(inArray(websitePublicationVersions.publishedWebsiteId, websiteIds));
+        await transaction.delete(publishedWebsites).where(inArray(publishedWebsites.id, websiteIds));
+      }
 
-    await db
-      .delete(projects)
-      .where(and(eq(projects.id, id), eq(projects.userId, userId)));
-
-    return NextResponse.json({
-      success: true,
-    });
-  } catch (error) {
-    console.error("Delete project error:", error);
-
-    return NextResponse.json(
-      { error: "Failed to delete project" },
-      { status: 500 }
-    );
-  }
+      await transaction.delete(aiManagerJobs).where(and(eq(aiManagerJobs.projectId, projectId), eq(aiManagerJobs.userId, userId)));
+      await transaction.delete(projectMemory).where(and(eq(projectMemory.projectId, projectId), eq(projectMemory.userId, userId)));
+      await transaction.delete(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, userId)));
+      const [deleted] = await transaction.delete(projects)
+        .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
+        .returning({ id: projects.id });
+      return deleted ? "deleted" as const : "not_found" as const;
+    }),
+  });
 }

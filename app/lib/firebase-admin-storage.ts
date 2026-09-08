@@ -33,6 +33,11 @@ export async function saveBusinessHeroObject(input: {
   return firebaseOwnerDownloadUrl(bucket.name, input.objectPath, input.downloadToken);
 }
 
+export async function deleteBusinessProjectStorage(userId: string, projectId: string) {
+  const prefix = `business/${userId}/${projectId}/`;
+  await getFirebaseAdminStorageBucket().deleteFiles({ prefix });
+}
+
 export const firebaseBusinessVideoStorage: BusinessVideoStorage = {
   async createSignedUploadUrl(input) {
     const bucket = getFirebaseAdminStorageBucket();
