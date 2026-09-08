@@ -1,6 +1,7 @@
 import "server-only";
 import { isUsableBusinessUploadedSrc, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
+import { concisePublicCopy, publicIndustryLabel, publicServiceText } from "@/app/lib/public-website-presentation";
 
 export const WEBSITE_TEMPLATES = [
   "Modern",
@@ -224,21 +225,21 @@ export function publicWebsiteSeoDescription(snapshot: WebsitePublicationSnapshot
 }
 
 export function publicWebsitePublicationView(snapshot: WebsitePublicationSnapshot): WebsitePublicationSnapshot {
-  const overview = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, MAX_LONG);
+  const overview = concisePublicCopy(publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, MAX_LONG)) || "";
   const edits = snapshot.websiteEdits ? {
     ...snapshot.websiteEdits,
     companyName: publicWebsiteText(snapshot.websiteEdits.companyName, MAX_SHORT) || snapshot.companyName,
     heroHeadline: publicWebsiteText(snapshot.websiteEdits.heroHeadline, MAX_SHORT),
     heroDescription: overview,
     aboutText: publicWebsiteText(snapshot.websiteEdits.aboutText, MAX_LONG),
-    servicesText: publicWebsiteText(snapshot.websiteEdits.servicesText, MAX_LONG),
+    servicesText: publicServiceText(publicWebsiteText(snapshot.websiteEdits.servicesText, MAX_LONG)) || "",
     phone: "", email: "", address: "", whatsapp: "",
     primaryCtaLabel: publicWebsiteText(snapshot.websiteEdits.primaryCtaLabel, MAX_SHORT) || "Contact",
     primaryCtaLink: "#contact",
   } : undefined;
   return {
     ...snapshot,
-    industry: publicWebsiteText(snapshot.industry, MAX_SHORT),
+    industry: publicIndustryLabel(publicWebsiteText(snapshot.industry, MAX_SHORT)) || "",
     websiteGoal: edits?.primaryCtaLabel || "Contact",
     websiteRequirements: "",
     websiteOutput: {

@@ -1,9 +1,10 @@
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import { publicContactMethods } from "@/app/lib/public-contact";
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
+import { concisePublicCopy, publicIndustryLabel, publicServiceTitle } from "@/app/lib/public-website-presentation";
 
 const INTERNAL_PAGE_LABELS = new Set(["home", "homepage", "landing", "landing page", "services", "service detail", "service detail page", "service detail pages", "portfolio", "portfolio case studies", "case studies", "project detail", "project details", "pricing", "pricing packages", "process", "about", "contact", "faq", "blog"]);
-const INTERNAL_PUBLIC_TEXT = /\b(?:primary objective|segmentation|lead scoring|day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|implementation notes?|content calendar|campaign timeline|customer acquisition|analytics strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword(?:s| research| strategy)?|meta titles?|meta descriptions?|kpis?|conversion rate|conversion flow|marketing score|ai manager|ai agent|prompt|raw json|model output)\b/i;
+const INTERNAL_PUBLIC_TEXT = /\b(?:primary objective|segmentation|lead scoring|day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|implementation notes?|planning notes?|scope\s*,\s*process\s*,\s*sample deliverables|content calendar|campaign timeline|customer acquisition|analytics strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword(?:s| research| strategy)?|meta titles?|meta descriptions?|kpis?|conversion rate|conversion flow|marketing score|ai manager|ai agent|prompt|raw json|model output)\b/i;
 const UNSAFE_FACT_TEXT = /(?:\b(?:free\s*trial|start\s+(?:a\s+)?free\s*trial|freemium|real\s+results?|proven\s+results?|guaranteed?(?:\s+(?:results?|leads?|rankings?))?|rank(?:ed|ing)?\s*#?\s*1|case\s+stud(?:y|ies)|placeholders?|lorem\s+ipsum)\b|(?:[$â‚¹â‚¬Â£]\s*(?:[xX]\b|\d))|\bTBD\b|\b(?:free|growth|pro)\s+plans?\b|\btestimonials?\b|\b(?:award(?:ed|s)?|certif(?:ied|ication|ications))\b|\b\d+(?:\.\d+)?\s*(?:x|Ã—)\s+(?:leads?|revenue|sales|traffic|visitors?|conversions?|growth)\b|\b\d+(?:\.\d+)?\s*%|\b\d[\d,]*(?:\.\d+)?\+?\s+(?:customers?|clients?|projects?|years?|leads?|visitors?|conversions?|sales|rankings?)\b)/i;
 const LABEL_PREFIX = /^(?:persona|audience|target audience|customer segment|step|phase|service|product|offer)\s*\d*\s*[:–—-]\s*/i;
 const LIST_MARKER = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
@@ -50,12 +51,14 @@ export function publicServices(snapshot: PublishedBusinessSnapshot): PublicServi
     const label = normalizedLabel(item.title);
     return label.length >= 3 && !INTERNAL_PAGE_LABELS.has(label) && Boolean(clean(item.title, 80)) &&
       !INTERNAL_PUBLIC_TEXT.test(`${item.title} ${item.description}`);
-  }).slice(0, 6).map((item) => ({ title: clean(item.title, 80)!, description: clean(item.description) ?? "" }));
+  }).slice(0, 6).map((item) => ({ title: publicServiceTitle(clean(item.title, 100))!, description: clean(item.description) ?? "" }))
+    .filter((item) => Boolean(item.title));
   if (direct.length > 0) return direct;
   const savedItems = pieces(snapshot.website?.services, 6).map(card).filter((item) => {
     const label = normalizedLabel(item.title);
     return label.length >= 3 && !INTERNAL_PAGE_LABELS.has(label) && Boolean(clean(item.title, 80));
-  }).map((item) => ({ title: clean(item.title, 80)!, description: clean(item.description) }));
+  }).map((item) => ({ title: publicServiceTitle(clean(item.title, 100))!, description: clean(item.description) }))
+    .filter((item) => Boolean(item.title));
   if (savedItems.length > 0) return savedItems;
   const sources = [snapshot.website?.services, snapshot.business.description, snapshot.website?.supportingText]
     .filter((value): value is string => Boolean(value));
@@ -70,9 +73,9 @@ export function publicServices(snapshot: PublishedBusinessSnapshot): PublicServi
   return [...found.values()].slice(0, 6).map((title) => ({ title, description: null }));
 }
 
-export function publicServicesSummary(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.business.description, 650) || clean(snapshot.website?.supportingText, 650); }
+export function publicServicesSummary(snapshot: PublishedBusinessSnapshot) { return concisePublicCopy(clean(snapshot.business.description, 650)) || concisePublicCopy(clean(snapshot.website?.supportingText, 650)); }
 export function publicCallToAction(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.primaryCta, 80) || "Get in Touch"; }
-export function publicHeroCopy(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.supportingText, 650) || clean(snapshot.business.description, 650); }
+export function publicHeroCopy(snapshot: PublishedBusinessSnapshot) { return concisePublicCopy(clean(snapshot.website?.supportingText, 650)) || concisePublicCopy(clean(snapshot.business.description, 650)); }
 function seoSnippet(value: string | null | undefined) {
   const candidate = clean(value, 180);
   if (!candidate) return null;
@@ -110,8 +113,8 @@ export function publicBusinessView(snapshot: PublishedBusinessSnapshot): Publish
   } : null;
   return {
     ...snapshot,
-    business: { ...snapshot.business, industry: clean(snapshot.business.industry, 120),
-      goal: null, description: clean(snapshot.business.description, 650) },
+    business: { ...snapshot.business, industry: publicIndustryLabel(clean(snapshot.business.industry, 120)),
+      goal: null, description: concisePublicCopy(clean(snapshot.business.description, 650), 420) },
     brand: snapshot.brand ? { ...snapshot.brand, tagline: clean(snapshot.brand.tagline, 180),
       colourDirection: null, typography: null, voice: null, logoConcept: null,
       story: clean(snapshot.brand.story, 900) } : null,
@@ -122,7 +125,7 @@ export function publicBusinessView(snapshot: PublishedBusinessSnapshot): Publish
     journey: null,
   };
 }
-export function publicAudience(_snapshot: PublishedBusinessSnapshot): PublicCard[] { return []; }
+export function publicAudience(snapshot: PublishedBusinessSnapshot): PublicCard[] { void snapshot; return []; }
 export function publicProcess(snapshot: PublishedBusinessSnapshot) {
   return /\b(?:shop|store|ecommerce|e-commerce|retail|product)\b/i.test(`${snapshot.business.industry} ${snapshot.website?.services}`)
     ? ["Explore the range", "Choose what fits", "Place your enquiry or order"]

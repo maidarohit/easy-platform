@@ -12,6 +12,7 @@ import CreativeTemplate from "./website-templates/CreativeTemplate";
 import MinimalTemplate from "./website-templates/MinimalTemplate";
 import DarkTemplate from "./website-templates/DarkTemplate";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
+import { showcaseGridClass } from "@/app/lib/public-website-presentation";
 
 type WebsitePreviewProps = {
   companyName: string;
@@ -198,8 +199,8 @@ const ui =
             {resolvedMedia.work.length > 0 && (
               <section>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Selected work</p>
-                <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                  {resolvedMedia.work.map((visual) => <WebsiteMediaVisual key={visual.src} media={visual} className="h-72 rounded-2xl" />)}
+                <div className={`mt-5 grid gap-5 ${showcaseGridClass(resolvedMedia.work.length)}`}>
+                  {resolvedMedia.work.map((visual) => <WebsiteMediaVisual key={visual.src} media={visual} className="aspect-[4/3] max-h-[28rem] w-full rounded-2xl" />)}
                 </div>
               </section>
             )}
