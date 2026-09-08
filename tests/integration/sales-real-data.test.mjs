@@ -84,6 +84,22 @@ test("final Sales hydration softens payment, booking, pipeline and upsell polici
   assert.match(text, /connect LinkedIn before publishing/);
 });
 
+test("saved hydration catches percentage ranges, reversed visit credits, reservations and placeholder timelines", () => {
+  const saved = {
+    pricingRecommendations: "Apply a +20–40% uplift for premium work. Require a deposit and balance due at handover.",
+    proposal: "A ₹2,000 fee is charged for the site visit and credited later. Reserve your slot today.",
+    actionPlan: "Delivery timeline is within [X] weeks. Three slots available this month. Book before Friday.",
+  };
+  const result = readStoredSalesInsights(JSON.stringify(saved), salesContext);
+  const text = JSON.stringify(result);
+  assert.doesNotMatch(text, /20–40%|deposit and balance|2,000 fee|credited later|Reserve your slot|\[X\] weeks|slots available|Book before/i);
+  assert.match(text, /pricing uplifts as optional hypotheses/);
+  assert.match(text, /Confirm all percentages, deposits, credits/);
+  assert.match(text, /booking process or checklist only after/);
+  assert.match(text, /Confirm delivery timelines/);
+  assert.match(text, /Use urgency only when/);
+});
+
 test("saved Sales output is normalized on authenticated GET without generation", async () => {
   const restored = readStoredSalesInsights(JSON.stringify({ output: { executiveSummary: "Use the 2 verified enquiries. Forecast 100 sales." } }), metrics);
   assert.match(restored.executiveSummary, /^Use the 2 verified enquiries\./);
