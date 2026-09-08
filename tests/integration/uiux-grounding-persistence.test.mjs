@@ -8,6 +8,7 @@ const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "ut
 const context = {
   website: { published: true, url: "https://buzypeezy.ai/business/acme" },
   business: { name: "Acme", industry: "Design", location: "Bengaluru", services: ["Interior design"], description: "Interior design in Bengaluru.", targetAudience: "Homeowners", brandStyle: "Modern" },
+  branding: { palette: "Navy #001122", typography: "Inter", direction: "Modern and clear" },
 };
 const fields = ["accessibility", "designSystem", "desktopExperience", "microInteractions", "mobileExperience", "uiuxStrategy", "userFlow", "userPersonas", "wireframes"];
 const output = (text) => Object.fromEntries(fields.map((field) => [field, text]));
@@ -21,6 +22,22 @@ test("UI/UX sanitizer treats research, metrics and compliance as unverified", ()
 test("saved UI/UX output is validated and sanitized without generation", () => {
   const result = readStoredUiuxOutput(JSON.stringify(output("Research shows this flow works.")), context, validateUiuxOutput);
   assert.match(result.uiuxStrategy, /hypotheses/);
+});
+
+test("personas are hypothetical and unsupported capabilities remain proposed", () => {
+  const result = sanitizeUiuxOutput(output("Add a dashboard, configurator, e-sign, calendar, automation, awards, testimonials, office locations and financing."), context);
+  assert.match(result.userPersonas, /^Hypothetical \/ Proposed personas:/);
+  assert.match(result.uiuxStrategy, /Proposed recommendation — validate with the business owner/);
+  assert.match(result.designSystem, /Verified Branding direction — palette: Navy #001122; typography: Inter; direction: Modern and clear/);
+});
+
+test("owned UI/UX context reads latest owned Branding direction", async () => {
+  const contextSource = await source("app/lib/uiux-business-context.ts");
+  const route = await source("app/api/uiux-ai/route.ts");
+  assert.match(contextSource, /eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, userId\)[\s\S]*eq\(projectOutputs\.module, "branding"\)/);
+  assert.match(contextSource, /desc\(projectOutputs\.updatedAt\)/);
+  assert.match(contextSource, /palette: branding\.colorPalette[\s\S]*typography: branding\.typography[\s\S]*direction: branding\.brandStyleGuide/);
+  assert.match(route, /branding: context\.branding/);
 });
 
 test("standalone UI/UX uses owned context, idempotency and transactional persistence", async () => {

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   const startedAt = Date.now();
   try {
     const payload = { companyName: context.business.name, industry: context.business.industry, targetAudience: context.business.targetAudience, brandStyle: context.business.brandStyle, brandDescription: context.business.description,
-      verifiedBusinessContext: { website: context.website, location: context.business.location, services: context.business.services },
+      verifiedBusinessContext: { website: context.website, location: context.business.location, services: context.business.services, branding: context.branding },
       groundingRules: ["Treat verifiedBusinessContext as authoritative.", "Treat personas, research findings, metrics, conversion improvements, usability results, and accessibility compliance as unverified unless explicitly supplied."] };
     const response = await fetch(webhook.url, { method: "POST", headers: webhook.headers, body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(120_000) });
     const usage = parseAiUsageMetadata(response.headers);
