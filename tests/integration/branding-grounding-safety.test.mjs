@@ -66,6 +66,15 @@ test("standalone Branding uses canonical context and owner-scoped no-usage hydra
   assert.doesNotMatch(page, /authenticatedFetch\("\/api\/project-outputs"|userId:\s*currentUser\.uid/);
 });
 
+test("late project-memory hydration cannot erase restored Branding output", async () => {
+  const page = await source("app/branding-ai/page.tsx");
+  const projectMemoryEffect = page.slice(page.indexOf("useEffect(() => {"), page.indexOf("useEffect(() => {", page.indexOf("useEffect(() => {") + 1));
+  const outputHydrationEffect = page.slice(page.indexOf("useEffect(() => {", page.indexOf("useEffect(() => {") + 1), page.indexOf("const colors"));
+  assert.doesNotMatch(projectMemoryEffect, /setBrandResult\(null\)/);
+  assert.match(outputHydrationEffect, /setBrandResult\(null\)/);
+  assert.match(outputHydrationEffect, /setBrandResult\(\(data\.output \?\? null\)/);
+});
+
 test("Branding persistence precedes success and failures release idempotent usage", async () => {
   const [route, persistence] = await Promise.all([source("app/api/branding-ai/route.ts"), source("app/lib/branding-generation-persistence.ts")]);
   assert.match(route, /claimIdempotentAiUsage/);

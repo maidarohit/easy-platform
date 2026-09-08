@@ -28,7 +28,6 @@ useEffect(() => {
 
     const activeProject = project?.id === projectId ? project : null;
 
-    setBrandResult(null);
     setCompanyName(activeProject?.companyName || "");
     setIndustry(activeProject?.industry || "");
     setTargetAudience(activeProject?.targetAudience || "");
@@ -43,6 +42,9 @@ useEffect(() => {
   if (!projectId) return;
 
   let active = true;
+  queueMicrotask(() => {
+    if (active) setBrandResult(null);
+  });
 
   const loadSavedBrandingOutput = async () => {
     try {
