@@ -5,8 +5,9 @@ const RESEARCH = /\b(?:research (?:shows?|found)|users? (?:said|reported|preferr
 const METRIC = /\b(?:conversion|engagement|bounce rate|task completion|time on task|success rate|click[- ]through|retention)\b[^.!?\n]{0,80}(?:\d|%|increase|improve|lift|reduce)/i;
 const COMPLIANCE = /\b(?:wcag|ada|accessibility)[^.!?\n]{0,80}\b(?:compliant|certified|passes?|meets?|conforms?)\b/i;
 const LIVE_CLAIM = /\b(?:the (?:current|live|published) (?:site|website)|website (?:currently|already))\b/i;
-const UNVERIFIED_CAPABILITY = /\b(?:dashboard|configurator|e-?sign(?:ature)?|calendar|automation|awards?|testimonials?|office locations?|financing)\b/i;
+const UNVERIFIED_CAPABILITY = /\b(?:dashboard|configurator|e-?sign(?:ature)?|scheduling|calendar|automated? emails?|automation|milestone payments?|3d viewers?|awards?|testimonials?|office locations?|financing|referrals?|client portals?|integrations?)\b/gi;
 const PROPOSED = /^\s*(?:proposed|recommended|consider|optional|hypothetical|suggested)\b/i;
+const BRAND_SYSTEM = /\b(?:colou?r(?:s| scheme)?|palette|fonts?|typeface|typography|brand voice|tone of voice|visual direction|brand direction)\b/i;
 
 function verifiedCorpus(context: UiuxBusinessContext) {
   return [context.business.name, context.business.industry, context.business.location,
@@ -22,9 +23,9 @@ function sanitizeSentence(sentence: string, context: UiuxBusinessContext, corpus
       ? "Review the verified published website before treating any interface observation as a measured finding."
       : "No published website is available for verified interface findings.";
   }
-  const capability = sentence.match(UNVERIFIED_CAPABILITY)?.[0]?.toLowerCase();
-  if (capability && !corpus.includes(capability) && !PROPOSED.test(sentence)) {
-    return `Proposed recommendation — validate with the business owner: ${sentence}`;
+  const capabilities = [...sentence.matchAll(UNVERIFIED_CAPABILITY)].map((match) => match[0].toLowerCase());
+  if (capabilities.some((capability) => !corpus.includes(capability)) && !PROPOSED.test(sentence)) {
+    return `Proposed recommendation — ${sentence}`;
   }
   return sentence;
 }
@@ -34,11 +35,13 @@ export function sanitizeUiuxOutput(value: unknown, context: UiuxBusinessContext)
   const corpus = verifiedCorpus(context);
   const clean = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => {
     if (typeof item !== "string") return [key, item];
-    const sentences = item.replace(/\r/g, "").split(/\n+|(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean);
+    let sentences = item.replace(/\r/g, "").split(/\n+|(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean);
+    if (context.branding) sentences = sentences.filter((sentence) => !BRAND_SYSTEM.test(sentence));
     let text = [...new Set(sentences.map((sentence) => sanitizeSentence(sentence, context, corpus)))].join("\n");
+    if (key === "colourScheme" && context.branding) text = context.branding.palette;
     if (key === "userPersonas" && !/^Hypothetical \/ Proposed personas:/i.test(text)) text = `Hypothetical / Proposed personas:\n${text}`;
     if (key === "designSystem" && context.branding) {
-      const grounding = `Verified Branding direction — palette: ${context.branding.palette}; typography: ${context.branding.typography}; direction: ${context.branding.direction}.`;
+      const grounding = `Verified Branding system — palette: ${context.branding.palette}; typography: ${context.branding.typography}; brand voice: ${context.branding.voice}; visual direction: ${context.branding.direction}.`;
       if (!text.includes(grounding)) text = `${grounding}\n${text}`;
     }
     return [key, text];

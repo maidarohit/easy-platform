@@ -23,6 +23,7 @@ export async function loadOwnedUiuxContext(userId: string, projectId: string) {
     branding: branding ? {
       palette: branding.colorPalette,
       typography: branding.typography,
+      voice: branding.brandVoice,
       direction: branding.brandStyleGuide,
     } : null,
   };

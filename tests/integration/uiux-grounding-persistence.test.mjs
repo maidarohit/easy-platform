@@ -8,7 +8,7 @@ const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "ut
 const context = {
   website: { published: true, url: "https://buzypeezy.ai/business/acme" },
   business: { name: "Acme", industry: "Design", location: "Bengaluru", services: ["Interior design"], description: "Interior design in Bengaluru.", targetAudience: "Homeowners", brandStyle: "Modern" },
-  branding: { palette: "Navy #001122", typography: "Inter", direction: "Modern and clear" },
+  branding: { palette: "Navy #001122", typography: "Inter", voice: "Clear and confident", direction: "Modern and clear" },
 };
 const fields = ["accessibility", "designSystem", "desktopExperience", "microInteractions", "mobileExperience", "uiuxStrategy", "userFlow", "userPersonas", "wireframes"];
 const output = (text) => Object.fromEntries(fields.map((field) => [field, text]));
@@ -27,8 +27,21 @@ test("saved UI/UX output is validated and sanitized without generation", () => {
 test("personas are hypothetical and unsupported capabilities remain proposed", () => {
   const result = sanitizeUiuxOutput(output("Add a dashboard, configurator, e-sign, calendar, automation, awards, testimonials, office locations and financing."), context);
   assert.match(result.userPersonas, /^Hypothetical \/ Proposed personas:/);
-  assert.match(result.uiuxStrategy, /Proposed recommendation — validate with the business owner/);
-  assert.match(result.designSystem, /Verified Branding direction — palette: Navy #001122; typography: Inter; direction: Modern and clear/);
+  assert.match(result.uiuxStrategy, /Proposed recommendation —/);
+  assert.doesNotMatch(result.uiuxStrategy, /validate with the business owner/i);
+  assert.match(result.designSystem, /Verified Branding system — palette: Navy #001122; typography: Inter; brand voice: Clear and confident; visual direction: Modern and clear/);
+});
+
+test("verified Branding replaces conflicting legacy palettes, fonts and direction", () => {
+  const legacy = { ...output("Use a red and gold palette. Use Playfair and Roboto fonts. The brand voice is playful. Add an existing client portal and 3D viewer."), colourScheme: "Red #ff0000 and gold #ffaa00" };
+  const result = readStoredUiuxOutput(JSON.stringify(legacy), context, validateUiuxOutput);
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, /red and gold|Playfair|Roboto|voice is playful/i);
+  assert.match(result.designSystem, /Navy #001122/);
+  assert.match(result.designSystem, /Inter/);
+  assert.match(result.designSystem, /Clear and confident/);
+  assert.equal(result.colourScheme, "Navy #001122");
+  assert.match(result.uiuxStrategy, /Proposed recommendation —.*client portal and 3D viewer/i);
 });
 
 test("owned UI/UX context reads latest owned Branding direction", async () => {
@@ -36,7 +49,7 @@ test("owned UI/UX context reads latest owned Branding direction", async () => {
   const route = await source("app/api/uiux-ai/route.ts");
   assert.match(contextSource, /eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, userId\)[\s\S]*eq\(projectOutputs\.module, "branding"\)/);
   assert.match(contextSource, /desc\(projectOutputs\.updatedAt\)/);
-  assert.match(contextSource, /palette: branding\.colorPalette[\s\S]*typography: branding\.typography[\s\S]*direction: branding\.brandStyleGuide/);
+  assert.match(contextSource, /palette: branding\.colorPalette[\s\S]*typography: branding\.typography[\s\S]*voice: branding\.brandVoice[\s\S]*direction: branding\.brandStyleGuide/);
   assert.match(route, /branding: context\.branding/);
 });
 
