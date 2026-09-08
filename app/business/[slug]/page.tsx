@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/app/db";
 import { businessPublications, businessPublicationVersions, projectMerchantPaymentAccounts, projectProducts } from "@/app/db/schema";
 import { validateBusinessSlug, validatePublishedBusinessSnapshot } from "@/app/lib/business-publication";
-import { publicBusinessKind, publicBusinessView, publicCallToAction, publicContact, publicHeroCopy, publicProcess, publicSeoDescription, publicServices, publicServicesSummary, publicStory, publicValuePoints } from "@/app/lib/public-business-presentation";
+import { publicBusinessKind, publicBusinessView, publicCallToAction, publicContact, publicHeroCopy, publicProcess, publicSeoDescription, publicSeoTitle, publicServices, publicServicesSummary, publicStory, publicValuePoints } from "@/app/lib/public-business-presentation";
 import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
 import { OrderForm } from "@/app/business/[slug]/OrderForm";
 import { BusinessSiteVisual } from "@/app/components/BusinessSiteVisual";
@@ -13,6 +13,7 @@ import { resolveWebsiteMedia, uploadedSrcFromRecord } from "@/app/lib/business-s
 import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 import { isStoreRazorpayCheckoutEnabled, merchantAccountCanAcceptCheckout } from "@/app/lib/store-checkout-core";
 import { getStoreCheckoutPublicKey } from "@/app/lib/store-checkout-razorpay";
+import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
 
 export const dynamic = "force-dynamic";
 function formatInr(pricePaise: number) {
@@ -41,12 +42,15 @@ const loadPublishedBusiness = cache(async (candidate: string) => {
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ service?: string | string[]; product?: string | string[] }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const published = await loadPublishedBusiness(decodeURIComponent((await params).slug));
+  const slug = (await params).slug;
+  const published = await loadPublishedBusiness(decodeURIComponent(slug));
   if (!published) return { title: "Business not found" };
   const snapshot = publicBusinessView(published.snapshot);
-  const title = snapshot.search?.title || snapshot.business.name;
+  const title = publicSeoTitle(snapshot);
   const description = publicSeoDescription(snapshot);
-  return { title, description, robots: { index: true, follow: true }, openGraph: { title, description, type: "website" } };
+  const origin = canonicalApplicationOrigin();
+  const canonical = origin ? `${origin}/business/${encodeURIComponent(slug)}` : undefined;
+  return { title, description, ...(canonical ? { alternates: { canonical } } : {}), robots: { index: true, follow: true }, openGraph: { title, description, ...(canonical ? { url: canonical } : {}), type: "website" } };
 }
 
 export default async function PublicBusinessPage({ params, searchParams }: Props) {

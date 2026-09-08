@@ -1,16 +1,17 @@
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import { publicContactMethods } from "@/app/lib/public-contact";
+import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 
 const INTERNAL_PAGE_LABELS = new Set(["home", "homepage", "landing", "landing page", "services", "service detail", "service detail page", "service detail pages", "portfolio", "portfolio case studies", "case studies", "project detail", "project details", "pricing", "pricing packages", "process", "about", "contact", "faq", "blog"]);
 const INTERNAL_PUBLIC_TEXT = /\b(?:primary objective|segmentation|lead scoring|day\s*\d+|outreach sequence|follow[- ]?up schedule|connection request|cold email|prospecting|sales script|implementation strategy|implementation notes?|content calendar|campaign timeline|customer acquisition|analytics strategy|site ?map|page layout|individual pages?|wireframes?|deliverables and timeline|keyword(?:s| research| strategy)?|meta titles?|meta descriptions?|kpis?|conversion rate|conversion flow|marketing score|ai manager|ai agent|prompt|raw json|model output)\b/i;
-const UNSAFE_FACT_TEXT = /(?:\$\s*[xX]\b|\bTBD\b|\b(?:free|growth|pro)\s+plans?\b|\btestimonials?\b|\b(?:award(?:ed|s)?|certif(?:ied|ication|ications))\b|\bguaranteed?\b|\b\d+(?:\.\d+)?%\b|\b\d+\+?\s+(?:customers?|clients?|projects?|years?)\b)/i;
+const UNSAFE_FACT_TEXT = /(?:\b(?:free\s*trial|start\s+(?:a\s+)?free\s*trial|freemium|real\s+results?|proven\s+results?|guaranteed?(?:\s+(?:results?|leads?|rankings?))?|rank(?:ed|ing)?\s*#?\s*1|case\s+stud(?:y|ies)|placeholders?|lorem\s+ipsum)\b|(?:[$â‚¹â‚¬Â£]\s*(?:[xX]\b|\d))|\bTBD\b|\b(?:free|growth|pro)\s+plans?\b|\btestimonials?\b|\b(?:award(?:ed|s)?|certif(?:ied|ication|ications))\b|\b\d+(?:\.\d+)?\s*(?:x|Ã—)\s+(?:leads?|revenue|sales|traffic|visitors?|conversions?|growth)\b|\b\d+(?:\.\d+)?\s*%|\b\d[\d,]*(?:\.\d+)?\+?\s+(?:customers?|clients?|projects?|years?|leads?|visitors?|conversions?|sales|rankings?)\b)/i;
 const LABEL_PREFIX = /^(?:persona|audience|target audience|customer segment|step|phase|service|product|offer)\s*\d*\s*[:–—-]\s*/i;
 const LIST_MARKER = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
 function normalizedLabel(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 function clean(value: string | null | undefined, maximum = 320) {
   const candidate = value?.replace(LIST_MARKER, "").replace(LABEL_PREFIX, "").trim();
-  if (!candidate || candidate.length > maximum || INTERNAL_PUBLIC_TEXT.test(candidate) ||
+  if (!candidate || candidate.length > maximum || INTERNAL_PUBLIC_TEXT.test(candidate) || hasUnsupportedPublicClaim(candidate) ||
       UNSAFE_FACT_TEXT.test(candidate) || /(?:\.\.\.|…|â€¦)\s*$/.test(candidate)) return null;
   const paragraphs = candidate.split(/\r?\n\s*\r?\n/).map((item) => item.trim()).filter(Boolean);
   return paragraphs.filter((item, index) => paragraphs.findIndex((other) => normalizedLabel(other) === normalizedLabel(item)) === index).join("\n\n") || null;
@@ -63,7 +64,28 @@ export function publicServices(snapshot: PublishedBusinessSnapshot): PublicServi
 export function publicServicesSummary(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.business.description, 650) || clean(snapshot.website?.supportingText, 650); }
 export function publicCallToAction(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.primaryCta, 80) || "Get in Touch"; }
 export function publicHeroCopy(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.website?.supportingText, 650) || clean(snapshot.business.description, 650); }
-export function publicSeoDescription(snapshot: PublishedBusinessSnapshot) { return clean(snapshot.search?.description, 650) || publicHeroCopy(snapshot) || undefined; }
+function seoSnippet(value: string | null | undefined) {
+  const candidate = clean(value, 180);
+  if (!candidate) return null;
+  if (candidate.length <= 165) return candidate;
+  const sentence = candidate.match(/^.{70,160}?[.!?](?=\s|$)/)?.[0];
+  return sentence ?? null;
+}
+export function publicSeoTitle(snapshot: PublishedBusinessSnapshot) {
+  const businessName = clean(snapshot.business.name, 70) || "Business";
+  const savedTitle = clean(snapshot.search?.title, 70);
+  if (savedTitle && normalizedLabel(savedTitle).includes(normalizedLabel(businessName))) return savedTitle;
+  const context = clean(snapshot.business.industry, 38);
+  const location = clean(snapshot.contact?.location, 38);
+  const qualifier = [context, location ? `in ${location}` : null].filter(Boolean).join(" ");
+  const contextualTitle = qualifier && normalizedLabel(qualifier) !== normalizedLabel(businessName)
+    ? `${qualifier} | ${businessName}` : businessName;
+  return contextualTitle.length <= 70 ? contextualTitle : businessName;
+}
+export function publicSeoDescription(snapshot: PublishedBusinessSnapshot) {
+  return seoSnippet(snapshot.search?.description) || seoSnippet(snapshot.website?.supportingText) ||
+    seoSnippet(snapshot.business.description) || undefined;
+}
 export function publicBusinessView(snapshot: PublishedBusinessSnapshot): PublishedBusinessSnapshot {
   const website = snapshot.website ? {
     ...snapshot.website,

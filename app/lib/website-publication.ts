@@ -1,5 +1,6 @@
 import "server-only";
 import { isUsableBusinessUploadedSrc, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
+import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 
 export const WEBSITE_TEMPLATES = [
   "Modern",
@@ -208,7 +209,18 @@ const PRIVATE_OR_PLACEHOLDER_TEXT = /(?:\$\s*[xX]\b|\bTBD\b|\b(?:primary objecti
 
 function publicWebsiteText(value: string | undefined, maximum: number) {
   const candidate = value?.trim();
-  return candidate && candidate.length <= maximum && !PRIVATE_OR_PLACEHOLDER_TEXT.test(candidate) ? candidate : "";
+  return candidate && candidate.length <= maximum && !PRIVATE_OR_PLACEHOLDER_TEXT.test(candidate) && !hasUnsupportedPublicClaim(candidate) ? candidate : "";
+}
+
+export function publicWebsiteSeoTitle(snapshot: WebsitePublicationSnapshot) {
+  return publicWebsiteText(snapshot.websiteEdits?.companyName || snapshot.companyName, 70) || "Business";
+}
+
+export function publicWebsiteSeoDescription(snapshot: WebsitePublicationSnapshot) {
+  const candidate = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, 180);
+  if (!candidate) return undefined;
+  if (candidate.length <= 165) return candidate;
+  return candidate.match(/^.{70,160}?[.!?](?=\s|$)/)?.[0];
 }
 
 export function publicWebsitePublicationView(snapshot: WebsitePublicationSnapshot): WebsitePublicationSnapshot {

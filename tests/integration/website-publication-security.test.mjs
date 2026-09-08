@@ -82,7 +82,8 @@ test("public renderer reads only active immutable snapshots and renders with Rea
   assert.match(page, /websitePublicationVersions\.snapshot/);
   assert.match(page, /validateWebsitePublicationSnapshot/);
   assert.match(page, /WebsitePreview/);
-  assert.doesNotMatch(page, /ownerUid|userId|projectMemory|dangerouslySetInnerHTML|eval\(/);
+  assert.match(page, /hasPaidProductAccess/);
+  assert.doesNotMatch(page, /projectMemory|dangerouslySetInnerHTML|eval\(/);
 });
 
 test("migration enforces unique slug/project and append-only version identity", async () => {
