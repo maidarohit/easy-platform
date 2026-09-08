@@ -58,3 +58,7 @@ export function readStoredSeoOpportunities(value: unknown): Record<string, unkno
     ? normalized
     : null;
 }
+
+export function findLatestValidSeoOutput<T extends Readonly<{ result: unknown }>>(orderedCandidates: readonly T[]): T | undefined {
+  return orderedCandidates.find((candidate) => readStoredSeoOpportunities(candidate.result));
+}

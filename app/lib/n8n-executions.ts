@@ -188,7 +188,8 @@ function getConfig(workflow: string) {
   const apiKey =
     process.env.N8N_API_KEY?.trim();
 
-  const prefix = workflowToEnvPrefix(workflow);
+  const configurationWorkflow = workflow.split("--request-", 1)[0];
+  const prefix = workflowToEnvPrefix(configurationWorkflow);
 
   const workflowId =
     process.env[`N8N_${prefix}_WORKFLOW_ID`]?.trim();
@@ -203,7 +204,7 @@ function getConfig(workflow: string) {
     !modelNodeName
   ) {
     throw new Error(
-      `n8n execution reconciliation is not configured for ${workflow}.`
+      `n8n execution reconciliation is not configured for ${configurationWorkflow}.`
     );
   }
 

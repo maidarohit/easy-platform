@@ -48,6 +48,7 @@ const schemas = {
   seo: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],
     long: ["brandDescription"],
+    optionalShort: ["requestId"],
   },
   uiux: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],

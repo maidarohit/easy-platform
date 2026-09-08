@@ -1,11 +1,10 @@
 import { db } from "@/app/db";
-import { businessPublications, businessPublicationVersions, projects, publishedWebsites, websitePublicationVersions } from "@/app/db/schema";
+import { businessPublications, businessPublicationVersions, projectOutputs, projects, publishedWebsites, websitePublicationVersions } from "@/app/db/schema";
 import {
-  completeAiUsage,
-  failAiUsage,
-  startAiUsage,
+  claimIdempotentAiUsage,
+  releaseFailedAiUsage,
 } from "@/app/lib/ai-usage";
-import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import { parseAiUsageMetadata } from "@/app/lib/ai-usage-metadata";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
@@ -14,28 +13,22 @@ import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8
 import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
 import { publicSeoDescription, publicSeoTitle, publicServices } from "@/app/lib/public-business-presentation";
 import { validatePublishedBusinessSnapshot } from "@/app/lib/business-publication";
-import { normalizeSeoOpportunities, SEO_GROUNDING_RULES } from "@/app/lib/seo-opportunity-safety";
+import { readStoredSeoOpportunities, normalizeSeoOpportunities, SEO_GROUNDING_RULES } from "@/app/lib/seo-opportunity-safety";
+import { persistCompletedSeoGeneration } from "@/app/lib/seo-generation-persistence";
 import { buildSeoSiteAudit } from "@/app/lib/seo-site-audit";
 import { publicWebsiteSeoDescription, publicWebsiteSeoTitle, validateWebsitePublicationSnapshot } from "@/app/lib/website-publication";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 const SEO_AI_WORKFLOW = "seo-ai";
 
 async function finalizeUsage(
   usageId: string,
-  status: "success" | "failed",
   startedAt: number,
-  usageComponents?: readonly AiUsageComponent[]
 ) {
   try {
     const durationMs = Date.now() - startedAt;
-
-    if (status === "success") {
-      await completeAiUsage({ usageId, durationMs, usageComponents });
-    } else {
-      await failAiUsage({ usageId, durationMs });
-    }
+    await releaseFailedAiUsage({ usageId, durationMs });
     return true;
   } catch {
     console.error("SEO AI usage finalization failed.");
@@ -178,16 +171,29 @@ export async function POST(request: Request) {
   const webhook = getN8nWebhookConfig("N8N_SEO_AI_WEBHOOK_URL");
   if (!webhook) return n8nConfigurationErrorResponse();
 
+  const suppliedRequestId = typeof body.requestId === "string" ? body.requestId.trim() : "";
+  const requestId = /^[a-zA-Z0-9-]{8,128}$/.test(suppliedRequestId) ? suppliedRequestId : crypto.randomUUID();
   let usageId: string;
 
   try {
-    usageId = await startAiUsage({
+    const claim = await claimIdempotentAiUsage({
       userId: uid,
       projectId,
       module: "seo",
-      workflow: SEO_AI_WORKFLOW,
+      workflow: `${SEO_AI_WORKFLOW}--request-${requestId}`,
       model: null,
     });
+    usageId = claim.usageId;
+    if (!claim.created) {
+      if (claim.status !== "success") return NextResponse.json({ error: "This SEO request is already being processed or did not complete." }, { status: 409 });
+      const rows = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
+        eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "seo"),
+      )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(20);
+      const saved = rows.map((row) => readStoredSeoOpportunities(row.result)).find(Boolean);
+      return saved
+        ? NextResponse.json({ siteAudit, seoOpportunities: saved })
+        : NextResponse.json({ error: "The completed SEO result could not be restored." }, { status: 500 });
+    }
   } catch (error) {
     if (error instanceof Response) return error;
     console.error("SEO AI usage initialization failed.");
@@ -227,7 +233,7 @@ export async function POST(request: Request) {
     console.log("STATUS:", response.status);
 
     if (!response.ok) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      await finalizeUsage(usageId, startedAt);
       return NextResponse.json(
         { error: "SEO AI request failed." },
         { status: response.status }
@@ -235,33 +241,41 @@ export async function POST(request: Request) {
     }
 
     if (!text.trim()) {
-      await finalizeUsage(usageId, "failed", startedAt);
+      await finalizeUsage(usageId, startedAt);
       return NextResponse.json(
         { error: "SEO AI returned an empty response." },
         { status: 502 }
       );
     }
 
+    let data: unknown;
     try {
-      const data = JSON.parse(text);
-      const usageFinalized = await finalizeUsage(usageId, "success", startedAt, usageMetadata?.components);
-      if (n8nExecutionId) {
-        try {
-          await associateN8nExecution({ usageId, executionId: n8nExecutionId, metadataAlreadyApplied: Boolean(usageMetadata) && usageFinalized });
-        } catch {
-          console.error("SEO AI execution association failed.");
-        }
-      }
-      return NextResponse.json({ siteAudit, seoOpportunities: normalizeSeoOpportunities(data, publicationContext) });
+      data = JSON.parse(text);
     } catch {
-      await finalizeUsage(usageId, "failed", startedAt);
-      return NextResponse.json(
-        { error: "SEO AI returned invalid JSON." },
-        { status: 502 }
-      );
+      await finalizeUsage(usageId, startedAt);
+      return NextResponse.json({ error: "SEO AI returned invalid JSON." }, { status: 502 });
     }
+    const seoOpportunities = normalizeSeoOpportunities(data, publicationContext);
+    if (!Object.values(seoOpportunities).some((value) => typeof value === "string" ? value.trim() : Array.isArray(value) && value.length)) {
+      await finalizeUsage(usageId, startedAt);
+      return NextResponse.json({ error: "SEO AI returned no usable recommendations." }, { status: 502 });
+    }
+    try {
+      await persistCompletedSeoGeneration({ usageId, userId: uid, projectId, result: seoOpportunities, durationMs: Date.now() - startedAt, usageComponents: usageMetadata?.components });
+    } catch {
+      await finalizeUsage(usageId, startedAt);
+      return NextResponse.json({ error: "Generated SEO recommendations could not be saved. Your allowance was restored." }, { status: 500 });
+    }
+    if (n8nExecutionId) {
+      try {
+        await associateN8nExecution({ usageId, executionId: n8nExecutionId, metadataAlreadyApplied: Boolean(usageMetadata) });
+      } catch {
+        console.error("SEO AI execution association failed.");
+      }
+    }
+    return NextResponse.json({ siteAudit, seoOpportunities });
   } catch {
-    await finalizeUsage(usageId, "failed", startedAt);
+    await finalizeUsage(usageId, startedAt);
     console.error("SEO AI request failed.");
 
     return NextResponse.json(

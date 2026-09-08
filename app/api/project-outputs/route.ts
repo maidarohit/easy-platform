@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { db } from "@/app/db";
 import { projectOutputs, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { validateProjectOutputBody } from "@/app/lib/project-request-validation";
+import { findLatestValidSeoOutput } from "@/app/lib/seo-opportunity-safety";
 
 const MAX_PROJECT_OUTPUT_BODY_BYTES = 256 * 1024;
 
@@ -152,7 +153,7 @@ export async function GET(req: Request) {
     }
 
     if (moduleName) {
-      const [output] = await db
+      const candidates = await db
         .select()
         .from(projectOutputs)
         .where(
@@ -162,7 +163,12 @@ export async function GET(req: Request) {
             eq(projectOutputs.module, moduleName)
           )
         )
-        .limit(1);
+        .orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt))
+        .limit(moduleName === "seo" ? 20 : 1);
+
+      const output = moduleName === "seo"
+        ? findLatestValidSeoOutput(candidates)
+        : candidates[0];
 
       return NextResponse.json({
         success: true,

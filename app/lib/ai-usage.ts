@@ -175,3 +175,13 @@ export async function failAiUsage({
     .set({ status: "failed", durationMs })
     .where(eq(aiUsage.id, usageId));
 }
+
+export async function releaseFailedAiUsage({
+  usageId,
+  durationMs,
+}: FailAiUsageInput): Promise<void> {
+  await db
+    .update(aiUsage)
+    .set({ status: "failed", durationMs, requestCount: 0 })
+    .where(and(eq(aiUsage.id, usageId), eq(aiUsage.status, "started")));
+}

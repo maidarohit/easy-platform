@@ -108,7 +108,9 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
     "automation-pipeline": "automationRuns",
   }).filter(([, mapped]) => mapped === category).map(([module]) => module);
 
-  const conditions = [eq(aiUsage.userId, userId), gte(aiUsage.createdAt, periodStart)];
+  // Started rows reserve capacity against concurrent requests; failed rows do
+  // not permanently consume customer allowance.
+  const conditions = [eq(aiUsage.userId, userId), gte(aiUsage.createdAt, periodStart), inArray(aiUsage.status, ["started", "success"])];
   if (category === "standardAiTasks") {
     conditions.push(sql`${aiUsage.module} NOT LIKE 'automation-%' AND ${aiUsage.module} NOT IN ('ai-manager','image','video','presentation','assistant')`);
   } else if (modules.length) {

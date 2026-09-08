@@ -307,6 +307,7 @@ ${cleanGrowthRecommendations(brandResult.growthRecommendations)}
           brandStyle,
           brandDescription,
           projectId,
+          requestId: crypto.randomUUID(),
         }),
       });
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -321,25 +322,6 @@ ${cleanGrowthRecommendations(brandResult.growthRecommendations)}
       setSiteAudit(isRecord(parsed) && isRecord(parsed.siteAudit) ? parsed.siteAudit as SeoSiteAudit : null);
 
 setBrandResult(finalSEOResult);
-
-if (projectId && project?.userId && finalSEOResult) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: project.userId,
-      module: "seo",
-      result: finalSEOResult,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save SEO AI output");
-  }
-}
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");
