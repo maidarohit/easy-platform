@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import Sidebar from "../dashboard/components/Sidebar";
@@ -22,10 +23,8 @@ type UiuxResult = {
   wireframes: string;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
 function UIUXAIPageContent() {
+  const router = useRouter();
   const [companyName, setCompanyName] = useState("");
   const [industry, setIndustry] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
@@ -58,14 +57,14 @@ function UIUXAIPageContent() {
   );
 }, [projectId, project]);
 useEffect(() => {
-  if (!projectId || !project?.userId) return;
+  if (!projectId) return;
 
   let active = true;
 
   const loadSavedUIUXOutput = async () => {
     try {
       const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=uiux`,
+        `/api/uiux-ai?projectId=${encodeURIComponent(projectId)}`,
         { cache: "no-store" }
       );
 
@@ -75,14 +74,7 @@ useEffect(() => {
         throw new Error(data.error || "Failed to load UI/UX AI output");
       }
 
-      if (!active || !data.output?.result) return;
-
-      const savedResult =
-        typeof data.output.result === "string"
-          ? JSON.parse(data.output.result)
-          : data.output.result;
-
-      setBrandResult(savedResult);
+      if (active) setBrandResult((data.output ?? null) as UiuxResult | null);
     } catch (error) {
       console.error("Failed to restore UI/UX AI output:", error);
     }
@@ -93,9 +85,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [projectId, project?.userId]);
-  const colors =
-    brandResult?.colourScheme?.match(/#[0-9A-Fa-f]{6}/g) || [];
+}, [projectId]);
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied!`);
@@ -154,7 +144,7 @@ ${brandResult.accessibility}
     })
   );
 
-  window.location.href = "/sales-ai";
+  router.push(`/sales-ai?projectId=${encodeURIComponent(projectId)}`);
 };
   
   const downloadPDF = () => {
@@ -239,6 +229,7 @@ addSection("Accessibility", brandResult.accessibility);
             brandStyle,
             brandDescription,
             projectId,
+            requestId: crypto.randomUUID(),
           }),
         }
       );
@@ -247,82 +238,9 @@ addSection("Accessibility", brandResult.accessibility);
         throw new Error(`HTTP Error: ${response.status}`);
       }
 
-      const text = await response.text();
-
-      console.log("RAW RESPONSE:", text);
-      console.log("STATUS:", response.status);
-
-      if (!text.trim()) {
-        throw new Error("n8n returned EMPTY response");
-      }
-
-      let parsed;
-
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
-      }
-
-      console.log("PARSED:", parsed);
-
-      let result: unknown = parsed;
-
-while (true) {
-  if (typeof result === "string") {
-    result = JSON.parse(result);
-    continue;
-  }
-
-  if (
-    isRecord(result) &&
-    "text" in result &&
-    typeof result.text === "object"
-  ) {
-    result = result.text;
-    continue;
-  }
-
-  if (
-  isRecord(result) &&
-  "output" in result
-) {
-  if (typeof result.output === "string") {
-    result = JSON.parse(result.output);
-  } else {
-    result = result.output;
-  }
-  continue;
-}
-
-
-  break;
-}
-
-
-if (!isRecord(result)) {
-  throw new Error("UI/UX AI returned an invalid response.");
-}
-
-setBrandResult(result as UiuxResult);
-if (projectId && project?.userId && result) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: project.userId,
-      module: "uiux",
-      result,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save UI/UX AI output");
-  }
-}
+      const data = await response.json();
+      if (!data.output) throw new Error("UI/UX AI returned an invalid response.");
+      setBrandResult(data.output as UiuxResult);
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong.");

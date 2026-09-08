@@ -56,6 +56,7 @@ const schemas = {
   uiux: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],
     long: ["brandDescription"],
+    optionalShort: ["requestId"],
   },
   sales: {
     short: ["companyName", "industry", "salesGoal", "targetAudience"],

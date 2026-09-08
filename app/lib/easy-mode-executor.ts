@@ -68,6 +68,8 @@ import {
 } from "@/app/lib/easy-mode-task-attempts";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 import { isSubscriptionRequiredResponse } from "@/app/lib/subscription-required";
+import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
+import { sanitizeUiuxOutput } from "@/app/lib/uiux-insight-safety";
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 
@@ -668,8 +670,14 @@ export async function persistTextSpecialistOutputAndMemory(
   module: TextSpecialistModule,
   value: unknown,
 ): Promise<PersistedOutput> {
-  const output = getModuleAdapter(module)?.validateOutput?.(value);
+  let output = getModuleAdapter(module)?.validateOutput?.(value);
   if (!output) throw new Error("Invalid specialist output.");
+  if (module === "uiux") {
+    const uiuxContext = await loadOwnedUiuxContext(context.userId, context.projectId);
+    if (!uiuxContext) throw new Error("UI/UX context not found.");
+    output = sanitizeUiuxOutput(output, uiuxContext);
+    if (!output) throw new Error("Invalid UI/UX output.");
+  }
   return db.transaction(async (transaction) => {
     const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
       eq(projects.id, context.projectId), eq(projects.userId, context.userId),
