@@ -40,14 +40,14 @@ useEffect(() => {
   };
 }, [project, projectId]);
 useEffect(() => {
-  if (!projectId || !project?.userId) return;
+  if (!projectId) return;
 
   let active = true;
 
   const loadSavedBrandingOutput = async () => {
     try {
       const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&userId=${encodeURIComponent(project.userId)}&module=branding`,
+        `/api/branding-ai?projectId=${encodeURIComponent(projectId)}`,
         { cache: "no-store" }
       );
 
@@ -57,14 +57,7 @@ useEffect(() => {
         throw new Error(data.error || "Failed to load Branding AI output");
       }
 
-      if (!active || !data.output?.result) return;
-
-      const savedResult =
-        typeof data.output.result === "string"
-          ? JSON.parse(data.output.result)
-          : data.output.result;
-
-      setBrandResult(savedResult as BrandingAiOutput);
+      if (active) setBrandResult((data.output ?? null) as BrandingAiOutput | null);
     } catch (error) {
       console.error("Failed to restore Branding AI output:", error);
     }
@@ -75,7 +68,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [projectId, project?.userId]);
+}, [projectId]);
 const colors =
   brandResult?.colorPalette?.match(/#[0-9A-Fa-f]{6}/g) || [];
 const copyToClipboard = (text: string, label: string) => {
@@ -246,6 +239,7 @@ try {
         brandStyle,
         brandDescription,
         projectId,
+        requestId: crypto.randomUUID(),
       }),
     }
   );
@@ -261,25 +255,6 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
-
-if (projectId) {
-  const saveOutputResponse = await authenticatedFetch("/api/project-outputs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      projectId,
-      userId: currentUser.uid,
-      module: "branding",
-      result: parsed,
-    }),
-  });
-
-  if (!saveOutputResponse.ok) {
-    console.error("Failed to save Branding AI output");
-  }
-}
 } catch (error) {
   console.error(error);
   toast.error("Something went wrong.");

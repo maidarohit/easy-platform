@@ -11,6 +11,7 @@ import {
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { sanitizeBrandingOutput } from "@/app/lib/branding-insight-safety";
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
 const PROVIDER_TIMEOUT_MS = 120_000;
@@ -138,7 +139,8 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
         ].join("\n"),
       }
     : responseOutput;
-  const output = validator?.(responseItem) ?? validator?.(normalizedCandidate);
+  const validatedOutput = validator?.(responseItem) ?? validator?.(normalizedCandidate);
+  const output = validatedOutput ? sanitizeBrandingOutput(validatedOutput, input) : null;
   if (!output) throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
 
   const usageMetadata = parseAiUsageMetadata(response.headers);

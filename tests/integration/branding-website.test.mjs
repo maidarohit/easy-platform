@@ -37,7 +37,10 @@ async function verifyProtectedProxy(post, routePath, environmentVariable) {
 
     assert.equal(response.status, 401);
     assert.equal(captured, undefined, "Unauthenticated requests must not reach n8n");
-    const contents = await readFile(new URL(`../../${routePath}`, import.meta.url), "utf8");
+    const routeContents = await readFile(new URL(`../../${routePath}`, import.meta.url), "utf8");
+    const serviceContents = routePath === "app/api/branding-ai/route.ts"
+      ? await readFile(new URL("../../app/lib/branding-execution.ts", import.meta.url), "utf8") : "";
+    const contents = `${routeContents}\n${serviceContents}`;
     assert.ok(contents.includes(environmentVariable));
     assert.doesNotMatch(contents, /https?:\/\/[^"']*n8n\.cloud/i);
   } finally {

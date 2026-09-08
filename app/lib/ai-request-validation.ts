@@ -35,6 +35,7 @@ const schemas = {
   branding: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],
     long: ["brandDescription"],
+    optionalShort: ["requestId"],
   },
   website: {
     short: ["companyName", "industry", "targetAudience", "brandStyle"],
