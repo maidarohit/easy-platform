@@ -11,7 +11,7 @@ import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context";
 import { persistCompletedMarketingGeneration } from "@/app/lib/marketing-generation-persistence";
-import { sanitizeMarketingInsights } from "@/app/lib/marketing-insight-safety";
+import { readStoredMarketingInsights, sanitizeMarketingInsights } from "@/app/lib/marketing-insight-safety";
 import { unwrapMarketingProviderResponse } from "@/app/lib/marketing-provider-response";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
@@ -44,8 +44,12 @@ export async function GET(request: Request) {
   if (!projectId) return NextResponse.json({ error: "projectId is required." }, { status: 400 });
   try {
     const context = await loadOwnedMarketingContext(uid, projectId);
-    return context ? NextResponse.json({ connectedBusinessContext: context }, { headers: { "Cache-Control": "private, no-store" } })
-      : NextResponse.json({ error: "Project not found." }, { status: 404 });
+    if (!context) return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    const rows = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(
+      eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "marketing"),
+    )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(20);
+    const marketingStrategy = rows.map((row) => readStoredMarketingInsights(row.result, context)).find(Boolean) ?? null;
+    return NextResponse.json({ connectedBusinessContext: context, marketingStrategy }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     console.error("Marketing business context load failed.");
     return NextResponse.json({ error: "Unable to load connected business context." }, { status: 500 });
@@ -109,7 +113,9 @@ export async function POST(request: Request) {
       if (claim.status !== "success") return NextResponse.json({ error: "This Marketing request is already being processed or did not complete." }, { status: 409 });
       const [saved] = await db.select({ result: projectOutputs.result }).from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid), eq(projectOutputs.module, "marketing"))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)).limit(1);
       if (!saved) return NextResponse.json({ error: "The completed Marketing result could not be restored." }, { status: 500 });
-      return NextResponse.json({ connectedBusinessContext: context, marketingStrategy: typeof saved.result === "string" ? JSON.parse(saved.result) : saved.result });
+      const marketingStrategy = readStoredMarketingInsights(saved.result, context);
+      return marketingStrategy ? NextResponse.json({ connectedBusinessContext: context, marketingStrategy })
+        : NextResponse.json({ error: "The completed Marketing result could not be restored." }, { status: 500 });
     }
   } catch (error) {
     if (error instanceof Response) return error;

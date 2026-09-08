@@ -29,7 +29,7 @@ test("social status is owner-scoped and disconnected channels are not claimed", 
   assert.match(contextSource, /eq\(socialConnections\.userId, userId\)/);
   assert.match(contextSource, /item\.status === "connected"/);
   assert.deepEqual(sanitizeMarketingInsights({ socialMediaStrategy: "Content was published on Facebook. LinkedIn is connected." }, context()), {
-    socialMediaStrategy: "Meta (Facebook / Instagram) is not connected. LinkedIn is connected.",
+    socialMediaStrategy: "No channel publishing activity is verified in this Marketing strategy. LinkedIn is connected.",
   });
   assert.match(page, /Meta \(Facebook \/ Instagram\)/);
   assert.match(page, /WhatsApp:.*Approved contact/);
@@ -49,8 +49,8 @@ test("server persistence completes usage only after output save", () => {
   assert.match(persistence, /eq\(aiUsage\.status, "started"\)/);
   assert.match(route, /Your allowance was restored/);
   assert.doesNotMatch(page, /method: "POST"[\s\S]{0,180}\/api\/project-outputs/);
-  assert.match(page, /module=marketing/);
-  assert.match(page, /setBrandResult\(savedResult as MarketingResult\)/);
+  assert.match(route, /readStoredMarketingInsights/);
+  assert.match(page, /setBrandResult\(data\.marketingStrategy \?\? null\)/);
   assert.match(route, /claimIdempotentAiUsage/);
 });
 

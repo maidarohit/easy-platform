@@ -104,43 +104,6 @@ const [isEditing, setIsEditing] = useState(false);
     return () => { active = false; };
   }, [projectId]);
   useEffect(() => {
-  if (!projectId || !project?.userId) return;
-
-  let active = true;
-
-  const loadSavedMarketingOutput = async () => {
-    try {
-      const response = await authenticatedFetch(
-        `/api/project-outputs?projectId=${encodeURIComponent(projectId)}&module=marketing`,
-        { cache: "no-store" }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load Marketing AI output");
-      }
-
-      if (!active || !data.output?.result) return;
-
-      const savedResult =
-        typeof data.output.result === "string"
-          ? JSON.parse(data.output.result)
-          : data.output.result;
-
-      setBrandResult(savedResult as MarketingResult);
-    } catch (error) {
-      console.error("Failed to restore Marketing AI output:", error);
-    }
-  };
-
-  loadSavedMarketingOutput();
-
-  return () => {
-    active = false;
-  };
-}, [projectId, project?.userId]);
-  useEffect(() => {
     if (!projectId) return;
     let active = true;
     const loadConnectedContext = async () => {
@@ -148,7 +111,10 @@ const [isEditing, setIsEditing] = useState(false);
         const response = await authenticatedFetch(`/api/marketing-ai?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Failed to load connected business context");
-        if (active) setConnectedContext(data.connectedBusinessContext ?? null);
+        if (active) {
+          setConnectedContext(data.connectedBusinessContext ?? null);
+          setBrandResult(data.marketingStrategy ?? null);
+        }
       } catch (error) {
         console.error("Failed to load connected business context:", error);
         if (active) setConnectedContext(null);
@@ -694,7 +660,7 @@ return (
                   const useFullWidthCard =
                     index === 0 ||
                     text.length > 700 ||
-                    ["typography", "marketingScore", "growthRecommendations", "bestChannels", "campaignTimeline", "contentMix"].includes(section.key);
+                    ["funnelSuggestions", "typography", "marketingScore", "growthRecommendations", "bestChannels", "campaignTimeline", "contentMix"].includes(section.key);
                   return (
                     <article key={section.key} className={useFullWidthCard ? moduleClass + " md:col-span-2" : moduleClass}>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

@@ -32,8 +32,8 @@ test("malformed and empty provider responses fail closed", () => {
 
 test("valid API result renders immediately and refresh restores saved output", () => {
   assert.match(page, /setBrandResult\(data\.marketingStrategy as MarketingResult\)/);
-  assert.match(page, /module=marketing/);
-  assert.match(page, /setBrandResult\(savedResult as MarketingResult\)/);
+  assert.match(route, /readStoredMarketingInsights/);
+  assert.match(page, /setBrandResult\(data\.marketingStrategy \?\? null\)/);
   assert.match(page, /data\?\.error \|\| `Marketing request failed/);
 });
 
