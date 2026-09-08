@@ -12,9 +12,33 @@ const base = {
   savedEnquiries: 1, unavailableMetrics: ["website visitors", "CTR", "campaign ROI", "CAC"],
 };
 
-test("Funnel Suggestions uses the responsive full-width card rule", () => {
-  assert.match(page, /\["funnelSuggestions", "typography"/);
-  assert.match(page, /moduleClass \+ " md:col-span-2"/);
+test("every normal Marketing module uses the responsive full-width card", () => {
+  assert.match(page, /<div className="relative grid gap-5">/);
+  assert.match(page, /<article key=\{section\.key\} className=\{moduleClass\}>/);
+  assert.doesNotMatch(page, /useFullWidthCard|relative grid gap-5 md:grid-cols-2/);
+});
+
+test("completed-work and unsupported booking claims become evidence-safe", () => {
+  const result = sanitizeMarketingInsights({ adCopy: "See how we transformed a dated kitchen into a modern family hub. Book a Site Visit Today! Our clients achieved remarkable growth. Book a free assessment." }, base);
+  assert.doesNotMatch(result.adCopy, /we transformed|book a site visit|our clients achieved|book a free/i);
+  assert.match(result.adCopy, /approved before-and-after project example/);
+  assert.match(result.adCopy, /Get in touch to discuss your project/);
+  assert.match(result.adCopy, /approved customer result/);
+});
+
+test("calendar execution wording is connection-aware and retains useful channel ideas", () => {
+  const result = sanitizeMarketingInsights({ calendar: "Tuesday: Instagram carousel about material selection. Publish on LinkedIn. Instagram Reel with design tips." }, base);
+  assert.match(result.calendar, /Recommended Meta content: Instagram carousel about material selection/);
+  assert.match(result.calendar, /connect Meta before publishing through Buzypeezy/);
+  assert.match(result.calendar, /Recommended LinkedIn content/);
+  assert.match(result.calendar, /Instagram Reel with design tips/);
+});
+
+test("audience analysis is explicitly hypothetical rather than measured fact", () => {
+  const result = sanitizeMarketingInsights({ targetAudienceAnalysis: "Homeowners may value clear timelines and practical guidance." }, base);
+  assert.match(result.targetAudienceAnalysis, /^Potential audience segments and suggested motivations/);
+  assert.match(result.targetAudienceAnalysis, /recommendations, not measured facts/);
+  assert.match(result.targetAudienceAnalysis, /Homeowners may value/);
 });
 
 test("verified placeholders resolve and missing facts disappear without invention", () => {
@@ -32,8 +56,8 @@ test("unsupported offers, projections, budgets, CPL and demographics are removed
 
 test("disconnected channels remain recommendations and unverified assets become optional", () => {
   const result = sanitizeMarketingInsights({ social: "Schedule posts on Instagram. Launch a LinkedIn campaign. Use our CRM and testimonials. Recommend SEO and referral partnerships." }, base);
-  assert.match(result.social, /Recommended channel — connect Meta/);
-  assert.match(result.social, /Recommended channel — connect LinkedIn/);
+  assert.match(result.social, /Recommended Meta content: posts on Instagram.*connect Meta before publishing/);
+  assert.match(result.social, /Recommended LinkedIn content: a LinkedIn campaign.*connect LinkedIn before publishing/);
   assert.match(result.social, /Consider an optional CRM/);
   assert.match(result.social, /Consider creating approved customer proof/);
   assert.match(result.social, /Recommend SEO and referral partnerships/);

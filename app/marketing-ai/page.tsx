@@ -654,15 +654,11 @@ return (
                 <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap"><button type="button" onClick={copyEntireBrand} className={copyButtonClass}>{copyIcon}Copy Entire Marketing Strategy</button><button type="button" onClick={downloadPDF} className="flex min-h-9 items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500/20 to-cyan-400/[0.08] px-3.5 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-red-300/60 hover:shadow-[0_0_22px_rgba(239,68,68,0.16)]"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-red-300" strokeWidth="1.5"><path d="M10 3.5v9m-3-3 3 3 3-3M4 15.5h12"/></svg>Download PDF</button><button type="button" onClick={saveProject} className="flex min-h-9 items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.05] px-3.5 py-2 text-xs font-semibold text-cyan-100 transition-all hover:-translate-y-0.5 hover:border-cyan-300/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 3.5h10l2 2v11H4zM7 3.5v5h6v-5M7 13h6"/></svg>Save Project</button><button type="button" onClick={() => window.location.href = projectId ? `/marketing-ai/projects?projectId=${encodeURIComponent(projectId)}` : "/marketing-ai/projects"} className={copyButtonClass}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M3 5h5l1.5 2H17v9H3z"/></svg>Project History</button><button type="button" onClick={() => { if (!brandResult) { toast.error("Generate a marketing strategy first."); return; } window.location.href = projectId ? `/seo-ai?projectId=${encodeURIComponent(projectId)}` : "/seo-ai"; }} className={copyButtonClass}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 10h12m-4-4 4 4-4 4"/></svg>Continue to SEO AI</button></div>
               </div>
 
-              <div className="relative grid gap-5 md:grid-cols-2">
+              <div className="relative grid gap-5">
                 {allStrategySections.map((section, index) => {
                   const text = sectionText(section.value);
-                  const useFullWidthCard =
-                    index === 0 ||
-                    text.length > 700 ||
-                    ["funnelSuggestions", "typography", "marketingScore", "growthRecommendations", "bestChannels", "campaignTimeline", "contentMix"].includes(section.key);
                   return (
-                    <article key={section.key} className={useFullWidthCard ? moduleClass + " md:col-span-2" : moduleClass}>
+                    <article key={section.key} className={moduleClass}>
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div><span className="font-mono text-[9px] tracking-[0.22em] text-red-300">MODULE / {String(index + 1).padStart(2, "0")}</span><h3 className="mt-1 text-lg font-semibold text-white">{section.label}</h3></div>
                         <div className="flex flex-wrap gap-2">

@@ -9,6 +9,10 @@ const FINANCIAL_ASSUMPTION = /(?:[$₹]\s*[\d,]+|\b(?:usd|inr|rs\.?)\s*[\d,]+|\b
 const DEMOGRAPHIC_ASSUMPTION = /\b(?:ages?\s*\d+\s*(?:-|–|to)\s*\d+|\d+\s*(?:-|–|to)\s*\d+\s*years? old|high[- ]net[- ]worth|income (?:band|segment)|project[- ]value band)\b/i;
 const OFFER_TERMS = ["within 48 hours", "discount", "guarantee", "years of experience", "pricing", "price"] as const;
 const ASSERTED_ASSET = /\b(crm|renovation budget planner|newsletter|google analytics|gtm|testimonials?|case studies|notion|airtable|client portal)\b/i;
+const COMPLETED_WORK = /\b(?:we|our team)\s+(?:transformed|completed|delivered|created|built|renovated|designed)\b/i;
+const CLIENT_RESULT = /\bour clients?\s+(?:achieved|increased|improved|saved|grew|generated)\b/i;
+const PAST_CHANNEL_ACTIVITY = /\b(?:was|were|is|are|has been|have been)\s+(?:posted|published|scheduled|launched|running)\b/i;
+const CHANNEL_EXECUTION = /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|carousel|reel|story|post|publish|schedule|launch|run|campaign)\b/i;
 
 function verifiedCorpus(context: MarketingBusinessContext) {
   return [context.business.name, context.business.industry, context.business.location, context.business.description, context.business.targetAudience, ...context.business.services]
@@ -34,14 +38,28 @@ function assetRecommendation(sentence: string) {
   return recommendations.join(" ");
 }
 
+function recommendedChannelContent(sentence: string, channel: "Meta" | "LinkedIn") {
+  if (PAST_CHANNEL_ACTIVITY.test(sentence)) return `Recommended channel — connect ${channel} before publishing through Buzypeezy.`;
+  const content = sentence.replace(/^\s*(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*:\s*/i, "")
+    .replace(/^\s*(?:publish|post|schedule|launch|run)\s+/i, "")
+    .replace(/^\s*on\s+(?:meta|facebook|instagram|linkedin)\s*[.:—-]*\s*/i, "")
+    .trim();
+  const recommendation = content ? `Recommended ${channel} content: ${content}` : `Recommended ${channel} content`;
+  return `${recommendation} — connect ${channel} before publishing through Buzypeezy.`;
+}
+
 function cleanSentence(sentence: string, context: MarketingBusinessContext, corpus: string) {
   const text = sentence.trim();
   if (!text) return "";
   if (/\b(wordpress|webflow)\b/i.test(text)) return "Continue using the Buzypeezy website; an external CMS replacement is not required.";
-  const channelMentioned = /\b(meta|facebook|instagram|linkedin)\b/i.test(text);
-  if (channelMentioned && /\b(?:was|were|is|are|has been|have been)\s+(?:posted|published|scheduled|launched|running)\b/i.test(text)) return "No channel publishing activity is verified in this Marketing strategy.";
-  if (context.channels.meta !== "connected" && /\b(meta|facebook|instagram)\b/i.test(text) && /\b(post|posted|publish|published|schedule|scheduled|launch|run|running|campaign|connected)\b/i.test(text)) return "Recommended channel — connect Meta to publish through Buzypeezy.";
-  if (context.channels.linkedin !== "connected" && /\blinkedin\b/i.test(text) && /\b(post|posted|publish|published|schedule|scheduled|launch|run|running|campaign|connected)\b/i.test(text)) return "Recommended channel — connect LinkedIn to publish through Buzypeezy.";
+  if (context.channels.meta !== "connected" && /\b(meta|facebook|instagram)\b/i.test(text) && (CHANNEL_EXECUTION.test(text) || /\bconnected\b/i.test(text))) return recommendedChannelContent(text, "Meta");
+  if (context.channels.linkedin !== "connected" && /\blinkedin\b/i.test(text) && (CHANNEL_EXECUTION.test(text) || /\bconnected\b/i.test(text))) return recommendedChannelContent(text, "LinkedIn");
+  if (/\b(meta|facebook|instagram|linkedin)\b/i.test(text) && PAST_CHANNEL_ACTIVITY.test(text)) return "No channel publishing activity is verified in this Marketing strategy.";
+  if (COMPLETED_WORK.test(text) && !corpus.includes(text.toLowerCase())) return "Show an approved before-and-after project example when verified project imagery is available.";
+  if (CLIENT_RESULT.test(text) && !corpus.includes(text.toLowerCase())) return "Consider sharing an approved customer result when verified evidence is available.";
+  if (/\bbook\s+(?:a\s+)?site visit\b/i.test(text) && !corpus.includes("site visit")) return "Get in touch to discuss your project.";
+  if (/\b(?:book|get|claim|request)\s+(?:a\s+)?free\b/i.test(text) && !corpus.includes(text.toLowerCase())) return "Get in touch to discuss your project.";
+  if (/\b(?:deliver|delivery|turnaround|ready|complete)[^.!?\n]{0,50}\bwithin\s+\d+\s*(?:hours?|days?|weeks?)\b/i.test(text) && !corpus.includes(text.toLowerCase())) return "";
   if (UNSUPPORTED_PERFORMANCE.test(text) || NUMERIC_TARGET.test(text) || FINANCIAL_ASSUMPTION.test(text)) return "";
   const demographic = text.match(DEMOGRAPHIC_ASSUMPTION)?.[0]?.toLowerCase();
   if (demographic && !corpus.includes(demographic)) return "";
@@ -63,11 +81,16 @@ function cleanText(value: string, context: MarketingBusinessContext) {
   return lines.join("\n").trim() || "Use only the verified business context and connected channels shown above.";
 }
 
+function labelAudienceHypotheses(value: string) {
+  if (/potential audience segments|recommendations, not measured facts/i.test(value)) return value;
+  return `Potential audience segments and suggested motivations (recommendations, not measured facts):\n${value}`;
+}
+
 export function sanitizeMarketingInsights(value: unknown, context: MarketingBusinessContext): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const clean = (item: unknown): unknown => typeof item === "string" ? cleanText(item, context)
-    : Array.isArray(item) ? item.map(clean)
-      : item && typeof item === "object" ? Object.fromEntries(Object.entries(item).filter(([key]) => !UNSUPPORTED_OUTPUT_KEY.test(key)).map(([key, nested]) => [key, clean(nested)])) : item;
+  const clean = (item: unknown, key = ""): unknown => typeof item === "string" ? (key === "targetAudienceAnalysis" ? labelAudienceHypotheses(cleanText(item, context)) : cleanText(item, context))
+    : Array.isArray(item) ? item.map((nested) => clean(nested, key))
+      : item && typeof item === "object" ? Object.fromEntries(Object.entries(item).filter(([nestedKey]) => !UNSUPPORTED_OUTPUT_KEY.test(nestedKey)).map(([nestedKey, nested]) => [nestedKey, clean(nested, nestedKey)])) : item;
   return clean(value) as Record<string, unknown>;
 }
 
