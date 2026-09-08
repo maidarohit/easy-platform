@@ -50,14 +50,14 @@ test("private keyword, audit, KPI, growth, marketing, and sales strategy never e
   assert.doesNotMatch(JSON.stringify(view), /keyword research|SEO audit|KPI targets|growth recommendations|sales sequence/i);
 });
 
-test("customer labels change without renaming SEO data contracts", async () => {
+test("SEO UI separates deterministic checks from provider opportunities", async () => {
   const [page, contracts] = await Promise.all([
     readFile("app/seo-ai/page.tsx", "utf8"), readFile("app/lib/easy-mode-execution-contracts.ts", "utf8"),
   ]);
   assert.match(page, /Website \/ Content Style/);
-  assert.match(page, /SEO Readiness Estimate/);
-  assert.doesNotMatch(page, /addSection\("SEO Score"/);
-  assert.match(page, /brandResult\.seoScore/); assert.match(page, /brandStyle/);
+  assert.match(page, /Real Website Check/);
+  assert.match(page, /SEO Opportunities/);
+  assert.doesNotMatch(page, /brandResult\.seoScore|Keyword Coverage|Optimization Areas/); assert.match(page, /brandStyle/);
   assert.match(contracts, /seoScore/); assert.match(contracts, /brandStyle/);
 });
 

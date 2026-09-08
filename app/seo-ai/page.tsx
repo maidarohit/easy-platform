@@ -8,6 +8,7 @@ import Navbar from "../dashboard/components/Navbar";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
+import type { SeoSiteAudit } from "../lib/seo-site-audit";
 
 const SEO_GOALS = [
   "Generate Leads",
@@ -30,13 +31,10 @@ type SEOResult = Record<string, unknown> & {
   internalLinking?: string;
   keywordResearch?: string;
   keywords?: string;
-  kpis?: string;
   metaDescriptions?: string;
   metaTitles?: string;
   recommendedPages?: string;
-  seoAudit?: string;
   seoContentPlan?: string;
-  seoScore?: string;
   seoStrategy?: string;
   siteStructure?: string;
   technicalSEO?: string;
@@ -76,6 +74,7 @@ function SEOAIPageContent() {
   const [brandDescription, setBrandDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [brandResult, setBrandResult] = useState<SEOResult | null>(null);
+  const [siteAudit, setSiteAudit] = useState<SeoSiteAudit | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -87,6 +86,7 @@ function SEOAIPageContent() {
       const projectGoal = activeProject?.goal || "";
 
       setBrandResult(null);
+      setSiteAudit(null);
       setCompanyName(activeProject?.companyName || "");
       setIndustry(activeProject?.industry || "");
       setTargetAudience(
@@ -208,15 +208,12 @@ ${cleanGrowthRecommendations(brandResult.growthRecommendations)}
       doc.text(lines, 20, y);
       y += lines.length * 7 + 14;
     };
-    addSection("SEO Audit", brandResult.seoAudit);
-    addSection("Keywords", brandResult.keywords);
+    addSection("Keyword Opportunities", brandResult.keywords || brandResult.keywordResearch);
     addSection("Meta Titles", brandResult.metaTitles);
     addSection("Meta Descriptions", brandResult.metaDescriptions);
     addSection("Internal Linking", brandResult.internalLinking);
     addSection("Blog Topics", brandResult.blogTopics);
     addSection("Technical SEO Suggestions", brandResult.technicalSEO);
-    addSection("SEO Readiness Estimate", brandResult.seoScore);
-    addSection("KPIs", brandResult.kpis);
     addSection("Growth Recommendations", cleanGrowthRecommendations(brandResult.growthRecommendations));
     doc.save(`${companyName}-SEO-Strategy.pdf`);
     toast.success("PDF downloaded!");
@@ -309,25 +306,11 @@ ${cleanGrowthRecommendations(brandResult.growthRecommendations)}
       console.log("RAW RESPONSE:", text);
       console.log("STATUS:", response.status);
       if (!text.trim()) throw new Error("n8n returned EMPTY response");
-      let parsed;
-      try { parsed = JSON.parse(text); } catch { parsed = text; }
-      console.log("PARSED:", parsed);
-      let result: unknown = parsed;
-      while (true) {
-        if (typeof result === "string") { result = JSON.parse(result); continue; }
-        if (isRecord(result) && "text" in result && isRecord(result.text)) {
-          result = result.text;
-          continue;
-        }
-        if (isRecord(result) && "output" in result) {
-          result = typeof result.output === "string" ? JSON.parse(result.output) : result.output;
-          continue;
-        }
-        break;
-      }
-      const finalSEOResult = isRecord(result)
-  ? (result as SEOResult)
-  : null;
+      const parsed: unknown = JSON.parse(text);
+      const finalSEOResult = isRecord(parsed) && isRecord(parsed.seoOpportunities)
+        ? parsed.seoOpportunities as SEOResult
+        : null;
+      setSiteAudit(isRecord(parsed) && isRecord(parsed.siteAudit) ? parsed.siteAudit as SeoSiteAudit : null);
 
 setBrandResult(finalSEOResult);
 
@@ -364,18 +347,17 @@ if (projectId && project?.userId && finalSEOResult) {
     setBrandStyle("Minimal");
     setBrandDescription("");
     setBrandResult(null);
+    setSiteAudit(null);
   };
 
   const modules = brandResult ? [
-    ["01", "SEO Audit", "TECHNICAL", brandResult.seoAudit],
-    ["02", "Keywords", "DISCOVERY", brandResult.keywords],
-    ["03", "Meta Titles", "ON-PAGE", brandResult.metaTitles],
-    ["04", "Meta Descriptions", "ON-PAGE", brandResult.metaDescriptions],
-    ["05", "Internal Linking", "ARCHITECTURE", brandResult.internalLinking],
-    ["06", "Blog Topics", "CONTENT", brandResult.blogTopics],
-    ["07", "Technical SEO Suggestions", "TECHNICAL", brandResult.technicalSEO],
-    ["08", "SEO KPIs", "MEASUREMENT", brandResult.kpis],
-    ["09", "Growth Recommendations", "GROWTH", cleanGrowthRecommendations(brandResult.growthRecommendations)],
+    ["01", "Keyword Opportunities", "DISCOVERY", brandResult.keywords || brandResult.keywordResearch],
+    ["02", "Title Opportunities", "ON-PAGE", brandResult.metaTitles],
+    ["03", "Meta Description Opportunities", "ON-PAGE", brandResult.metaDescriptions],
+    ["04", "Internal Linking Suggestions", "ARCHITECTURE", brandResult.internalLinking],
+    ["05", "Content Ideas", "CONTENT", brandResult.blogTopics || brandResult.seoContentPlan],
+    ["06", "Platform-aware Technical Actions", "TECHNICAL", brandResult.technicalSEO],
+    ["07", "Growth Actions", "GROWTH", cleanGrowthRecommendations(brandResult.growthRecommendations)],
   ] : [];
   const fieldClass = "w-full rounded-xl border border-slate-700/70 bg-[#070b16]/90 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-slate-600 hover:border-red-500/30 focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10";
   const selectClass = `${fieldClass} appearance-none pr-11`;
@@ -424,14 +406,31 @@ if (projectId && project?.userId && finalSEOResult) {
             <button onClick={handleGenerateBrand} disabled={loading} className={`mt-7 flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-sm font-bold uppercase tracking-[0.12em] transition sm:px-7 ${loading ? "cursor-not-allowed border-slate-700 bg-slate-800 text-slate-500" : "border-red-500/40 bg-gradient-to-r from-red-600 via-red-700 to-[#090c15] text-white shadow-[0_0_30px_rgba(239,68,68,0.18)] hover:border-red-400/70 hover:shadow-[0_0_40px_rgba(239,68,68,0.28)]"}`}><span>{loading ? "Generating SEO Intelligence..." : "Generate SEO Intelligence"}</span><span className="flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/5 text-cyan-300">→</span></button>
           </section>
 
+          {siteAudit && (
+            <section className="mt-8 rounded-[28px] border border-cyan-500/20 bg-slate-950/70 p-6 sm:p-8">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Real Website Check</p>
+              <h2 className="mt-2 text-2xl font-semibold">Measured from your published Buzypeezy website</h2>
+              {!siteAudit.published ? (
+                <p className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-400/5 p-5 text-amber-100">Publish your website to run a live website check.</p>
+              ) : (
+                <>
+                  <div className="mt-6 grid gap-4 sm:grid-cols-4">
+                    {[["SEO Readiness", `${siteAudit.score}/100`], ["Passed", `${siteAudit.passedChecks} of ${siteAudit.measuredChecks}`], ["Needs attention", siteAudit.needsAttention], ["Not measured", siteAudit.notMeasuredChecks]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}
+                  </div>
+                  <div className="mt-6 grid gap-3 md:grid-cols-2">
+                    {Object.entries(siteAudit.checks).map(([name, item]) => <div key={name} className="rounded-xl border border-slate-800 p-4"><div className="flex items-center justify-between gap-3"><span className="font-semibold capitalize">{name.replace(/([A-Z])/g, " $1")}</span><span className={`text-xs font-bold uppercase tracking-wider ${item.status === "pass" ? "text-emerald-300" : item.status === "missing" ? "text-amber-300" : "text-slate-500"}`}>{item.status.replace("_", " ")}</span></div><p className="mt-2 text-sm leading-6 text-slate-400">{item.evidence}</p></div>)}
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
           {!brandResult ? (
             <section className="mt-8 rounded-[28px] border border-dashed border-red-500/20 bg-slate-950/45 px-6 py-14 text-center sm:px-10"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/5 text-cyan-300"><SearchIcon /></div><p className="mt-5 text-[9px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Search Output / Standby</p><h2 className="mt-3 text-2xl font-semibold">Your SEO Intelligence will appear here</h2><p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-500">Configure the search brief to generate keyword intelligence, technical recommendations, content strategy, ranking opportunities and scalable organic growth direction.</p></section>
           ) : (
             <section className="mt-8">
-              <div className="flex flex-col gap-5 rounded-[28px] border border-red-500/20 bg-slate-950/70 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-[9px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Search Output / Ready</p><h2 className="mt-2 text-2xl font-semibold">Generated SEO Intelligence</h2></div><div className="flex flex-wrap gap-2"><button onClick={copyEntireSEO} className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-2.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/10"><CopyIcon />Copy Entire SEO Strategy</button><button onClick={downloadPDF} className="rounded-xl border border-red-400/20 bg-red-500/5 px-4 py-2.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/10">Download PDF</button><button onClick={saveProject} className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/5 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/50 hover:bg-cyan-400/10"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 3.5h10l2 2v11H4zM7 3.5v5h6v-5M7 13h6" /></svg>Save Project</button><button onClick={handleGenerateBrand} disabled={loading} className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:border-red-500/30 hover:text-white">Regenerate</button><button onClick={continueToUIUX} className="rounded-xl border border-violet-400/20 bg-violet-500/5 px-4 py-2.5 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/10">Continue to UI/UX AI →</button></div></div>
-              <div className="mt-6 rounded-[26px] border border-red-500/20 bg-gradient-to-br from-red-500/10 via-slate-950/80 to-cyan-400/5 p-6 sm:p-7"><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-cyan-300">System Health / 00</p><h3 className="mt-2 text-xl font-semibold">SEO Readiness Estimate</h3></div><div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 px-5 py-3 text-2xl font-bold text-cyan-300">{String(brandResult.seoScore).match(/\d+\/100/)?.[0] || brandResult.seoScore}</div></div><div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-red-500 to-cyan-400 transition-all duration-700" style={{ width: `${Math.min(100, Number(String(brandResult.seoScore).match(/\d+/)?.[0] || 0))}%` }} /></div></div>
+              <div className="flex flex-col gap-5 rounded-[28px] border border-red-500/20 bg-slate-950/70 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-[9px] font-semibold uppercase tracking-[0.28em] text-cyan-300">SEO Opportunities</p><h2 className="mt-2 text-2xl font-semibold">AI recommendations based on your business and verified website data</h2></div><div className="flex flex-wrap gap-2"><button onClick={copyEntireSEO} className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-2.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/10"><CopyIcon />Copy SEO Opportunities</button><button onClick={downloadPDF} className="rounded-xl border border-red-400/20 bg-red-500/5 px-4 py-2.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/10">Download PDF</button><button onClick={saveProject} className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/5 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition hover:border-cyan-300/50 hover:bg-cyan-400/10"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 3.5h10l2 2v11H4zM7 3.5v5h6v-5M7 13h6" /></svg>Save Project</button><button onClick={handleGenerateBrand} disabled={loading} className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-300 transition hover:border-red-500/30 hover:text-white">Regenerate</button><button onClick={continueToUIUX} className="rounded-xl border border-violet-400/20 bg-violet-500/5 px-4 py-2.5 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/10">Continue to UI/UX AI →</button></div></div>
               <div className="mt-6 grid gap-5">{modules.map(([number, title, category, value]) => <article key={String(number)} className="relative overflow-hidden rounded-[24px] border border-red-500/15 bg-slate-950/65 p-5 shadow-[0_0_35px_rgba(239,68,68,0.04)] sm:p-7"><div className="absolute left-0 top-8 h-12 w-px bg-gradient-to-b from-red-400 to-cyan-400" /><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-red-300">Module / {number}</span><span className="rounded-full border border-cyan-400/15 bg-cyan-400/5 px-2 py-1 text-[8px] font-bold tracking-[0.16em] text-cyan-300">{category}</span></div><h3 className="mt-2 text-xl font-semibold">{title}</h3></div><button onClick={() => copyToClipboard(String(value ?? ""), String(title))} className="inline-flex w-fit items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs font-semibold text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-400/10"><CopyIcon />Copy</button></div><p className="mt-5 whitespace-pre-wrap break-words text-[15px] leading-[1.8] text-slate-300 sm:text-base">{value}</p></article>)}</div>
-              <div className="mt-6 rounded-[28px] border border-cyan-500/15 bg-slate-950/60 p-6 sm:p-8"><p className="text-[9px] uppercase tracking-[0.28em] text-cyan-300">Performance Intelligence</p><h3 className="mt-2 text-2xl font-semibold">SEO Performance Overview</h3><div className="mt-6 grid gap-4 sm:grid-cols-3">{[["SEO Readiness Estimate", String(brandResult.seoScore).match(/\d+\/100/)?.[0] || brandResult.seoScore], ["Keyword Coverage", "20+"], ["Optimization Areas", "8"]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-slate-800 bg-slate-900/55 p-5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div></div>
             </section>
           )}
         </div>

@@ -1,5 +1,5 @@
 import { db } from "@/app/db";
-import { projects } from "@/app/db/schema";
+import { businessPublications, businessPublicationVersions, projects, publishedWebsites, websitePublicationVersions } from "@/app/db/schema";
 import {
   completeAiUsage,
   failAiUsage,
@@ -11,6 +11,12 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
+import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
+import { publicSeoDescription, publicSeoTitle, publicServices } from "@/app/lib/public-business-presentation";
+import { validatePublishedBusinessSnapshot } from "@/app/lib/business-publication";
+import { normalizeSeoOpportunities, SEO_GROUNDING_RULES } from "@/app/lib/seo-opportunity-safety";
+import { buildSeoSiteAudit } from "@/app/lib/seo-site-audit";
+import { publicWebsiteSeoDescription, publicWebsiteSeoTitle, validateWebsitePublicationSnapshot } from "@/app/lib/website-publication";
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -62,15 +68,49 @@ export async function POST(request: Request) {
     );
   }
 
+  let publicationContext: Record<string, unknown>;
+  let siteAudit: ReturnType<typeof buildSeoSiteAudit>;
   try {
     const [ownedProject] = await db
-      .select({ id: projects.id })
+      .select({ id: projects.id, name: projects.name, companyName: projects.companyName, industry: projects.industry, location: projects.location, originalBrief: projects.originalBrief, targetAudience: projects.targetAudience, goal: projects.goal, brandStyle: projects.brandStyle, brandDescription: projects.brandDescription })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.userId, uid)))
       .limit(1);
 
     if (!ownedProject) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    }
+
+    const [[businessRow], [websiteRow]] = await Promise.all([
+      db.select({ slug: businessPublications.publicSlug, snapshot: businessPublicationVersions.snapshot })
+        .from(businessPublications)
+        .innerJoin(businessPublicationVersions, and(eq(businessPublicationVersions.publicationId, businessPublications.id), eq(businessPublicationVersions.versionNumber, businessPublications.currentVersion)))
+        .where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, uid), eq(businessPublications.status, "active"))).limit(1),
+      db.select({ slug: publishedWebsites.slug, snapshot: websitePublicationVersions.snapshot })
+        .from(publishedWebsites)
+        .innerJoin(websitePublicationVersions, and(eq(websitePublicationVersions.publishedWebsiteId, publishedWebsites.id), eq(websitePublicationVersions.versionNumber, publishedWebsites.currentVersion)))
+        .where(and(eq(publishedWebsites.projectId, projectId), eq(publishedWebsites.ownerUid, uid), eq(publishedWebsites.status, "active"))).limit(1),
+    ]);
+    const origin = canonicalApplicationOrigin();
+    const businessSnapshot = businessRow ? validatePublishedBusinessSnapshot(businessRow.snapshot) : null;
+    const websiteSnapshot = websiteRow ? validateWebsitePublicationSnapshot(websiteRow.snapshot) : null;
+    if (businessSnapshot) {
+      const url = origin ? `${origin}/business/${encodeURIComponent(businessRow.slug)}` : null;
+      const services = publicServices(businessSnapshot);
+      const publicSections = [businessSnapshot.website?.supportingText, services.length, businessSnapshot.website?.about, businessSnapshot.website?.features, businessSnapshot.contact].filter(Boolean).length;
+      const imageCount = [businessSnapshot.website?.heroImage, businessSnapshot.website?.secondaryImage].filter(Boolean).length;
+      siteAudit = buildSeoSiteAudit({ published: true, publishedUrl: url, title: publicSeoTitle(businessSnapshot), metaDescription: publicSeoDescription(businessSnapshot), hasH1: true, hasOrderedHeadings: true, publicSectionCount: publicSections, internalLinkCount: 3 + publicSections, imageCount, imagesHaveAltText: true, hasStructuredData: false });
+      publicationContext = { published: true, businessName: businessSnapshot.business.name, industry: businessSnapshot.business.industry, businessDescription: businessSnapshot.business.description, targetAudience: ownedProject.targetAudience || ownedProject.goal || null, brandStyle: ownedProject.brandStyle || null, location: businessSnapshot.contact?.location || null, services: services.map((item) => item.title), title: publicSeoTitle(businessSnapshot), metaDescription: publicSeoDescription(businessSnapshot) || null, publicationUrl: url, measurableGaps: Object.entries(siteAudit.checks).filter(([, item]) => item.status === "missing").map(([key]) => key) };
+    } else if (websiteSnapshot) {
+      const url = origin ? `${origin}/published-sites/${encodeURIComponent(websiteRow.slug)}` : null;
+      const edits = websiteSnapshot.websiteEdits;
+      const publicSections = [edits?.heroDescription || websiteSnapshot.websiteOutput.websiteOverview, edits?.servicesText, edits?.aboutText].filter(Boolean).length;
+      const imageCount = Object.values(websiteSnapshot.media ?? {}).flatMap((item) => Array.isArray(item) ? item : item ? [item] : []).length;
+      siteAudit = buildSeoSiteAudit({ published: true, publishedUrl: url, title: publicWebsiteSeoTitle(websiteSnapshot), metaDescription: publicWebsiteSeoDescription(websiteSnapshot), hasH1: true, hasOrderedHeadings: true, publicSectionCount: publicSections, internalLinkCount: 3 + publicSections, imageCount, imagesHaveAltText: true, hasStructuredData: false });
+      publicationContext = { published: true, businessName: edits?.companyName || websiteSnapshot.companyName, industry: websiteSnapshot.industry || null, businessDescription: edits?.heroDescription || websiteSnapshot.websiteOutput.websiteOverview, targetAudience: ownedProject.targetAudience || ownedProject.goal || null, brandStyle: ownedProject.brandStyle || null, location: null, services: edits?.servicesText || null, title: publicWebsiteSeoTitle(websiteSnapshot), metaDescription: publicWebsiteSeoDescription(websiteSnapshot) || null, publicationUrl: url, measurableGaps: Object.entries(siteAudit.checks).filter(([, item]) => item.status === "missing").map(([key]) => key) };
+    } else {
+      siteAudit = buildSeoSiteAudit({ published: false });
+      publicationContext = { published: false, businessName: ownedProject.companyName || ownedProject.name, industry: ownedProject.industry || null, businessDescription: ownedProject.originalBrief || ownedProject.brandDescription || null, targetAudience: ownedProject.targetAudience || ownedProject.goal || null, brandStyle: ownedProject.brandStyle || null, location: ownedProject.location || null, services: null, title: null, metaDescription: null, publicationUrl: null, measurableGaps: [] };
     }
   } catch {
     console.error("SEO AI project authorization failed.");
@@ -102,8 +142,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const seoPayload = { ...body };
-  delete seoPayload.projectId;
+  const seoPayload = {
+    companyName: publicationContext.businessName,
+    industry: publicationContext.industry,
+    targetAudience: publicationContext.targetAudience,
+    brandStyle: publicationContext.brandStyle,
+    brandDescription: publicationContext.businessDescription,
+    publicationContext,
+    recommendationRules: SEO_GROUNDING_RULES,
+  };
   const controller = new AbortController();
   const startedAt = Date.now();
   const timeout = setTimeout(() => controller.abort(), 120_000);
@@ -150,7 +197,7 @@ export async function POST(request: Request) {
           console.error("SEO AI execution association failed.");
         }
       }
-      return NextResponse.json(data);
+      return NextResponse.json({ siteAudit, seoOpportunities: normalizeSeoOpportunities(data, publicationContext) });
     } catch {
       await finalizeUsage(usageId, "failed", startedAt);
       return NextResponse.json(
