@@ -9,6 +9,15 @@ const LABEL_PREFIX = /^(?:persona|audience|target audience|customer segment|step
 const LIST_MARKER = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
 function normalizedLabel(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+export function uniquePublicNavigationItems<T extends Readonly<{ label: string }>>(items: readonly T[]): T[] {
+  const labels = new Set<string>();
+  return items.filter((item) => {
+    const label = normalizedLabel(item.label);
+    if (!label || labels.has(label)) return false;
+    labels.add(label);
+    return true;
+  });
+}
 function clean(value: string | null | undefined, maximum = 320) {
   const candidate = value?.replace(LIST_MARKER, "").replace(LABEL_PREFIX, "").trim();
   if (!candidate || candidate.length > maximum || INTERNAL_PUBLIC_TEXT.test(candidate) || hasUnsupportedPublicClaim(candidate) ||
