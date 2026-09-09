@@ -35,6 +35,10 @@ export const WEBSITE_INTELLIGENCE_MODULES = [
   "Branding", "UI/UX", "SEO", "Marketing", "Sales", "Social/Content", "Business DNA",
 ] as const;
 export type WebsiteIntelligenceModule = (typeof WEBSITE_INTELLIGENCE_MODULES)[number];
+export type WebsiteIntelligenceFailure = Readonly<{
+  ok: false;
+  code: "INVALID_EXISTING_WEBSITE" | "INVALID_WEBSITE_EDITS" | "INVALID_MERGED_WEBSITE";
+}>;
 
 const PRIVATE_STRATEGY = /\b(?:strategy|funnel|kpi|campaign timeline|content calendar|lead scoring|internal|implementation|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
 const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
@@ -42,6 +46,38 @@ const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
   try { return JSON.parse(value); } catch { return null; }
+}
+
+const WEBSITE_FIELDS = [
+  "websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures",
+  "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations",
+] as const;
+
+function record(value: unknown): Record<string, unknown> | null {
+  const parsed = parse(value);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  return parsed as Record<string, unknown>;
+}
+
+function normalizeExistingWebsite(value: unknown) {
+  let candidate = record(value);
+  if (candidate && !candidate.websiteOverview && candidate.output) candidate = record(candidate.output);
+  if (!candidate) return null;
+  const canonical: Record<string, unknown> = {};
+  for (const field of WEBSITE_FIELDS) {
+    const fieldValue = field === "colourScheme" ? candidate[field] ?? candidate.colorScheme : candidate[field];
+    if (typeof fieldValue !== "string") return null;
+    canonical[field] = fieldValue;
+  }
+  const website = validateWebsiteAiOutput(canonical);
+  if (!website) return null;
+  const edits = candidate.websiteEdits === undefined ? null : validateWebsiteEdits(candidate.websiteEdits);
+  return {
+    website,
+    edits,
+    hadInvalidEdits: candidate.websiteEdits !== undefined && !edits,
+    legacyHeroHeadline: typeof candidate.heroHeadline === "string" ? candidate.heroHeadline : null,
+  };
 }
 
 function publicCopy(value: unknown, maximum = 650) {
@@ -78,19 +114,17 @@ function dnaServices(dna: BusinessDnaContent | null | undefined) {
   return values.length ? publicServiceText([...new Set(values)].join("\n"))?.slice(0, 1_200) || null : null;
 }
 
-export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSources) {
-  const rawWebsite = parse(sources.website);
-  const website = validateWebsiteAiOutput(rawWebsite);
-  if (!website) return null;
+export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntelligenceSources) {
+  const normalized = normalizeExistingWebsite(sources.website);
+  if (!normalized) return { ok: false, code: "INVALID_EXISTING_WEBSITE" } as const;
+  if (normalized.hadInvalidEdits) return { ok: false, code: "INVALID_WEBSITE_EDITS" } as const;
+  const { website, edits: existingEdits } = normalized;
   const branding = sources.branding ? validateBrandingOutput(parse(sources.branding)) : null;
   const uiux = sources.uiux ? validateUiuxOutput(parse(sources.uiux)) : null;
   const seo = sources.approvedSeo ? validateSeoOutput(parse(sources.approvedSeo)) : null;
   const marketing = sources.approvedMarketing ? validateMarketingOutput(parse(sources.approvedMarketing)) : null;
   const sales = sources.approvedSales ? validateSalesOutput(parse(sources.approvedSales)) : null;
   const content = sources.approvedContent ? validateContentOutput(parse(sources.approvedContent)) : null;
-  const existingEdits = rawWebsite && typeof rawWebsite === "object" && !Array.isArray(rawWebsite) && "websiteEdits" in rawWebsite
-    ? validateWebsiteEdits(rawWebsite.websiteEdits)
-    : null;
   const dna = sources.businessDna;
 
   const socialCopy = joinPublic((sources.approvedSocial ?? []).map((post) => post.content), 650);
@@ -122,7 +156,7 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
 
   const websiteEdits = {
     companyName,
-    heroHeadline: existingEdits?.heroHeadline ?? firstPublicCandidate(seo?.metaTitles, 200)
+    heroHeadline: existingEdits?.heroHeadline ?? publicCopy(normalized.legacyHeroHeadline, 200) ?? firstPublicCandidate(seo?.metaTitles, 200)
       ?? String(website.websiteGoal),
     heroDescription,
     aboutText: about ?? existingEdits?.aboutText ?? String(website.designRecommendations),
@@ -135,7 +169,7 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
     primaryCtaLink: existingEdits?.primaryCtaLink ?? "#contact",
     template,
   };
-  if (!validateWebsiteEdits(websiteEdits)) return null;
+  if (!validateWebsiteEdits(websiteEdits)) return { ok: false, code: "INVALID_WEBSITE_EDITS" } as const;
 
   const merged = {
     ...website,
@@ -162,7 +196,7 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
   };
   const validatedOutput = validateWebsiteAiOutput(merged);
   const validatedEdits = validateWebsiteEdits(websiteEdits);
-  if (!validatedOutput || !validatedEdits) return null;
+  if (!validatedOutput || !validatedEdits) return { ok: false, code: "INVALID_MERGED_WEBSITE" } as const;
   const output = { ...validatedOutput, websiteEdits: validatedEdits };
   const original = { ...website, ...(existingEdits && { websiteEdits: existingEdits }) };
   const modules: WebsiteIntelligenceModule[] = [];
@@ -194,5 +228,10 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
     (Boolean(dnaAbout) && output.websiteEdits.aboutText !== existingEdits?.aboutText) ||
     (Boolean(dnaServices(dna)) && output.websiteEdits.servicesText !== existingEdits?.servicesText)
   )) modules.push("Business DNA");
-  return { output, changed: modules.length > 0 && changed(output, original), modules };
+  return { ok: true, value: { output, changed: modules.length > 0 && changed(output, original), modules } } as const;
+}
+
+export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSources) {
+  const result = applyLatestWebsiteIntelligenceDetailed(sources);
+  return result.ok ? result.value : null;
 }

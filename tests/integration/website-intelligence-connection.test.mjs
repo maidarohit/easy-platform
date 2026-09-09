@@ -106,6 +106,19 @@ test("invalid existing website produces a failure result and no success metadata
   }), null);
 });
 
+test("legacy loadable website output with an extra hero field updates the existing draft", () => {
+  const legacyWebsite = Object.fromEntries(Object.entries(website).filter(([field]) => field !== "websiteEdits"));
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" },
+    website: { ...legacyWebsite, heroHeadline: "Strongest spaces start here" }, branding,
+  });
+  assert.ok(result);
+  assert.equal(result.changed, true);
+  assert.equal(result.output.websiteEdits.heroHeadline, "Strongest spaces start here");
+  assert.equal(result.output.websiteEdits.primaryCtaLink, "#contact");
+  assert.deepEqual(result.modules, ["Branding"]);
+});
+
 test("apply route is owner-scoped, updates only an existing draft, and cannot publish or call providers", async () => {
   const route = await source("app/api/website-ai/apply-intelligence/route.ts");
   assert.match(route, /verifyFirebaseIdToken/);
@@ -116,6 +129,8 @@ test("apply route is owner-scoped, updates only an existing draft, and cannot pu
   assert.match(route, /row\?\.approvedAt \? parsed\(row\.result\) : null/);
   assert.match(route, /socialDailyPosts\.status, "approved"[\s\S]*socialDailyPosts\.status, "published"/);
   assert.doesNotMatch(route, /analytics/);
+  assert.match(route, /Website intelligence merge rejected the saved draft\.[\s\S]*websiteOutputId/);
+  assert.match(route, /Some saved website settings could not be applied safely\. Your website draft was not changed\./);
 });
 
 test("Website AI action previews the merged draft and leaves publishing explicit", async () => {

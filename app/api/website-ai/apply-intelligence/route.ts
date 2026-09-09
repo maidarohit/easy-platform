@@ -3,7 +3,7 @@ import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projects, socialDailyPosts } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
-import { applyLatestWebsiteIntelligence } from "@/app/lib/website-intelligence-connection";
+import { applyLatestWebsiteIntelligenceDetailed } from "@/app/lib/website-intelligence-connection";
 
 const MAX_BODY_BYTES = 1_024;
 const SOURCE_MODULES = ["website", "branding", "uiux", "seo", "marketing", "sales", "content"] as const;
@@ -61,7 +61,7 @@ export async function PATCH(request: Request) {
         const row = latest.get(module);
         return row?.approvedAt ? parsed(row.result) : null;
       };
-      const merged = applyLatestWebsiteIntelligence({
+      const mergeResult = applyLatestWebsiteIntelligenceDetailed({
         project,
         website: parsed(website.result),
         businessDna: dnaRows[0]?.dna ?? null,
@@ -76,7 +76,8 @@ export async function PATCH(request: Request) {
           recommendedAction: post.recommendedAction,
         })),
       });
-      if (!merged) throw new Error("INVALID_MERGE");
+      if (!mergeResult.ok) return { mergeFailure: mergeResult.code, websiteOutputId: website.id } as const;
+      const merged = mergeResult.value;
       if (!merged.changed) return merged;
       const [updated] = await transaction.update(projectOutputs).set({
         result: JSON.stringify(merged.output), approvedAt: null, updatedAt: new Date(),
@@ -87,11 +88,23 @@ export async function PATCH(request: Request) {
       if (!updated) throw new Error("UPDATE_FAILED");
       return merged;
     });
+    if ("mergeFailure" in output) {
+      console.error("Website intelligence merge rejected the saved draft.", {
+        code: output.mergeFailure, projectId, userId, websiteOutputId: output.websiteOutputId,
+      });
+      const error = output.mergeFailure === "INVALID_EXISTING_WEBSITE"
+        ? "The saved website draft could not be updated safely. Please save the website draft and try again."
+        : "Some saved website settings could not be applied safely. Your website draft was not changed.";
+      return Response.json({ error }, { status: 422 });
+    }
     return Response.json(output, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof Error && error.message === "NOT_FOUND") return Response.json({ error: "Project not found." }, { status: 404 });
     if (error instanceof Error && error.message === "NO_WEBSITE_DRAFT") return Response.json({ error: "Generate a website draft before applying business intelligence." }, { status: 409 });
-    console.error("Website intelligence update failed.");
+    console.error("Website intelligence update failed.", {
+      code: error instanceof Error ? error.message : "UNKNOWN_ERROR", projectId, userId,
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
     return Response.json({ error: "Unable to update the website draft." }, { status: 500 });
   }
 }
