@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/request-body";
 import { validateProjectOutputBody } from "@/app/lib/project-request-validation";
 import { findLatestValidSeoOutput } from "@/app/lib/seo-opportunity-safety";
+import { normalizeWebsiteDraftForPersistence } from "@/app/lib/website-intelligence-connection";
 
 const MAX_PROJECT_OUTPUT_BODY_BYTES = 256 * 1024;
 
@@ -46,16 +47,23 @@ export async function POST(req: Request) {
   try {
     const projectId = body.projectId;
     const moduleName = body.module.toLowerCase();
-    const result = body.result;
+    let result = body.result;
 
     const [ownedProject] = await db
-      .select({ id: projects.id })
+      .select({ id: projects.id, name: projects.name, companyName: projects.companyName,
+        industry: projects.industry, brandStyle: projects.brandStyle })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
       .limit(1);
 
     if (!ownedProject) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    if (moduleName === "website") {
+      const normalized = normalizeWebsiteDraftForPersistence({ project: ownedProject, website: result });
+      if (!normalized) return NextResponse.json({ error: "The saved website draft could not be normalized safely." }, { status: 422 });
+      result = JSON.stringify(normalized);
     }
 
     const [existingOutput] = await db
@@ -68,6 +76,7 @@ export async function POST(req: Request) {
           eq(projectOutputs.module, moduleName)
         )
       )
+      .orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt))
       .limit(1);
 
     if (existingOutput) {
@@ -78,7 +87,10 @@ export async function POST(req: Request) {
           approvedAt: null,
           updatedAt: new Date(),
         })
-        .where(eq(projectOutputs.id, existingOutput.id))
+        .where(and(
+          eq(projectOutputs.id, existingOutput.id), eq(projectOutputs.projectId, projectId),
+          eq(projectOutputs.userId, userId), eq(projectOutputs.module, moduleName),
+        ))
         .returning();
 
       return NextResponse.json({

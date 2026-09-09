@@ -467,6 +467,13 @@ const saveProject = async () => {
       throw new Error("Failed to save project");
     }
 
+    const outputResponse = await authenticatedFetch("/api/project-outputs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, module: "website", result: JSON.stringify(brandResult) }),
+    });
+    if (!outputResponse.ok) throw new Error("Failed to save website draft");
+
     toast.success("Project saved successfully!");
   } catch (error) {
     console.error("Website project save error:", error);

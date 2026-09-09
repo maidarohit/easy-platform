@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyLatestWebsiteIntelligence } from "../../app/lib/website-intelligence-connection.ts";
+import { applyLatestWebsiteIntelligence, normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const website = {
@@ -119,6 +119,30 @@ test("legacy loadable website output with an extra hero field updates the existi
   assert.deepEqual(result.modules, ["Branding"]);
 });
 
+test("legacy website draft applies directly through safe server normalization", () => {
+  const legacyWebsite = { ...website, designRecommendations: "A".repeat(4_500) };
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" },
+    website: legacyWebsite, branding,
+  });
+  assert.ok(result);
+  assert.equal(result.changed, true);
+  assert.equal(result.output.designRecommendations.length <= 4_000, true);
+});
+
+test("legacy website draft is canonicalized on save and then applies successfully", () => {
+  const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
+  const saved = normalizeWebsiteDraftForPersistence({
+    project, website: { ...website, designRecommendations: "A".repeat(4_500), legacyLayout: "grid" },
+  });
+  assert.ok(saved);
+  assert.equal(saved.designRecommendations.length, 4_000);
+  assert.equal("legacyLayout" in saved, false);
+  const result = applyLatestWebsiteIntelligence({ project, website: saved, branding });
+  assert.ok(result);
+  assert.equal(result.changed, true);
+});
+
 test("apply route is owner-scoped, updates only an existing draft, and cannot publish or call providers", async () => {
   const route = await source("app/api/website-ai/apply-intelligence/route.ts");
   assert.match(route, /verifyFirebaseIdToken/);
@@ -131,6 +155,18 @@ test("apply route is owner-scoped, updates only an existing draft, and cannot pu
   assert.doesNotMatch(route, /analytics/);
   assert.match(route, /Website intelligence merge rejected the saved draft\.[\s\S]*websiteOutputId/);
   assert.match(route, /Some saved website settings could not be applied safely\. Your website draft was not changed\./);
+});
+
+test("Save Project canonicalizes the same latest owned website row used by hydration and apply", async () => {
+  const [page, outputs] = await Promise.all([
+    source("app/dashboard/website-ai/page.tsx"), source("app/api/project-outputs/route.ts"),
+  ]);
+  const saveProject = page.slice(page.indexOf("const saveProject"), page.indexOf("const handleGenerateBrand"));
+  assert.match(saveProject, /authenticatedFetch\("\/api\/projects"[\s\S]*authenticatedFetch\("\/api\/project-outputs"/);
+  assert.match(saveProject, /module: "website"[\s\S]*JSON\.stringify\(brandResult\)/);
+  assert.match(outputs, /normalizeWebsiteDraftForPersistence/);
+  assert.match(outputs, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\)\)[\s\S]*limit\(1\)/);
+  assert.match(outputs, /eq\(projectOutputs\.id, existingOutput\.id\)[\s\S]*eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, userId\)[\s\S]*eq\(projectOutputs\.module, moduleName\)/);
 });
 
 test("Website AI action previews the merged draft and leaves publishing explicit", async () => {

@@ -52,6 +52,9 @@ const WEBSITE_FIELDS = [
   "websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures",
   "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations",
 ] as const;
+const LEGACY_WEBSITE_MAX = 20_000;
+const CANONICAL_WEBSITE_MAX = 4_000;
+const UNSAFE_WEBSITE_TEXT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
 
 function record(value: unknown): Record<string, unknown> | null {
   const parsed = parse(value);
@@ -67,7 +70,9 @@ function normalizeExistingWebsite(value: unknown) {
   for (const field of WEBSITE_FIELDS) {
     const fieldValue = field === "colourScheme" ? candidate[field] ?? candidate.colorScheme : candidate[field];
     if (typeof fieldValue !== "string") return null;
-    canonical[field] = fieldValue;
+    const normalized = fieldValue.trim();
+    if (!normalized || normalized.length > LEGACY_WEBSITE_MAX || UNSAFE_WEBSITE_TEXT.test(normalized)) return null;
+    canonical[field] = normalized.slice(0, CANONICAL_WEBSITE_MAX).trimEnd();
   }
   const website = validateWebsiteAiOutput(canonical);
   if (!website) return null;
@@ -234,4 +239,12 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
 export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSources) {
   const result = applyLatestWebsiteIntelligenceDetailed(sources);
   return result.ok ? result.value : null;
+}
+
+export function normalizeWebsiteDraftForPersistence(input: Readonly<{
+  project: ProjectIdentity;
+  website: unknown;
+}>) {
+  const result = applyLatestWebsiteIntelligenceDetailed({ project: input.project, website: input.website });
+  return result.ok ? result.value.output : null;
 }
