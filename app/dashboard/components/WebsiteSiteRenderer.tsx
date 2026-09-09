@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 import { resolveWebsiteMedia, type WebsiteMediaInput, type ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
 import { publicWebsitePageBlocks, resolvePublishedWebsitePage, resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "@/app/lib/website-site-presentation";
-import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { websiteThemes } from "./websiteThemes";
 import { websiteMediaReference } from "@/app/lib/website-essential-pages";
@@ -131,6 +131,16 @@ function PageIntro({ title, description, accent }: { title: string; description:
   return <section className="border-b border-slate-200/70 bg-slate-500/[0.07] px-5 py-14 sm:px-8 sm:py-20 lg:px-12"><div className="mx-auto max-w-7xl"><p className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Explore</p><h1 className="mt-4 max-w-4xl text-4xl font-extrabold leading-tight tracking-[-0.05em] sm:text-6xl">{title}</h1>{description && <p className="mt-5 max-w-2xl text-lg leading-8 opacity-70">{description}</p>}</div></section>;
 }
 
+function PageEmptyState({ type, contactHref, basePath, accent }: { type: WebsitePage["type"]; contactHref: string; basePath: string; accent: string }) {
+  const copy = type === "portfolio" || type === "project"
+    ? "Verified project work will be presented here when it is available."
+    : type === "faq" ? "Have a question about your project? Contact us for the information you need."
+    : type === "services" || type === "service" ? "Contact us to discuss the service that best fits your needs."
+    : null;
+  if (!copy) return null;
+  return <section className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-900 shadow-sm"><p className="mx-auto max-w-2xl leading-7 text-slate-600">{copy}</p><SiteLink href={contactHref} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center font-semibold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Contact us</SiteLink></div></section>;
+}
+
 export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
   const validated = validateWebsiteSiteDocument(document), page = validated && (publicPageOnly ? resolvePublishedWebsitePage(validated, pagePath) : resolveWebsiteSitePage(validated, pagePath, preview));
   if (!validated || !page) return null;
@@ -141,7 +151,7 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
   const shellStyle: CSSProperties = { backgroundColor: baseTheme.pageBackground, color: baseTheme.textColor, fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont };
   const pages = new Map(validated.pages.map((item) => [item.id, item]));
   const navigation = visibleWebsiteNavigation(validated);
-  const pageBlocks = publicPageOnly ? publicWebsitePageBlocks(validated, page.path) : page.blocks;
+  const pageBlocks = publicWebsitePageBlocks(validated, page.path, !publicPageOnly && preview);
   const pageServices = validated.pages.filter((item) => item.type === "service" && item.visibility === "visible").map((item): SiteService | null => {
     const detail = item.blocks.find((block): block is Extract<WebsiteBlock, { type: "serviceDetail" }> => block.type === "serviceDetail" && block.visibility === "visible");
     const title = safeWebsiteBlockText(detail?.heading || item.title, 160);
@@ -162,13 +172,19 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
   const headerCta = safeWebsiteBlockText(validated.header.ctaLabel, 100);
   const contactHref = validated.pages.find((item) => item.type === "contact" && item.visibility === "visible")?.path
     ?? (pageBlocks.some((block) => block.type === "contact" && block.visibility === "visible") ? "#contact" : "/");
+  const hasPageContent = pageBlocks.some((block) => {
+    if (block.type === "gallery") return resolvedMedia.work.length > 0 || resolvedMedia.services.length > 0;
+    if (block.type === "faq") return block.items.some((item) => Boolean(safeWebsiteBlockText(item.question)) && Boolean(safeWebsiteBlockText(item.answer)));
+    if (block.type === "services") return services.length > 0 || Boolean(safeWebsiteBlockText(block.introduction)) || resolvedMedia.services.length > 0;
+    return true;
+  });
   return <div data-site-document-version="2" data-page-path={page.path} className="min-h-full overflow-hidden" style={shellStyle}>
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur sm:px-8 lg:px-12"><div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
       <SiteLink href="/" basePath={basePath} onNavigate={onNavigate} className="text-xl font-bold tracking-tight focus-visible:outline-none focus-visible:ring-2">{brandLabel}</SiteLink>
       <nav aria-label="Primary navigation" className="hidden items-center gap-6 md:flex">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`border-b-2 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${href === page.path ? "border-current opacity-100" : "border-transparent opacity-65 hover:opacity-100"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav>
       {headerCta && <SiteLink href={publicPageOnly ? contactHref : validated.header.ctaHref} basePath={basePath} className="px-4 py-2 text-sm font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: baseTheme.buttonRadius }}>{headerCta}</SiteLink>}
     </div><nav aria-label="Mobile navigation" className="mx-auto mt-3 flex max-w-7xl gap-5 overflow-x-auto pb-1 md:hidden">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`shrink-0 py-1 text-sm font-semibold ${href === page.path ? "opacity-100" : "opacity-60"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav></header>
-    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} />)}</main>
+    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} />)}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
     <footer className="border-t border-slate-200 bg-slate-950 px-5 py-12 text-white sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-slate-300 hover:text-white">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-white">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-slate-400" /></footer>
   </div>;
 }

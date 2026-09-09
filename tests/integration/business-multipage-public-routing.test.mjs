@@ -20,6 +20,7 @@ function fullDocument() {
   let value = document();
   value = addWebsitePage(value, { title: "About", path: "/about", type: "about" });
   value = addWebsitePage(value, { title: "Services", path: "/services", type: "services" });
+  value = addWebsitePage(value, { title: "Process", path: "/process", type: "process" });
   return addWebsitePage(value, { title: "Contact", path: "/contact", type: "contact" });
 }
 
@@ -28,6 +29,8 @@ function pageResolutionDocument() {
   return validateWebsiteSiteDocument({ ...value, pages: value.pages.map((page) => {
     if (page.path === "/contact") return { ...page, blocks: [{ id: "block-contact-page", type: "contact", order: 0, visibility: "visible", heading: "Contact us", body: "Send an enquiry." }] };
     if (page.path === "/services") return { ...page, blocks: [{ id: "block-services-page", type: "services", order: 0, visibility: "visible", heading: "Services", introduction: "Interior design", serviceIds: [] }] };
+    if (page.path === "/projects") return { ...page, blocks: [{ id: "block-projects-page", type: "gallery", order: 0, visibility: "visible", heading: "Projects", mediaIds: ["media-project-one"] }] };
+    if (page.path === "/process") return { ...page, blocks: [{ id: "block-process-page", type: "process", order: 0, visibility: "visible", heading: "Process", steps: [] }] };
     return page;
   }) });
 }
@@ -48,18 +51,19 @@ test("schema-v2 business child routes resolve only published document pages", as
 test("schema-v2 root and child resolution return only their exact page block sets", () => {
   const value = pageResolutionDocument();
   assert.ok(value);
-  assert.deepEqual(publicWebsitePageBlocks(value, "/").map((block) => block.id), ["block-home-hero", "block-home-content", "block-home-services", "block-home-contact"]);
+  assert.deepEqual(publicWebsitePageBlocks(value, "/").map((block) => block.id), ["block-home-hero", "block-home-services", "block-home-projects-preview", "block-home-process-preview", "block-home-content", "block-home-final-cta"]);
   assert.deepEqual(publicWebsitePageBlocks(value, "/services").map((block) => block.id), ["block-services-page"]);
   assert.deepEqual(publicWebsitePageBlocks(value, "/contact").map((block) => block.id), ["block-contact-page"]);
-  assert.ok(publicWebsitePageBlocks(value, "/").every((block) => block.id.startsWith("block-home-")));
+  assert.equal(publicWebsitePageBlocks(value, "/")[0].type, "hero");
+  assert.ok(!publicWebsitePageBlocks(value, "/").some((block) => block.type === "contact"));
 });
 
 test("each supported public page resolves only its own block composition", () => {
   const value = pageResolutionDocument();
   assert.ok(value);
   const expected = new Map([
-    ["/", ["block-home-hero", "block-home-content", "block-home-services", "block-home-contact"]],
-    ["/services", ["block-services-page"]], ["/projects", []], ["/process", []], ["/faq", []], ["/contact", ["block-contact-page"]],
+    ["/", ["block-home-hero", "block-home-services", "block-home-projects-preview", "block-home-process-preview", "block-home-content", "block-home-final-cta"]],
+    ["/services", ["block-services-page"]], ["/projects", ["block-projects-page"]], ["/process", ["block-process-page"]], ["/faq", []], ["/contact", ["block-contact-page"]],
   ]);
   for (const [path, ids] of expected) assert.deepEqual(publicWebsitePageBlocks(value, path).map((block) => block.id), ids, path);
 });
@@ -116,4 +120,16 @@ test("shared rendering removes internal instructions and unverified history", ()
   assert.equal(safeWebsiteBlockText("Our team of award-winning designers has 20 years of experience."), "");
   const snapshot = buildPublishedBusinessSnapshot(preview, {}, document());
   assert.ok(snapshot.siteDocument);
+});
+
+test("Home never promotes Contact copy into its hero and keeps full Contact content on the Contact page", () => {
+  const value = pageResolutionDocument();
+  assert.ok(value);
+  const contactHero = validateWebsiteSiteDocument({ ...value, pages: value.pages.map((page) => page.path === "/" ? { ...page, blocks: page.blocks.map((block) => block.type === "hero" ? { ...block, headline: "Contact us" } : block) } : page) });
+  assert.ok(contactHero);
+  const home = publicWebsitePageBlocks(contactHero, "/");
+  assert.equal(home[0].type, "hero");
+  assert.equal(home[0].headline, contactHero.branding.name);
+  assert.ok(!home.some((block) => block.id === "block-contact-page" || block.type === "contact"));
+  assert.deepEqual(publicWebsitePageBlocks(contactHero, "/contact").map((block) => block.id), ["block-contact-page"]);
 });

@@ -1,5 +1,5 @@
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
-import { validateWebsiteSiteDocument, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|^(?:i run|i want|we want|our goal is)\b|\bthe website (?:will|should|must|needs? to)\b|\bthe tone (?:will|should|must)\b|\b(?:describe|mention|claim|include|add|write)\b[^.!?\n]{0,160}\b(?:only when|if verified|when verified)\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt|project brief|original brief|customer brief|target audience|conversion goal)\b|\b(?:we started as|we began as|founded by|our founders?|our team of)\b)/i;
 const HTML_OR_SCRIPT = /<\/?[a-z][^>]*>|(?:javascript|vbscript)\s*:/i;
@@ -49,9 +49,35 @@ export function visiblePublishedWebsitePages(document: WebsiteSiteDocument) {
   return validated ? validated.pages.filter((page) => page.visibility === "visible" && supportedPublicPage(page)).sort((a, b) => a.order - b.order) : [];
 }
 
-export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: string) {
-  const validated = validateWebsiteSiteDocument(document), page = validated && resolvePublishedWebsitePage(validated, path);
-  return page?.blocks ?? [];
+export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: string, includeHidden = false) {
+  const validated = validateWebsiteSiteDocument(document);
+  const page = validated && (includeHidden ? resolveWebsiteSitePage(validated, path, true) : resolvePublishedWebsitePage(validated, path));
+  if (!validated || !page) return [];
+  if (page.path !== "/") return page.blocks;
+
+  const hero = page.blocks.find((block): block is Extract<WebsiteBlock, { type: "hero" }> => block.type === "hero");
+  const services = page.blocks.find((block): block is Extract<WebsiteBlock, { type: "services" }> => block.type === "services");
+  const projects = validated.pages.find((item) => item.type === "portfolio" && item.visibility === "visible")?.blocks
+    .find((block): block is Extract<WebsiteBlock, { type: "gallery" }> => block.type === "gallery" && block.visibility === "visible" && block.mediaIds.length > 0);
+  const process = validated.pages.find((item) => item.type === "process" && item.visibility === "visible")?.blocks
+    .find((block): block is Extract<WebsiteBlock, { type: "process" }> => block.type === "process" && block.visibility === "visible");
+  const about = page.blocks.find((block): block is Extract<WebsiteBlock, { type: "content" }> => block.type === "content" && Boolean(safeWebsiteBlockText(block.body)));
+  const ctaLabel = safeWebsiteBlockText(validated.header.ctaLabel, 100) || "Contact";
+  const contactPath = validated.pages.find((item) => item.type === "contact" && item.visibility === "visible")?.path || "/contact";
+  const homeHero: WebsiteBlock = hero ? {
+    ...hero,
+    headline: /^(?:contact|get in touch|enquire|book|request)(?:\s|$)/i.test(hero.headline.trim()) ? validated.branding.name : hero.headline,
+    order: 0,
+  } : { id: "block-home-hero-presentation", type: "hero", order: 0, visibility: "visible", headline: validated.branding.name, description: "", ctaLabel, ctaHref: contactPath };
+  const finalCta: WebsiteBlock = { id: "block-home-final-cta", type: "cta", order: 5, visibility: "visible", heading: "Start a conversation", body: "Tell us what you are looking for and we can discuss the right next step.", label: ctaLabel, href: contactPath };
+  return [
+    homeHero,
+    ...(services ? [{ ...services, order: 1 }] : []),
+    ...(projects ? [{ ...projects, id: "block-home-projects-preview", order: 2 }] : []),
+    ...(process ? [{ ...process, id: "block-home-process-preview", order: 3 }] : []),
+    ...(about ? [{ ...about, order: 4 }] : []),
+    finalCta,
+  ] as WebsiteBlock[];
 }
 
 export function publicWebsitePageSeo(document: WebsiteSiteDocument, path: string) {
