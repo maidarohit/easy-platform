@@ -77,8 +77,9 @@ export async function PATCH(request: Request) {
         })),
       });
       if (!merged) throw new Error("INVALID_MERGE");
+      if (!merged.changed) return merged;
       const [updated] = await transaction.update(projectOutputs).set({
-        result: JSON.stringify(merged), approvedAt: null, updatedAt: new Date(),
+        result: JSON.stringify(merged.output), approvedAt: null, updatedAt: new Date(),
       }).where(and(
         eq(projectOutputs.id, website.id), eq(projectOutputs.projectId, projectId),
         eq(projectOutputs.userId, userId), eq(projectOutputs.module, "website"),
@@ -86,7 +87,7 @@ export async function PATCH(request: Request) {
       if (!updated) throw new Error("UPDATE_FAILED");
       return merged;
     });
-    return Response.json({ output }, { headers: { "Cache-Control": "private, no-store" } });
+    return Response.json(output, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     if (error instanceof Error && error.message === "NOT_FOUND") return Response.json({ error: "Project not found." }, { status: 404 });
     if (error instanceof Error && error.message === "NO_WEBSITE_DRAFT") return Response.json({ error: "Generate a website draft before applying business intelligence." }, { status: 409 });

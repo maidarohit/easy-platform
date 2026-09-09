@@ -49,19 +49,21 @@ test("deterministic website merge applies authoritative and approved sources whi
     approvedSocial: [{ content: "Explore ideas for your next space.", recommendedAction: "Book a consultation" }],
   });
   assert.ok(result);
-  assert.equal(result.colourScheme, branding.colorPalette);
-  assert.equal(result.typography, branding.typography);
-  assert.equal(result.siteStructure, uiux.userFlow);
-  assert.match(result.designRecommendations, /Warm and concise|compact mobile navigation/);
-  assert.match(result.seoRecommendations, /Meta title: Acme Interior Design/);
-  assert.match(result.seoRecommendations, /Meta description: Thoughtful interior design/);
-  assert.equal(result.websiteEdits.primaryCtaLabel, "Book a consultation");
-  assert.equal(result.websiteEdits.template, "Luxury");
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.modules, ["Branding", "UI/UX", "SEO", "Sales", "Social/Content", "Business DNA"]);
+  assert.equal(result.output.colourScheme, branding.colorPalette);
+  assert.equal(result.output.typography, branding.typography);
+  assert.equal(result.output.siteStructure, uiux.userFlow);
+  assert.match(result.output.designRecommendations, /Warm and concise|compact mobile navigation/);
+  assert.match(result.output.seoRecommendations, /Meta title: Acme Interior Design/);
+  assert.match(result.output.seoRecommendations, /Meta description: Thoughtful interior design/);
+  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Book a consultation");
+  assert.equal(result.output.websiteEdits.template, "Luxury");
   assert.deepEqual(
-    { phone: result.websiteEdits.phone, email: result.websiteEdits.email, address: result.websiteEdits.address, whatsapp: result.websiteEdits.whatsapp },
+    { phone: result.output.websiteEdits.phone, email: result.output.websiteEdits.email, address: result.output.websiteEdits.address, whatsapp: result.output.websiteEdits.whatsapp },
     { phone: "123", email: "owner@example.com", address: "Existing address", whatsapp: "456" },
   );
-  assert.doesNotMatch(JSON.stringify(result.websiteEdits), /Private strategy|Private funnel|Private script|Private pricing/);
+  assert.doesNotMatch(JSON.stringify(result.output.websiteEdits), /Private strategy|Private funnel|Private script|Private pricing/);
 });
 
 test("unapproved customer-facing modules are absent unless passed through the approved boundary", () => {
@@ -70,9 +72,38 @@ test("unapproved customer-facing modules are absent unless passed through the ap
     branding, uiux,
   });
   assert.ok(result);
-  assert.equal(result.websiteEdits.heroDescription, "Existing description");
-  assert.equal(result.websiteEdits.primaryCtaLabel, "Contact");
-  assert.equal(result.seoRecommendations, "Existing SEO");
+  assert.equal(result.output.websiteEdits.heroDescription, "Existing description");
+  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Contact");
+  assert.equal(result.output.seoRecommendations, "Existing SEO");
+});
+
+test("no-change result reports an up-to-date draft with no applied modules", () => {
+  const first = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" }, website, branding, uiux,
+  });
+  assert.ok(first);
+  const second = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" }, website: first.output, branding, uiux,
+  });
+  assert.ok(second);
+  assert.equal(second.changed, false);
+  assert.deepEqual(second.modules, []);
+});
+
+test("partial change reports only the module that changed the draft", () => {
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" }, website, branding,
+  });
+  assert.ok(result);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.modules, ["Branding"]);
+});
+
+test("invalid existing website produces a failure result and no success metadata", () => {
+  assert.equal(applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" },
+    website: { websiteOverview: "Incomplete" }, branding,
+  }), null);
 });
 
 test("apply route is owner-scoped, updates only an existing draft, and cannot publish or call providers", async () => {
@@ -92,7 +123,12 @@ test("Website AI action previews the merged draft and leaves publishing explicit
   assert.match(page, /Apply latest business intelligence/);
   assert.match(page, /authenticatedFetch\("\/api\/website-ai\/apply-intelligence"[\s\S]*method: "PATCH"/);
   assert.match(page, /setBrandResult\(data\.output\)[\s\S]*setWebsiteEdits\(data\.output\.websiteEdits \|\| null\)/);
-  assert.match(page, /Preview it before republishing/);
+  assert.match(page, /Your website draft has been updated according to your latest business changes\./);
+  assert.match(page, /Your website is already up to date with your latest business settings\./);
+  assert.match(page, /Preview your updated website before publishing\./);
+  assert.match(page, /What changed/);
+  assert.match(page, /setIntelligenceUpdate\(null\)[\s\S]*authenticatedFetch/);
+  assert.match(page, /if \(update\.changed\) \{[\s\S]*toast\.success/);
   assert.match(page, /Republish Changes/);
   assert.doesNotMatch(page.slice(page.indexOf("const applyLatestBusinessIntelligence"), page.indexOf("const activeWebsiteEdits")), /updatePublication|website-publications/);
 });

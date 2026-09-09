@@ -31,6 +31,11 @@ export type WebsiteIntelligenceSources = Readonly<{
   approvedSocial?: readonly Readonly<{ content: string; recommendedAction?: string | null }>[];
 }>;
 
+export const WEBSITE_INTELLIGENCE_MODULES = [
+  "Branding", "UI/UX", "SEO", "Marketing", "Sales", "Social/Content", "Business DNA",
+] as const;
+export type WebsiteIntelligenceModule = (typeof WEBSITE_INTELLIGENCE_MODULES)[number];
+
 const PRIVATE_STRATEGY = /\b(?:strategy|funnel|kpi|campaign timeline|content calendar|lead scoring|internal|implementation|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
 const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
@@ -89,7 +94,9 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
   const dna = sources.businessDna;
 
   const socialCopy = joinPublic((sources.approvedSocial ?? []).map((post) => post.content), 650);
+  const socialCta = (sources.approvedSocial ?? []).map((post) => publicCta(post.recommendedAction)).find(Boolean) ?? null;
   const marketingCopy = publicCopy(marketing?.adCopy, 650);
+  const marketingCta = publicCta(marketing?.adCopy);
   const contentCopy = publicCopy(content?.content, 650);
   const seoDescription = firstPublicCandidate(seo?.metaDescriptions, 650);
   const dnaAbout = joinPublic([
@@ -99,8 +106,8 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
   ], 1_200);
   const about = joinPublic([dnaAbout, branding?.story, contentCopy], 1_500);
   const services = joinPublic([dnaServices(dna), sales?.proposal], 1_500);
-  const cta = (sources.approvedSocial ?? []).map((post) => publicCta(post.recommendedAction)).find(Boolean)
-    ?? publicCta(marketing?.adCopy)
+  const cta = socialCta
+    ?? marketingCta
     ?? existingEdits?.primaryCtaLabel
     ?? "Contact us";
   const template = existingEdits?.template
@@ -155,5 +162,37 @@ export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSourc
   };
   const validatedOutput = validateWebsiteAiOutput(merged);
   const validatedEdits = validateWebsiteEdits(websiteEdits);
-  return validatedOutput && validatedEdits ? { ...validatedOutput, websiteEdits: validatedEdits } : null;
+  if (!validatedOutput || !validatedEdits) return null;
+  const output = { ...validatedOutput, websiteEdits: validatedEdits };
+  const original = { ...website, ...(existingEdits && { websiteEdits: existingEdits }) };
+  const modules: WebsiteIntelligenceModule[] = [];
+  const changed = (left: unknown, right: unknown) => JSON.stringify(left) !== JSON.stringify(right);
+  if (branding && (
+    output.colourScheme !== website.colourScheme || output.typography !== website.typography ||
+    (Boolean(publicCopy(branding.brandStyleGuide) || publicCopy(branding.brandVoice) || publicCopy(branding.story)) &&
+      (output.designRecommendations !== website.designRecommendations || output.websiteEdits.aboutText !== existingEdits?.aboutText))
+  )) modules.push("Branding");
+  if (uiux && (
+    output.siteStructure !== website.siteStructure || output.recommendedPages !== website.recommendedPages ||
+    (Boolean(joinPublic([uiux.designSystem, uiux.desktopExperience, uiux.mobileExperience, uiux.uiuxStrategy, uiux.userFlow])) &&
+      output.designRecommendations !== website.designRecommendations)
+  )) modules.push("UI/UX");
+  if (seo && (
+    output.seoRecommendations !== website.seoRecommendations ||
+    (seoDescription === heroDescription && heroDescription !== existingEdits?.heroDescription)
+  )) modules.push("SEO");
+  if (marketing && (
+    (marketingCopy === heroDescription && heroDescription !== existingEdits?.heroDescription) ||
+    (marketingCta === cta && cta !== existingEdits?.primaryCtaLabel)
+  )) modules.push("Marketing");
+  if (sales && publicCopy(sales.proposal) && output.websiteEdits.servicesText !== existingEdits?.servicesText) modules.push("Sales");
+  if ((socialCopy === heroDescription && heroDescription !== existingEdits?.heroDescription) ||
+      (Boolean(contentCopy) && output.websiteEdits.aboutText !== existingEdits?.aboutText) ||
+      (socialCta === cta && cta !== existingEdits?.primaryCtaLabel)) modules.push("Social/Content");
+  if (dna && (
+    output.websiteEdits.companyName !== existingEdits?.companyName ||
+    (Boolean(dnaAbout) && output.websiteEdits.aboutText !== existingEdits?.aboutText) ||
+    (Boolean(dnaServices(dna)) && output.websiteEdits.servicesText !== existingEdits?.servicesText)
+  )) modules.push("Business DNA");
+  return { output, changed: modules.length > 0 && changed(output, original), modules };
 }

@@ -97,6 +97,7 @@ const [brandStyle, setBrandStyle] = useState("Minimal");
 const [brandDescription, setBrandDescription] = useState("");
 const [loading, setLoading] = useState(false);
 const [applyingIntelligence, setApplyingIntelligence] = useState(false);
+const [intelligenceUpdate, setIntelligenceUpdate] = useState<{ changed: boolean; modules: string[] } | null>(null);
 const [brandResult, setBrandResult] = useState<WebsiteAiOutput | null>(null);
 const [websiteEdits, setWebsiteEdits] = useState<WebsiteEdits | null>(null);
 const [draftEdits, setDraftEdits] = useState<WebsiteEdits | null>(null);
@@ -313,6 +314,7 @@ const saveWebsiteEdits = async () => {
 };
 const applyLatestBusinessIntelligence = async () => {
   if (!projectId || !brandResult || applyingIntelligence) return;
+  setIntelligenceUpdate(null);
   setApplyingIntelligence(true);
   try {
     const response = await authenticatedFetch("/api/website-ai/apply-intelligence", {
@@ -320,16 +322,20 @@ const applyLatestBusinessIntelligence = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId }),
     });
-    const data = await response.json() as { output?: WebsiteAiOutput; error?: string };
+    const data = await response.json() as { output?: WebsiteAiOutput; changed?: boolean; modules?: string[]; error?: string };
     if (!response.ok || !data.output) throw new Error(data.error || "Unable to update the website draft.");
-    setBrandResult(data.output);
-    setWebsiteEdits(data.output.websiteEdits || null);
-    setDraftEdits(null);
-    setEditingWebsite(false);
-    setShowGoLiveReview(false);
-    setPreviewMode("desktop");
-    toast.success("Website draft updated. Preview it before republishing.");
-    queueMicrotask(() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" }));
+    const update = { changed: data.changed === true, modules: Array.isArray(data.modules) ? data.modules : [] };
+    setIntelligenceUpdate(update);
+    if (update.changed) {
+      setBrandResult(data.output);
+      setWebsiteEdits(data.output.websiteEdits || null);
+      setDraftEdits(null);
+      setEditingWebsite(false);
+      setShowGoLiveReview(false);
+      setPreviewMode("desktop");
+      toast.success("Your website draft has been updated according to your latest business changes.");
+      queueMicrotask(() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" }));
+    }
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Unable to update the website draft.");
   } finally {
@@ -687,6 +693,25 @@ return (
                   </article>
                 ))}
               </div>
+
+              {intelligenceUpdate && (
+                <section className="relative mt-7 rounded-[24px] border border-cyan-400/25 bg-cyan-400/[0.06] p-5 text-cyan-50 sm:p-6" aria-live="polite">
+                  <h3 className="text-lg font-semibold">
+                    {intelligenceUpdate.changed
+                      ? "Your website draft has been updated according to your latest business changes."
+                      : "Your website is already up to date with your latest business settings."}
+                  </h3>
+                  {intelligenceUpdate.changed && (
+                    <>
+                      <p className="mt-3 text-sm font-semibold text-cyan-200">What changed</p>
+                      <ul className="mt-2 flex flex-wrap gap-2">
+                        {intelligenceUpdate.modules.map((module) => <li key={module} className="rounded-full border border-cyan-300/25 px-3 py-1 text-xs">{module}</li>)}
+                      </ul>
+                      <p className="mt-4 text-sm text-slate-300">Preview your updated website before publishing.</p>
+                    </>
+                  )}
+                </section>
+              )}
 
               <section className="relative mt-7 overflow-hidden rounded-[24px] border border-red-500/20 bg-slate-950/60 p-4 shadow-[0_0_30px_rgba(239,68,68,0.06)] sm:p-6">
                 <div className="mb-5 flex flex-col gap-4 border-b border-white/[0.07] pb-5 lg:flex-row lg:items-center lg:justify-between">
