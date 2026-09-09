@@ -103,7 +103,7 @@ const [websiteEdits, setWebsiteEdits] = useState<WebsiteEdits | null>(null);
 const [draftEdits, setDraftEdits] = useState<WebsiteEdits | null>(null);
 const [editingWebsite, setEditingWebsite] = useState(false);
 const [savingEdits, setSavingEdits] = useState(false);
-const [publication, setPublication] = useState<{ status: "unpublished" | "active" | "inactive"; slug?: string; currentVersion?: number; internalUrl?: string; futureUrl?: string } | null>(null);
+const [publication, setPublication] = useState<{ status: "unpublished" | "active" | "inactive"; slug?: string; currentVersion?: number; internalUrl?: string; futureUrl?: string; source?: "website" | "business" } | null>(null);
 const [publicationSlug, setPublicationSlug] = useState("");
 const [publicationLoading, setPublicationLoading] = useState(false);
 const [showGoLiveReview, setShowGoLiveReview] = useState(false);
@@ -233,11 +233,16 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
   if (!projectId || !brandResult) return;
   setPublicationLoading(true);
   try {
-    const body = method === "POST"
+    const usesBusinessPublication = publication?.source === "business";
+    const endpoint = usesBusinessPublication ? "/api/business-publications" : "/api/website-publications";
+    const requestMethod = usesBusinessPublication && method === "PATCH" ? "POST" : method;
+    const body = usesBusinessPublication
+      ? { projectId, ...(method === "PATCH" && { action: "republish" }) }
+      : method === "POST"
       ? { projectId, slug: publicationSlug, template: websiteEdits?.template || brandStyle }
       : { projectId };
-    const response = await authenticatedFetch("/api/website-publications", {
-      method,
+    const response = await authenticatedFetch(endpoint, {
+      method: requestMethod,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
@@ -820,7 +825,7 @@ media={websiteMedia}
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Website publication</p>
-                    <h3 className="mt-2 text-xl font-semibold text-white">Status: {(publication?.status || "unpublished").toUpperCase()}</h3>
+                    <h3 className="mt-2 text-xl font-semibold text-white">Status: {publication?.status === "active" ? "PUBLISHED" : "UNPUBLISHED"}</h3>
                     {publication?.status === "unpublished" ? (
                       <p className="mt-3 text-sm text-slate-400">Review your saved website and choose its address before going live.</p>
                     ) : (

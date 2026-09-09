@@ -20,9 +20,13 @@ function metadata(site: typeof businessPublications.$inferSelect | undefined) {
   return {
     status: site.status,
     slug: site.publicSlug,
+    currentVersion: site.currentVersion,
     publishedPreviewRevision: site.publishedPreviewRevision,
     publishedAt: site.publishedAt,
     publicUrl: `/business/${site.publicSlug}`,
+    internalUrl: `/business/${site.publicSlug}`,
+    futureUrl: `/business/${site.publicSlug}`,
+    source: "business" as const,
   };
 }
 
@@ -30,11 +34,15 @@ async function userId(request: Request) {
   try { return (await verifyFirebaseIdToken(request)).uid; } catch { return null; }
 }
 
-async function bodyProjectId(request: Request) {
+async function publicationBody(request: Request) {
   try {
     const body = await readLimitedJson(request, MAX_BODY_BYTES);
-    if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, "projectId")) return null;
-    return validateEasyModeProjectId((body as { projectId?: unknown }).projectId);
+    if (!body || typeof body !== "object" || Array.isArray(body) || !Object.hasOwn(body, "projectId")) return null;
+    const candidate = body as { projectId?: unknown; action?: unknown };
+    if (Object.keys(body).some((key) => key !== "projectId" && key !== "action") ||
+        (candidate.action !== undefined && candidate.action !== "republish")) return null;
+    const projectId = validateEasyModeProjectId(candidate.projectId);
+    return projectId ? { projectId, republish: candidate.action === "republish" } : null;
   } catch (error) {
     if (error instanceof RequestBodyTooLargeError || error instanceof MalformedJsonBodyError) return null;
     throw error;
@@ -77,8 +85,9 @@ export async function POST(request: Request) {
   const uid = await userId(request);
   if (!uid) return Response.json({ error: "Authentication is required." }, { status: 401 });
   const entitlement = await requirePaidProductAccess(uid); if (!entitlement.ok) return entitlement.response;
-  const projectId = await bodyProjectId(request);
-  if (!projectId) return Response.json({ error: "Invalid publication request." }, { status: 400 });
+  const mutation = await publicationBody(request);
+  if (!mutation) return Response.json({ error: "Invalid publication request." }, { status: 400 });
+  const { projectId } = mutation;
   try {
     const site = await db.transaction(async (transaction) => {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`business-publication:${projectId}`}))`);
@@ -99,14 +108,21 @@ export async function POST(request: Request) {
       if (original.approval.outputIds.length === 0) throw new Error("NO_PREVIEW");
       const checked = validatePreviewOverrides(customRows[0]?.overrides ?? {}, original);
       const overrides = checked.valid ? checked.overrides : {};
+      const [existing] = await transaction.select().from(businessPublications).where(and(
+        eq(businessPublications.projectId, projectId), eq(businessPublications.userId, uid),
+      )).limit(1);
+      if (mutation.republish && !existing) throw new Error("NOT_FOUND");
       const hasOverrides = Object.keys(overrides).length > 0;
-      const approved = hasOverrides ? Boolean(customRows[0]?.approvedAt) : original.approval.approved;
+      const approved = mutation.republish || (hasOverrides ? Boolean(customRows[0]?.approvedAt) : original.approval.approved);
       if (!approved) throw new Error("PREVIEW_NOT_APPROVED");
-      const revision = businessPreviewRevision(original.approval.outputIds, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
+      const outputRevisions = original.approval.outputIds.map((id) => {
+        const row = outputRows.find((item) => item.id === id);
+        return `${id}:${row?.updatedAt?.toISOString() ?? ""}`;
+      });
+      const revision = businessPreviewRevision(outputRevisions, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
       const preview = applyPreviewOverrides(original, overrides);
       const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {});
-      const [existing] = await transaction.select().from(businessPublications).where(eq(businessPublications.projectId, projectId)).limit(1);
-      if (existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
+      if (!mutation.republish && existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
       const now = new Date();
       if (existing) {
         const nextVersion = existing.currentVersion + 1;
@@ -135,8 +151,9 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const uid = await userId(request);
   if (!uid) return Response.json({ error: "Authentication is required." }, { status: 401 });
-  const projectId = await bodyProjectId(request);
-  if (!projectId) return Response.json({ error: "Invalid publication request." }, { status: 400 });
+  const mutation = await publicationBody(request);
+  if (!mutation || mutation.republish) return Response.json({ error: "Invalid publication request." }, { status: 400 });
+  const { projectId } = mutation;
   try {
     const [site] = await db.update(businessPublications).set({ status: "inactive", unpublishedAt: new Date(), updatedAt: new Date() }).where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, uid))).returning();
     if (!site) throw new Error("NOT_FOUND");

@@ -248,6 +248,25 @@ test("Website AI action previews the merged draft and leaves publishing explicit
   assert.doesNotMatch(page.slice(page.indexOf("const applyLatestBusinessIntelligence"), page.indexOf("const activeWebsiteEdits")), /updatePublication|website-publications/);
 });
 
+test("Website AI publication state recognizes both publication generations and preserves owner isolation", async () => {
+  const [route, page, businessRoute, applyRoute] = await Promise.all([
+    source("app/api/website-publications/route.ts"), source("app/dashboard/website-ai/page.tsx"),
+    source("app/api/business-publications/route.ts"), source("app/api/website-ai/apply-intelligence/route.ts"),
+  ]);
+  assert.match(route, /eq\(publishedWebsites\.projectId, projectId\), eq\(publishedWebsites\.ownerUid, authorized\.uid\)/);
+  assert.match(route, /eq\(businessPublications\.projectId, projectId\), eq\(businessPublications\.userId, authorized\.uid\)/);
+  assert.match(route, /websiteSites\[0\] \? safeMetadata\(websiteSites\[0\]\) : safeBusinessMetadata\(businessSites\[0\]\)/);
+  assert.match(route, /status: "unpublished" as const/);
+  assert.match(route, /orderBy\(desc\(businessPublications\.updatedAt\), desc\(businessPublications\.id\)\)/);
+  assert.match(page, /publication\?\.status === "active" \? "PUBLISHED" : "UNPUBLISHED"/);
+  assert.match(page, /publication\?\.status === "unpublished"[\s\S]*Review &amp; Go Live/);
+  assert.match(page, /publication && publication\.status !== "unpublished"[\s\S]*Republish Changes/);
+  assert.match(page, /publication\?\.source === "business"[\s\S]*action: "republish"/);
+  assert.match(businessRoute, /mutation\.republish && !existing[\s\S]*throw new Error\("NOT_FOUND"\)/);
+  assert.match(businessRoute, /insert\(businessPublicationVersions\)[\s\S]*update\(businessPublications\)[\s\S]*eq\(businessPublications\.id, existing\.id\)/);
+  assert.doesNotMatch(applyRoute, /businessPublications|publishedWebsites|PublicationVersions/);
+});
+
 test("approved SEO metadata is used safely only by the versioned publication snapshot", async () => {
   const publication = await import("../../app/lib/website-publication.ts");
   const snapshot = publication.buildWebsitePublicationSnapshot({

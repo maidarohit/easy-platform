@@ -38,7 +38,22 @@ function safeMetadata(site: typeof publishedWebsites.$inferSelect | undefined) {
     slug: site.slug,
     currentVersion: site.currentVersion,
     lastPublishedAt: site.lastPublishedAt,
+    source: "website" as const,
     ...publicUrl(site.slug),
+  };
+}
+
+function safeBusinessMetadata(site: typeof businessPublications.$inferSelect | undefined) {
+  if (!site) return { status: "unpublished" as const };
+  const internalUrl = `/business/${site.publicSlug}`;
+  return {
+    status: site.status,
+    slug: site.publicSlug,
+    currentVersion: site.currentVersion,
+    lastPublishedAt: site.publishedAt,
+    source: "business" as const,
+    internalUrl,
+    futureUrl: internalUrl,
   };
 }
 
@@ -115,9 +130,16 @@ export async function GET(request: Request) {
   if (!projectId || projectId.length > 128) return Response.json({ error: "Invalid project." }, { status: 400 });
   const authorized = await authorizeProject(request, projectId);
   if ("response" in authorized) return authorized.response;
-  const [site] = await db.select().from(publishedWebsites)
-    .where(and(eq(publishedWebsites.projectId, projectId), eq(publishedWebsites.ownerUid, authorized.uid))).limit(1);
-  return Response.json({ publication: safeMetadata(site), suggestedSlug: suggestWebsiteSlug(authorized.project.companyName || authorized.project.name) });
+  const [websiteSites, businessSites] = await Promise.all([
+    db.select().from(publishedWebsites)
+      .where(and(eq(publishedWebsites.projectId, projectId), eq(publishedWebsites.ownerUid, authorized.uid)))
+      .orderBy(desc(publishedWebsites.updatedAt), desc(publishedWebsites.createdAt)).limit(1),
+    db.select().from(businessPublications)
+      .where(and(eq(businessPublications.projectId, projectId), eq(businessPublications.userId, authorized.uid)))
+      .orderBy(desc(businessPublications.updatedAt), desc(businessPublications.id)).limit(1),
+  ]);
+  const publication = websiteSites[0] ? safeMetadata(websiteSites[0]) : safeBusinessMetadata(businessSites[0]);
+  return Response.json({ publication, suggestedSlug: suggestWebsiteSlug(authorized.project.companyName || authorized.project.name) });
 }
 
 export async function POST(request: Request) {
@@ -134,6 +156,9 @@ export async function POST(request: Request) {
       const [existing] = await transaction.select({ id: publishedWebsites.id }).from(publishedWebsites)
         .where(eq(publishedWebsites.projectId, parsed.body.projectId)).limit(1);
       if (existing) throw new Error("PUBLICATION_EXISTS");
+      const [existingBusiness] = await transaction.select({ id: businessPublications.id }).from(businessPublications)
+        .where(and(eq(businessPublications.projectId, parsed.body.projectId), eq(businessPublications.userId, authorized.uid))).limit(1);
+      if (existingBusiness) throw new Error("PUBLICATION_EXISTS");
       const [otherActive] = await transaction.select({ id: businessPublications.id }).from(businessPublications)
         .where(and(eq(businessPublications.userId, authorized.uid), eq(businessPublications.status, "active"))).limit(1);
       if (otherActive) throw new Error("WEBSITE_LIMIT_REACHED");

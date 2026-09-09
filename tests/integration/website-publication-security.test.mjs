@@ -83,6 +83,7 @@ test("publication route uses server identity, transactions, locks, immutable ver
   assert.match(route, /transaction\.insert\(websitePublicationVersions\)/);
   assert.match(route, /eq\(projectOutputs\.userId, authorized\.uid\)/);
   assert.doesNotMatch(route, /body\.(?:ownerUid|userId|snapshot)/);
+  assert.match(route, /existingBusiness[\s\S]*PUBLICATION_EXISTS/);
 });
 
 test("public renderer reads only active immutable snapshots and renders with React", async () => {
