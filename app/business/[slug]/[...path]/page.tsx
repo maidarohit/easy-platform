@@ -32,5 +32,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessChildPage({ params }: Props) {
   const loaded = await loadPage(params);
   if (!loaded) notFound();
-  return <WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} />;
+  return <WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} publicPageOnly />;
 }

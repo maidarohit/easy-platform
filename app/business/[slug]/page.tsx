@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessPage({ params, searchParams }: Props) {
   const slug = decodeURIComponent((await params).slug); const published = await loadPublishedBusiness(slug); if (!published) notFound();
   const snapshot = publicBusinessView(published.snapshot);
-  if (snapshot.siteDocument) return <WebsiteSiteRenderer document={snapshot.siteDocument} pagePath="/" basePath={`/business/${encodeURIComponent(slug)}`} industry={snapshot.business.industry ?? ""} description={snapshot.business.description ?? ""} media={{ hero: snapshot.website?.heroImage, work: snapshot.website?.secondaryImage }} />;
+  if (snapshot.siteDocument) return <WebsiteSiteRenderer document={snapshot.siteDocument} pagePath="/" basePath={`/business/${encodeURIComponent(slug)}`} industry={snapshot.business.industry ?? ""} description={snapshot.business.description ?? ""} media={{ hero: snapshot.website?.heroImage, work: snapshot.website?.secondaryImage }} publicPageOnly />;
   const catalogue = await db.select({
     id: projectProducts.id, name: projectProducts.name, kind: projectProducts.kind, category: projectProducts.category,
     description: projectProducts.description, pricePaise: projectProducts.pricePaise,

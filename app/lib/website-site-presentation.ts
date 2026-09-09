@@ -1,7 +1,7 @@
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { validateWebsiteSiteDocument, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
-const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|\b(?:describe|mention|claim|include|add)\b[^.!?\n]{0,160}\bonly when\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt)\b|\bwe started as\b)/i;
+const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|\b(?:describe|mention|claim|include|add)\b[^.!?\n]{0,160}\bonly when\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt|project brief|original brief|customer brief)\b|\bwe started as\b)/i;
 const HTML_OR_SCRIPT = /<\/?[a-z][^>]*>|(?:javascript|vbscript)\s*:/i;
 
 export function safeWebsiteBlockText(value: string, maximum = 4_000) {
@@ -47,6 +47,21 @@ export function resolvePublishedWebsitePage(document: WebsiteSiteDocument, path:
 export function visiblePublishedWebsitePages(document: WebsiteSiteDocument) {
   const validated = validateWebsiteSiteDocument(document);
   return validated ? validated.pages.filter((page) => page.visibility === "visible" && supportedPublicPage(page)).sort((a, b) => a.order - b.order) : [];
+}
+
+export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: string) {
+  const validated = validateWebsiteSiteDocument(document), page = validated && resolvePublishedWebsitePage(validated, path);
+  if (!validated || !page) return [];
+  if (page.path !== "/") return page.blocks;
+  const dedicatedTypes = new Set(validated.pages.filter((item) => item.visibility === "visible" && item.path !== "/").map((item) => item.type));
+  return page.blocks.filter((block) => {
+    if (block.type === "services" && dedicatedTypes.has("services")) return false;
+    if (block.type === "contact" && dedicatedTypes.has("contact")) return false;
+    if (block.type === "process" && dedicatedTypes.has("process")) return false;
+    if (block.type === "faq" && dedicatedTypes.has("faq")) return false;
+    if (block.type === "gallery" && dedicatedTypes.has("portfolio")) return false;
+    return !(block.type === "content" && dedicatedTypes.has("about") && /(?:^|-)about(?:-|$)|^block-home-content$/.test(block.id));
+  });
 }
 
 export function publicWebsitePageSeo(document: WebsiteSiteDocument, path: string) {
