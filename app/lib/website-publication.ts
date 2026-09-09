@@ -2,6 +2,7 @@ import "server-only";
 import { isUsableBusinessUploadedSrc, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicIndustryLabel, publicServiceText } from "@/app/lib/public-website-presentation";
+import { validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 export const WEBSITE_TEMPLATES = [
   "Modern",
@@ -27,7 +28,7 @@ const OUTPUT_FIELDS = [
   "seoRecommendations",
 ] as const;
 
-export type WebsitePublicationSnapshot = {
+export type LegacyWebsitePublicationSnapshot = {
   schemaVersion: 1;
   companyName: string;
   industry: string;
@@ -38,6 +39,13 @@ export type WebsitePublicationSnapshot = {
   websiteEdits?: WebsiteEdits;
   media?: WebsiteMediaInput;
 };
+
+export type MultiPageWebsitePublicationSnapshot = Omit<LegacyWebsitePublicationSnapshot, "schemaVersion"> & {
+  schemaVersion: 2;
+  siteDocument: WebsiteSiteDocument;
+};
+
+export type WebsitePublicationSnapshot = LegacyWebsitePublicationSnapshot | MultiPageWebsitePublicationSnapshot;
 
 export type WebsiteEdits = {
   companyName: string;
@@ -196,9 +204,9 @@ export function buildWebsitePublicationSnapshot(input: {
 
 export function validateWebsitePublicationSnapshot(value: unknown): WebsitePublicationSnapshot | null {
   if (!isPlainObject(value)) return null;
-  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput", "websiteEdits", "media"];
-  if (Object.keys(value).some((key) => !expected.includes(key)) || value.schemaVersion !== 1) return null;
-  return buildWebsitePublicationSnapshot({
+  const expected = ["schemaVersion", "companyName", "industry", "websiteGoal", "websiteRequirements", "template", "websiteOutput", "websiteEdits", "media", "siteDocument"];
+  if (Object.keys(value).some((key) => !expected.includes(key)) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) return null;
+  const legacy = buildWebsitePublicationSnapshot({
     companyName: value.companyName,
     industry: value.industry,
     websiteGoal: value.websiteGoal,
@@ -208,6 +216,19 @@ export function validateWebsitePublicationSnapshot(value: unknown): WebsitePubli
     websiteEdits: value.websiteEdits,
     media: value.media,
   });
+  if (!legacy) return null;
+  if (value.schemaVersion === 1) return "siteDocument" in value ? null : legacy;
+  const siteDocument = validateWebsiteSiteDocument(value.siteDocument);
+  return siteDocument ? { ...legacy, schemaVersion: 2, siteDocument } : null;
+}
+
+export function buildMultiPageWebsitePublicationSnapshot(input: {
+  companyName: unknown; industry: unknown; websiteGoal: unknown; websiteRequirements: unknown; template: unknown;
+  websiteOutput: unknown; websiteEdits?: unknown; media?: unknown; siteDocument: unknown;
+}): MultiPageWebsitePublicationSnapshot | null {
+  const legacy = buildWebsitePublicationSnapshot(input);
+  const siteDocument = validateWebsiteSiteDocument(input.siteDocument);
+  return legacy && siteDocument ? { ...legacy, schemaVersion: 2, siteDocument } : null;
 }
 
 const PRIVATE_OR_PLACEHOLDER_TEXT = /(?:\$\s*[xX]\b|\bTBD\b|\b(?:primary objective|segmentation|lead scoring|content calendar|keyword research|sales script|campaign timeline|implementation notes?|recommended tech stack|seo recommendations?)\b|\btestimonials?\b|\b\d+(?:\.\d+)?%\b|\b\d+\+?\s+(?:customers?|clients?|years?)\b|(?:\.\.\.|…|â€¦)\s*$)/i;
