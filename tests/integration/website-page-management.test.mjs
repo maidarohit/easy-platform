@@ -82,9 +82,10 @@ test("draft preview navigation switches selected paths without publication calls
 
 test("Page Manager actions keep readable interactive, disabled, and destructive states", async () => {
   const manager = await source("app/dashboard/components/WebsitePageManager.tsx");
-  assert.match(manager, /ACTION_BUTTON = .*bg-slate-800.*text-white.*hover:bg-slate-700.*focus-visible:ring-2.*disabled:bg-slate-900.*disabled:text-slate-500/);
-  assert.match(manager, /SAVE_BUTTON = .*bg-cyan-950.*text-cyan-50.*hover:bg-cyan-900.*focus-visible:ring-2.*disabled:text-slate-500/);
-  assert.match(manager, /REMOVE_BUTTON = .*border-red-400.*bg-red-950.*text-red-100.*hover:bg-red-900.*focus-visible:ring-red-300.*disabled:text-slate-500/);
+  assert.match(manager, /ACTION_BUTTON = .*bg-slate-800.*text-white.*hover:bg-slate-700.*focus-visible:ring-2.*disabled:bg-slate-200.*disabled:text-slate-500/);
+  assert.match(manager, /SAVE_BUTTON = .*bg-cyan-900.*text-white.*hover:bg-cyan-800.*focus-visible:ring-2.*disabled:bg-slate-200.*disabled:text-slate-500/);
+  assert.match(manager, /REMOVE_BUTTON = .*border-red-700.*bg-red-900.*text-white.*hover:bg-red-800.*focus-visible:ring-red-500.*disabled:bg-slate-200.*disabled:text-slate-500/);
+  assert.match(manager, /bg-slate-100 p-4 text-slate-900[\s\S]*selected \? "border-cyan-500 ring-2 ring-cyan-500\/30" : "border-slate-300"/);
   for (const label of ["Preview", "Move up", "Move down", "Hide from navigation", "Show in navigation", "Remove", "Restore hidden", "Save name/path"]) assert.ok(manager.includes(label), label);
 });
 
