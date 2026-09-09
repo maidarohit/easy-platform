@@ -105,3 +105,33 @@ test("sparse schema-v2 pages avoid dead media and unsupported content", async ()
   assert.doesNotMatch(renderer, /award-winning|years of experience|guaranteed results|trusted by \d+/i);
   assert.equal(resolveWebsiteMedia({ industry: "Interior design" }).hero, null);
 });
+
+test("schema-v2 consumes the saved style, full palette, typography and existing inquiry form", async () => {
+  const [renderer, editor, inquiry] = await Promise.all([
+    componentSource(),
+    readFile(new URL("../../app/dashboard/website-ai/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/InquiryForm.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(renderer, /websiteThemes\[validated\.theme\.template\]/);
+  assert.match(renderer, /data-site-template=\{baseTheme\.name\}/);
+  assert.match(renderer, /savedPalette\(validated\.theme\.colorPalette, baseTheme\)/);
+  assert.match(renderer, /--site-primary/);
+  assert.match(renderer, /validated\.theme\.typography/);
+  assert.match(editor, /withWebsiteTheme\(siteDocument, draftEdits\.template, draftPalette, draftTypography\)/);
+  assert.match(editor, /siteDocument: nextDocument/);
+  assert.match(renderer, /<InquiryForm slug=\{inquirySlug \|\| ""\}/);
+  assert.match(inquiry, /fetch\("\/api\/public-business-inquiries"/);
+});
+
+test("Website AI reuses the existing owner-photo endpoint for add, replace and remove", async () => {
+  const [editor, imageRoute] = await Promise.all([
+    readFile(new URL("../../app/dashboard/website-ai/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/api/business-preview/images/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /Add Photo/);
+  assert.match(editor, /Replace Photo/);
+  assert.match(editor, /Remove Photo/);
+  assert.match(editor, /authenticatedFetch\("\/api\/business-preview\/images"/);
+  assert.match(imageRoute, /export async function DELETE/);
+  assert.match(imageRoute, /eq\(projects\.userId, userId\)/);
+});

@@ -38,6 +38,7 @@ function pageResolutionDocument() {
 test("schema-v2 business root uses the shared multi-page renderer", async () => {
   const root = await source("app/business/[slug]/page.tsx");
   assert.match(root, /snapshot\.siteDocument[\s\S]*WebsiteSiteRenderer[\s\S]*pagePath="\/"[\s\S]*basePath=\{`\/business\/[\s\S]*publicPageOnly/);
+  assert.match(root, /inquirySlug=\{slug\}/);
 });
 
 test("schema-v2 business child routes resolve only published document pages", async () => {

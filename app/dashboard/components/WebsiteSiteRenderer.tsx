@@ -8,10 +8,7 @@ import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { websiteThemes } from "./websiteThemes";
 import { websiteMediaReference } from "@/app/lib/website-essential-pages";
 import { publicContactMethods, validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
-
-function firstHex(value: string) {
-  return value.match(/#[0-9a-f]{6}\b/i)?.[0];
-}
+import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
 
 function readableTextColor(background: string) {
   const value = Number.parseInt(background.slice(1), 16);
@@ -21,7 +18,14 @@ function readableTextColor(background: string) {
 
 type SiteService = { id: string; title: string; body: string; path: string };
 export type WebsiteSiteServiceItem = { id: string; title: string; description?: string | null; path?: string | null };
-type BlockProps = { block: WebsiteBlock; media: ResolvedWebsiteMedia; accent: string; accentText: string; basePath: string; services: SiteService[]; fallbackHeadline: string; fallbackDescription: string; pagePath: string; secondaryHref: string | null; contact: PublicContactSettings };
+type BlockProps = { block: WebsiteBlock; media: ResolvedWebsiteMedia; accent: string; accentText: string; basePath: string; services: SiteService[]; fallbackHeadline: string; fallbackDescription: string; pagePath: string; secondaryHref: string | null; contact: PublicContactSettings; inquirySlug?: string; preview: boolean };
+
+function savedPalette(value: string, theme: (typeof websiteThemes)[string]) {
+  const colors = value.match(/#[0-9a-f]{6}\b/gi) ?? [];
+  const primary = colors[0] || theme.primaryColor;
+  return { primary, secondary: colors[1] || theme.secondaryColor, light: colors[2] || theme.sectionBackground,
+    dark: colors[3] || (readableTextColor(primary) === "#ffffff" ? primary : "#0f172a") };
+}
 
 function siteHref(href: string, basePath: string) {
   if (!href.startsWith("/") || !basePath) return href;
@@ -37,7 +41,7 @@ function SiteLink({ href, basePath, className, style, onNavigate, children }: { 
 }
 
 function Section({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
-  return <section className={muted ? "border-y border-slate-200/70 bg-slate-500/[0.07] px-5 py-16 sm:px-8 sm:py-20 lg:px-12" : "px-5 py-16 sm:px-8 sm:py-20 lg:px-12"}>{children}</section>;
+  return <section className={muted ? "border-y border-[var(--site-border)] bg-[var(--site-section)] px-5 py-16 text-[var(--site-section-text)] sm:px-8 sm:py-20 lg:px-12" : "bg-[var(--site-page)] px-5 py-16 sm:px-8 sm:py-20 lg:px-12"}>{children}</section>;
 }
 
 function Heading({ children }: { children: string }) {
@@ -110,10 +114,10 @@ function FaqBlock({ block, services, contact }: BlockProps & { block: Extract<We
   return <Section><div data-block-type="faq" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}<div className="mt-8 space-y-4">{items.map((item) => <details key={item.id} className="rounded-xl border border-slate-200 p-5"><summary className="cursor-pointer font-semibold">{item.question}</summary><p className="mt-3 leading-7 opacity-75">{item.answer}</p></details>)}</div></div></Section>;
 }
 
-function ContactBlock({ block, contact, services, accent }: BlockProps & { block: Extract<WebsiteBlock, { type: "contact" }> }) {
+function ContactBlock({ block, contact, services, accent, inquirySlug, preview }: BlockProps & { block: Extract<WebsiteBlock, { type: "contact" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body);
   const methods = publicContactMethods(contact);
-  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-8 text-slate-900 shadow-sm sm:p-12">{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-slate-200 p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider text-slate-500">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-slate-200 p-5"><span className="block text-xs font-bold uppercase tracking-wider text-slate-500">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm text-slate-500">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div></Section>;
+  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 opacity-70">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm opacity-60">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
 }
 
 function CtaBlock({ block, accent, accentText, basePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "cta" }> }) {
@@ -151,14 +155,20 @@ function PageEmptyState({ type, contactHref, basePath, accent }: { type: Website
   return <section className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-900 shadow-sm"><p className="mx-auto max-w-2xl leading-7 text-slate-600">{copy}</p><SiteLink href={contactHref} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center font-semibold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Contact us</SiteLink></div></section>;
 }
 
-export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], contact: suppliedContact = {}, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; contact?: PublicContactSettings; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
+export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], contact: suppliedContact = {}, inquirySlug, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; contact?: PublicContactSettings; inquirySlug?: string; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
   const validated = validateWebsiteSiteDocument(document), page = validated && (publicPageOnly ? resolvePublishedWebsitePage(validated, pagePath) : resolveWebsiteSitePage(validated, pagePath, preview));
   if (!validated || !page) return null;
   const baseTheme = websiteThemes[validated.theme.template] || websiteThemes.Modern;
-  const accent = firstHex(validated.theme.colorPalette) || baseTheme.primaryColor;
+  const palette = savedPalette(validated.theme.colorPalette, baseTheme);
+  const accent = palette.primary;
   const accentText = readableTextColor(accent);
   const font = validated.theme.typography.split(/[,;\n]|\s+and\s+/i)[0]?.replace(/[^a-zA-Z0-9 '-]/g, "").trim();
-  const shellStyle: CSSProperties = { backgroundColor: baseTheme.pageBackground, color: baseTheme.textColor, fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont };
+  const shellStyle = { backgroundColor: baseTheme.pageBackground, color: baseTheme.textColor, fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont,
+    "--site-primary": palette.primary, "--site-secondary": palette.secondary, "--site-page": baseTheme.pageBackground,
+    "--site-section": palette.light, "--site-section-text": readableTextColor(palette.light), "--site-dark": palette.dark, "--site-card": baseTheme.cardBackground,
+    "--site-text": baseTheme.textColor, "--site-muted": baseTheme.mutedTextColor, "--site-border": baseTheme.borderColor,
+    "--site-card-radius": baseTheme.cardRadius,
+  } as CSSProperties;
   const pages = new Map(validated.pages.map((item) => [item.id, item]));
   const navigation = visibleWebsiteNavigation(validated);
   const pageBlocks = publicWebsitePageBlocks(validated, page.path, !publicPageOnly && preview);
@@ -194,13 +204,13 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
     if (block.type === "services") return services.length > 0 || Boolean(safeWebsiteBlockText(block.introduction)) || resolvedMedia.services.length > 0;
     return true;
   });
-  return <div data-site-document-version="2" data-page-path={page.path} className="min-h-full overflow-hidden" style={shellStyle}>
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-5 py-4 shadow-sm backdrop-blur sm:px-8 lg:px-12"><div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
+  return <div data-site-document-version="2" data-site-template={baseTheme.name} data-page-path={page.path} className="min-h-full overflow-hidden" style={shellStyle}>
+    <header className="sticky top-0 z-40 border-b border-[var(--site-border)] bg-[var(--site-page)] px-5 py-4 shadow-sm sm:px-8 lg:px-12"><div className="mx-auto flex max-w-7xl items-center justify-between gap-6">
       <SiteLink href="/" basePath={basePath} onNavigate={onNavigate} className="text-xl font-bold tracking-tight focus-visible:outline-none focus-visible:ring-2">{brandLabel}</SiteLink>
       <nav aria-label="Primary navigation" className="hidden items-center gap-6 md:flex">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`border-b-2 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${href === page.path ? "border-current opacity-100" : "border-transparent opacity-65 hover:opacity-100"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav>
       {headerCta && <SiteLink href={publicPageOnly ? contactHref : validated.header.ctaHref} basePath={basePath} className="px-4 py-2 text-sm font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: baseTheme.buttonRadius }}>{headerCta}</SiteLink>}
     </div><nav aria-label="Mobile navigation" className="mx-auto mt-3 flex max-w-7xl gap-5 overflow-x-auto pb-1 md:hidden">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`shrink-0 py-1 text-sm font-semibold ${href === page.path ? "opacity-100" : "opacity-60"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav></header>
-    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} fallbackDescription={fallbackDescription} pagePath={page.path} secondaryHref={secondaryHref} contact={contact} />)}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
-    <footer className="border-t border-slate-200 bg-slate-950 px-5 py-12 text-white sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-slate-300 hover:text-white">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-white">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-slate-400" /></footer>
+    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} fallbackDescription={fallbackDescription} pagePath={page.path} secondaryHref={secondaryHref} contact={contact} inquirySlug={inquirySlug} preview={preview} />)}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
+    <footer className="border-t border-[var(--site-border)] bg-[var(--site-dark)] px-5 py-12 text-white sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-white/70 hover:text-white">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-white">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-white/50" /></footer>
   </div>;
 }

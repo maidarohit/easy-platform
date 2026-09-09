@@ -3,8 +3,9 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { selectLatestWorkspaceOutputs, workspaceProjectPresentation } from "@/app/api/master-workspace/route";
 import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projectPreviewCustomizations, projects } from "@/app/db/schema";
-import { OWNER_IMAGE_MAX_BYTES, parseOwnerImageSlot, runBusinessOwnerImageUpload } from "@/app/lib/business-hero-image";
+import { OWNER_IMAGE_MAX_BYTES, OWNER_IMAGE_SLOTS, parseOwnerImageSlot, runBusinessOwnerImageUpload } from "@/app/lib/business-hero-image";
 import { applyPreviewOverrides } from "@/app/lib/business-preview-edits";
+import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
 import { buildBusinessPreview } from "@/app/lib/business-preview";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
@@ -170,4 +171,30 @@ export async function POST(request: Request) {
     overrides: result.overrides,
     preview,
   }, { headers: { "Cache-Control": "no-store" } });
+}
+
+export async function DELETE(request: Request) {
+  let userId: string;
+  try { userId = (await verifyFirebaseIdToken(request)).uid; }
+  catch { return Response.json({ error: "Authentication is required." }, { status: 401 }); }
+  let body: unknown;
+  try { body = await request.json(); }
+  catch { return Response.json({ error: "Invalid photo request." }, { status: 400 }); }
+  if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => key !== "projectId" && key !== "slot")) {
+    return Response.json({ error: "Invalid photo request." }, { status: 400 });
+  }
+  const projectId = validateEasyModeProjectId((body as { projectId?: unknown }).projectId);
+  const slot = parseOwnerImageSlot((body as { slot?: unknown }).slot);
+  if (!projectId || !slot) return Response.json({ error: "Invalid photo request." }, { status: 400 });
+  const [project, customization] = await Promise.all([
+    db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, userId))).limit(1).then((rows) => rows[0] ?? null),
+    db.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, userId))).limit(1).then((rows) => rows[0] ?? null),
+  ]);
+  if (!project) return Response.json({ error: "Project not found." }, { status: 404 });
+  const overrides: PreviewOverrides = customization?.overrides && typeof customization.overrides === "object" && !Array.isArray(customization.overrides)
+    ? { ...customization.overrides } as PreviewOverrides : {};
+  delete overrides[OWNER_IMAGE_SLOTS[slot].overrideKey];
+  await db.update(projectPreviewCustomizations).set({ overrides, approvedAt: null, revisionCount: sql`${projectPreviewCustomizations.revisionCount} + 1`, updatedAt: new Date() })
+    .where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, userId)));
+  return Response.json({ slot, overrides, heroImage: overrides.heroImage ?? null, secondaryImage: overrides.secondaryImage ?? null }, { headers: { "Cache-Control": "no-store" } });
 }

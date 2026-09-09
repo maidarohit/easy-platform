@@ -1,6 +1,6 @@
  "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import { downloadPaidBlob } from "@/app/lib/paid-download";
@@ -22,6 +22,10 @@ function legacyWebsiteOutput(result: WebsiteDraftOutput): WebsiteAiOutput {
   const { siteDocument: _siteDocument, ...legacy } = result;
   void _siteDocument;
   return legacy;
+}
+
+function withWebsiteTheme(document: WebsiteSiteDocument | null, template: string, colorPalette: string, typography: string) {
+  return document ? validateWebsiteSiteDocument({ ...document, theme: { template, colorPalette, typography } }) : null;
 }
 
 const WEBSITE_GOALS = [
@@ -125,6 +129,11 @@ const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">
 const [customDomain, setCustomDomain] = useState("");
 const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
 const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
+const [draftPalette, setDraftPalette] = useState("");
+const [draftTypography, setDraftTypography] = useState("");
+const [uploadingPhoto, setUploadingPhoto] = useState<"hero" | "secondary" | null>(null);
+const heroPhotoInput = useRef<HTMLInputElement>(null);
+const projectPhotoInput = useRef<HTMLInputElement>(null);
 const [verifiedServices, setVerifiedServices] = useState<VerifiedWebsiteService[]>([]);
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
@@ -301,11 +310,15 @@ const beginEditingWebsite = () => {
       projectPrimaryLanguage
     )
 );
+  setDraftPalette(siteDocument?.theme.colorPalette || brandResult.colourScheme || "");
+  setDraftTypography(siteDocument?.theme.typography || brandResult.typography || "");
   setEditingWebsite(true);
   setShowGoLiveReview(false);
 };
 const cancelEditingWebsite = () => {
   setDraftEdits(null);
+  setDraftPalette("");
+  setDraftTypography("");
   setEditingWebsite(false);
 };
 const updateDraftEdit = (field: keyof WebsiteEdits, value: string) => {
@@ -325,7 +338,9 @@ const saveWebsiteEdits = async () => {
   }
   setSavingEdits(true);
   try {
-    const updatedResult: WebsiteAiOutput = { ...brandResult, websiteEdits: draftEdits };
+    const nextDocument = withWebsiteTheme(siteDocument, draftEdits.template, draftPalette, draftTypography);
+    if (siteDocument && !nextDocument) throw new Error("The selected website theme is not valid.");
+    const updatedResult: WebsiteDraftOutput = { ...brandResult, websiteEdits: draftEdits, ...(nextDocument && { siteDocument: nextDocument }) };
     const response = await authenticatedFetch("/api/project-outputs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -337,6 +352,7 @@ const saveWebsiteEdits = async () => {
     });
     if (!response.ok) throw new Error("Unable to save website changes.");
     setBrandResult(updatedResult);
+    if (nextDocument) setSiteDocument(nextDocument);
     setWebsiteEdits(draftEdits);
     setEditingWebsite(false);
     setDraftEdits(null);
@@ -417,7 +433,29 @@ const addEssentialBusinessPages = async () => {
   if (JSON.stringify(next) === JSON.stringify(siteDocument)) { toast.success("Essential business pages are already set up."); return; }
   await saveSiteDocument(next);
 };
+const updateWebsitePhoto = async (slot: "hero" | "secondary", file?: File) => {
+  if (!projectId || uploadingPhoto) return;
+  if (file && file.size > 4 * 1024 * 1024) { toast.error("That photo is too large. Use an image under 4 MB."); return; }
+  setUploadingPhoto(slot);
+  try {
+    const response = file ? await (() => { const body = new FormData(); body.append("projectId", projectId); body.append("slot", slot); body.append("image", file); return authenticatedFetch("/api/business-preview/images", { method: "POST", body }); })()
+      : await authenticatedFetch("/api/business-preview/images", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, slot }) });
+    const data = await response.json() as { heroImage?: string | null; secondaryImage?: string | null; error?: string };
+    if (!response.ok) throw new Error(data.error || "Unable to update that photo.");
+    setWebsiteMedia((current) => ({ ...current, hero: data.heroImage || null, work: data.secondaryImage || null }));
+    setShowGoLiveReview(false);
+    toast.success(file ? "Photo saved to the website draft." : "Photo removed from the website draft.");
+  } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to update that photo."); }
+  finally {
+    setUploadingPhoto(null);
+    const input = slot === "hero" ? heroPhotoInput.current : projectPhotoInput.current;
+    if (input) input.value = "";
+  }
+};
 const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
+const activeSiteDocument = siteDocument && editingWebsite && draftEdits
+  ? withWebsiteTheme(siteDocument, draftEdits.template, draftPalette, draftTypography) || siteDocument
+  : siteDocument;
 const publicationSlugIsValid = isValidWebsiteSlug(publicationSlug);
 const customDomainIsValid = isValidCustomDomain(customDomain.trim().toLowerCase());
 const colors =
@@ -837,6 +875,11 @@ return (
                         <label key={field} className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">{label}</span><textarea value={draftEdits[field]} onChange={(event) => updateDraftEdit(field, event.target.value)} maxLength={4_000} required rows={4} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
                       ))}
                       <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">Website template / style</span><select value={draftEdits.template} onChange={(event) => updateDraftEdit("template", event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50">{WEBSITE_TEMPLATES.map((template) => <option key={template}>{template}</option>)}</select></label>
+                      <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">Brand palette</span><input value={draftPalette} onChange={(event) => setDraftPalette(event.target.value)} placeholder="#173D32, #D4AF37, #F8F5EE, #102A23" maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
+                      <label className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">Typography</span><input value={draftTypography} onChange={(event) => setDraftTypography(event.target.value)} maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
+                      <div className="md:col-span-2 grid gap-4 sm:grid-cols-2">
+                        {([ ["hero", "Hero photo", heroPhotoInput, websiteMedia.hero], ["secondary", "Project / gallery photo", projectPhotoInput, websiteMedia.work] ] as const).map(([slot, label, inputRef, current]) => <div key={slot} className="rounded-xl border border-white/10 p-4"><p className="text-sm font-semibold text-white">{label}</p><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void updateWebsitePhoto(slot, file); }} /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => inputRef.current?.click()} className={copyButtonClass}>{uploadingPhoto === slot ? "Uploading…" : current ? "Replace Photo" : "Add Photo"}</button>{current && <button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => void updateWebsitePhoto(slot)} className="min-h-9 rounded-xl border border-red-400/35 px-3.5 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Remove Photo</button>}</div></div>)}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -848,7 +891,7 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={project?.businessDescription || brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={siteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={project?.businessDescription || brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={activeSiteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
 primaryLanguage={projectPrimaryLanguage}
 media={websiteMedia}
 serviceItems={verifiedServices.map((service) => ({ id: service.id, title: service.name, description: service.description, path: service.slug ? `/services/${service.slug}` : null }))}
