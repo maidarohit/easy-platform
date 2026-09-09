@@ -2,7 +2,7 @@ import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 import { resolveWebsiteMedia, type WebsiteMediaInput, type ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
-import { publicWebsitePageBlocks, resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "@/app/lib/website-site-presentation";
+import { publicWebsitePageBlocks, resolvePublishedWebsitePage, resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "@/app/lib/website-site-presentation";
 import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { websiteThemes } from "./websiteThemes";
@@ -122,7 +122,7 @@ export function WebsiteBlockRenderer(props: BlockProps) {
 }
 
 export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
-  const validated = validateWebsiteSiteDocument(document), page = validated && resolveWebsiteSitePage(validated, pagePath, preview);
+  const validated = validateWebsiteSiteDocument(document), page = validated && (publicPageOnly ? resolvePublishedWebsitePage(validated, pagePath) : resolveWebsiteSitePage(validated, pagePath, preview));
   if (!validated || !page) return null;
   const baseTheme = websiteThemes[validated.theme.template] || websiteThemes.Modern;
   const accent = firstHex(validated.theme.colorPalette) || baseTheme.primaryColor;

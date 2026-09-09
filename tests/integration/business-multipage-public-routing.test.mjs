@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildPublishedBusinessSnapshot, validatePublishedBusinessSnapshot } from "../../app/lib/business-publication.ts";
-import { adaptLegacyWebsiteToSiteDocument, addWebsitePage } from "../../app/lib/website-site-document.ts";
+import { adaptLegacyWebsiteToSiteDocument, addWebsitePage, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
 import { publicWebsitePageBlocks, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
 import { validateWebsiteOutput } from "../../app/lib/easy-mode-execution-contracts.ts";
 
@@ -23,10 +23,18 @@ function fullDocument() {
   return addWebsitePage(value, { title: "Contact", path: "/contact", type: "contact" });
 }
 
+function pageResolutionDocument() {
+  const value = fullDocument();
+  return validateWebsiteSiteDocument({ ...value, pages: value.pages.map((page) => {
+    if (page.path === "/contact") return { ...page, blocks: [{ id: "block-contact-page", type: "contact", order: 0, visibility: "visible", heading: "Contact us", body: "Send an enquiry." }] };
+    if (page.path === "/services") return { ...page, blocks: [{ id: "block-services-page", type: "services", order: 0, visibility: "visible", heading: "Services", introduction: "Interior design", serviceIds: [] }] };
+    return page;
+  }) });
+}
+
 test("schema-v2 business root uses the shared multi-page renderer", async () => {
   const root = await source("app/business/[slug]/page.tsx");
   assert.match(root, /snapshot\.siteDocument[\s\S]*WebsiteSiteRenderer[\s\S]*pagePath="\/"[\s\S]*basePath=\{`\/business\/[\s\S]*publicPageOnly/);
-  assert.deepEqual(publicWebsitePageBlocks(fullDocument(), "/").map((block) => block.type), ["hero"]);
 });
 
 test("schema-v2 business child routes resolve only published document pages", async () => {
@@ -35,7 +43,15 @@ test("schema-v2 business child routes resolve only published document pages", as
   assert.match(child, /WebsiteSiteRenderer[\s\S]*pagePath=\{loaded\.path\}/);
   assert.match(child, /pagePath=\{loaded\.path\}[\s\S]*publicPageOnly/);
   assert.match(child, /segments\.length < 1 \|\| segments\.length > 2/);
-  assert.deepEqual(publicWebsitePageBlocks(fullDocument(), "/services"), []);
+});
+
+test("schema-v2 root and child resolution return only their exact page block sets", () => {
+  const value = pageResolutionDocument();
+  assert.ok(value);
+  assert.deepEqual(publicWebsitePageBlocks(value, "/").map((block) => block.id), ["block-home-hero", "block-home-content", "block-home-services", "block-home-contact"]);
+  assert.deepEqual(publicWebsitePageBlocks(value, "/services").map((block) => block.id), ["block-services-page"]);
+  assert.deepEqual(publicWebsitePageBlocks(value, "/contact").map((block) => block.id), ["block-contact-page"]);
+  assert.ok(publicWebsitePageBlocks(value, "/").every((block) => block.id.startsWith("block-home-")));
 });
 
 test("visible Projects and FAQ pages appear as real-path navigation", () => {

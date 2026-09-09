@@ -51,17 +51,7 @@ export function visiblePublishedWebsitePages(document: WebsiteSiteDocument) {
 
 export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: string) {
   const validated = validateWebsiteSiteDocument(document), page = validated && resolvePublishedWebsitePage(validated, path);
-  if (!validated || !page) return [];
-  if (page.path !== "/") return page.blocks;
-  const dedicatedTypes = new Set(validated.pages.filter((item) => item.visibility === "visible" && item.path !== "/").map((item) => item.type));
-  return page.blocks.filter((block) => {
-    if (block.type === "services" && dedicatedTypes.has("services")) return false;
-    if (block.type === "contact" && dedicatedTypes.has("contact")) return false;
-    if (block.type === "process" && dedicatedTypes.has("process")) return false;
-    if (block.type === "faq" && dedicatedTypes.has("faq")) return false;
-    if (block.type === "gallery" && dedicatedTypes.has("portfolio")) return false;
-    return !(block.type === "content" && dedicatedTypes.has("about") && /(?:^|-)about(?:-|$)|^block-home-content$/.test(block.id));
-  });
+  return page?.blocks ?? [];
 }
 
 export function publicWebsitePageSeo(document: WebsiteSiteDocument, path: string) {
