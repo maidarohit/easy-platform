@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 import { resolveWebsiteMedia, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 
@@ -44,6 +44,13 @@ export default function WebsitePreview({
   const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });
 
   const primaryColor = theme.primaryColor;
+  const connectedPrimaryColor = brandResult?.colourScheme?.match(/#[0-9a-f]{6}\b/i)?.[0] || primaryColor;
+  const connectedFont = brandResult?.typography?.split(/[,;\n]|\s+and\s+/i)[0]?.replace(/[^a-zA-Z0-9 '-]/g, "").trim();
+  const connectedThemeStyle: CSSProperties = {
+    borderColor: connectedPrimaryColor,
+    boxShadow: `0 0 70px ${connectedPrimaryColor}29`,
+    ...(connectedFont && { fontFamily: `'${connectedFont}', sans-serif` }),
+  };
   const businessName = websiteEdits?.companyName || companyName || "Your Business";
   const savedHeroHeadline = websiteEdits?.heroHeadline?.trim() || "";
 
@@ -193,6 +200,7 @@ const ui =
     return (
       <div
         className={`easy-website-preview mx-auto overflow-hidden rounded-[32px] border border-cyan-500/20 bg-slate-950/70 shadow-[0_0_70px_rgba(6,182,212,0.16)] backdrop-blur-xl transition-all duration-500 ${previewWidthClass}`}
+        style={connectedThemeStyle}
       >
         {selectedTemplate}
         {(resolvedMedia.work.length > 0 || resolvedMedia.about || resolvedMedia.services.length > 0) && (
@@ -243,7 +251,7 @@ const ui =
                 {websiteEdits.whatsapp && <p>WhatsApp: {websiteEdits.whatsapp}</p>}
                 {websiteEdits.address && <p>Address: {websiteEdits.address}</p>}
               </div>
-              <a href={websiteEdits.primaryCtaLink} className="mt-6 inline-flex rounded-xl px-5 py-3 font-semibold text-white" style={{ backgroundColor: primaryColor }}>
+              <a href={websiteEdits.primaryCtaLink} className="mt-6 inline-flex rounded-xl px-5 py-3 font-semibold text-white" style={{ backgroundColor: connectedPrimaryColor }}>
                 {websiteEdits.primaryCtaLabel}
               </a>
             </div>

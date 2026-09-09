@@ -213,11 +213,26 @@ function publicWebsiteText(value: string | undefined, maximum: number) {
   return candidate && candidate.length <= maximum && !PRIVATE_OR_PLACEHOLDER_TEXT.test(candidate) && !hasUnsupportedPublicClaim(candidate) ? candidate : "";
 }
 
+function approvedSeoMetadata(value: string | undefined, field: "title" | "description") {
+  const match = value?.match(new RegExp(`(?:^|\\n)Meta ${field}:\\s*([^\\n]+)`, "i"));
+  return publicWebsiteText(match?.[1], field === "title" ? 70 : 165);
+}
+
+function publicApprovedSeoMetadata(value: string | undefined) {
+  const title = approvedSeoMetadata(value, "title");
+  const description = approvedSeoMetadata(value, "description");
+  return [title && `Meta title: ${title}`, description && `Meta description: ${description}`].filter(Boolean).join("\n");
+}
+
 export function publicWebsiteSeoTitle(snapshot: WebsitePublicationSnapshot) {
-  return publicWebsiteText(snapshot.websiteEdits?.companyName || snapshot.companyName, 70) || "Business";
+  return approvedSeoMetadata(snapshot.websiteOutput.seoRecommendations, "title")
+    || publicWebsiteText(snapshot.websiteEdits?.companyName || snapshot.companyName, 70)
+    || "Business";
 }
 
 export function publicWebsiteSeoDescription(snapshot: WebsitePublicationSnapshot) {
+  const approved = approvedSeoMetadata(snapshot.websiteOutput.seoRecommendations, "description");
+  if (approved) return approved;
   const candidate = publicWebsiteText(snapshot.websiteEdits?.heroDescription || snapshot.websiteOutput.websiteOverview, 650).replace(/\s+/g, " ").trim();
   if (!candidate) return undefined;
   if (candidate.length <= 165) return candidate;
@@ -251,7 +266,10 @@ export function publicWebsitePublicationView(snapshot: WebsitePublicationSnapsho
       recommendedPages: "", siteStructure: "",
       websiteFeatures: publicWebsiteText(snapshot.websiteOutput.websiteFeatures, MAX_LONG),
       designRecommendations: overview,
-      colourScheme: "", typography: "", recommendedTechStack: "", seoRecommendations: "",
+      colourScheme: publicWebsiteText(snapshot.websiteOutput.colourScheme, MAX_LONG),
+      typography: publicWebsiteText(snapshot.websiteOutput.typography, MAX_LONG),
+      recommendedTechStack: "",
+      seoRecommendations: publicApprovedSeoMetadata(snapshot.websiteOutput.seoRecommendations),
     },
     ...(edits ? { websiteEdits: edits } : { websiteEdits: undefined }),
   };

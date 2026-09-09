@@ -96,6 +96,7 @@ const [targetAudience, setTargetAudience] = useState("");
 const [brandStyle, setBrandStyle] = useState("Minimal");
 const [brandDescription, setBrandDescription] = useState("");
 const [loading, setLoading] = useState(false);
+const [applyingIntelligence, setApplyingIntelligence] = useState(false);
 const [brandResult, setBrandResult] = useState<WebsiteAiOutput | null>(null);
 const [websiteEdits, setWebsiteEdits] = useState<WebsiteEdits | null>(null);
 const [draftEdits, setDraftEdits] = useState<WebsiteEdits | null>(null);
@@ -308,6 +309,31 @@ const saveWebsiteEdits = async () => {
     toast.error(error instanceof Error ? error.message : "Unable to save website changes.");
   } finally {
     setSavingEdits(false);
+  }
+};
+const applyLatestBusinessIntelligence = async () => {
+  if (!projectId || !brandResult || applyingIntelligence) return;
+  setApplyingIntelligence(true);
+  try {
+    const response = await authenticatedFetch("/api/website-ai/apply-intelligence", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    });
+    const data = await response.json() as { output?: WebsiteAiOutput; error?: string };
+    if (!response.ok || !data.output) throw new Error(data.error || "Unable to update the website draft.");
+    setBrandResult(data.output);
+    setWebsiteEdits(data.output.websiteEdits || null);
+    setDraftEdits(null);
+    setEditingWebsite(false);
+    setShowGoLiveReview(false);
+    setPreviewMode("desktop");
+    toast.success("Website draft updated. Preview it before republishing.");
+    queueMicrotask(() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" }));
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Unable to update the website draft.");
+  } finally {
+    setApplyingIntelligence(false);
   }
 };
 const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
@@ -646,6 +672,7 @@ return (
                   <button type="button" onClick={copyEntireBrand} className={copyButtonClass}>{copyIcon}Copy Entire Website Plan</button>
                   <button type="button" onClick={downloadPDF} className="flex min-h-9 items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-gradient-to-r from-red-500/20 to-cyan-400/[0.08] px-3.5 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 hover:border-red-300/60 hover:shadow-[0_0_22px_rgba(239,68,68,0.16)]"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-red-300" strokeWidth="1.5"><path d="M10 3.5v9m-3-3 3 3 3-3M4 15.5h12"/></svg>Download PDF</button>
                   <button type="button" onClick={saveProject} className="flex min-h-9 items-center justify-center gap-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.05] px-3.5 py-2 text-xs font-semibold text-cyan-100 transition-all hover:-translate-y-0.5 hover:border-cyan-300/50"><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 3.5h10l2 2v11H4zM7 3.5v5h6v-5M7 13h6"/></svg>Save Project</button>
+                  <button type="button" onClick={applyLatestBusinessIntelligence} disabled={applyingIntelligence} className={copyButtonClass}>{applyingIntelligence ? "Updating Website…" : "Apply latest business intelligence"}</button>
                   <button type="button" onClick={handleGenerateBrand} disabled={loading} className={copyButtonClass}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M15.5 7A6 6 0 1 0 16 12"/><path d="M12.5 4.5H16V8"/></svg>Regenerate</button>
                   <button type="button" onClick={() => { if (!brandResult) { toast.error("Generate or open a website project first."); return; } window.location.href = projectId ? `/marketing-ai?projectId=${encodeURIComponent(projectId)}` : "/marketing-ai"; }} className={copyButtonClass}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-cyan-300" strokeWidth="1.5"><path d="M4 10h12m-4-4 4 4-4 4"/></svg>Continue to Marketing AI</button>
                 </div>
