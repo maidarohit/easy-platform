@@ -14,6 +14,8 @@ import DarkTemplate from "./website-templates/DarkTemplate";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { showcaseGridClass } from "@/app/lib/public-website-presentation";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
+import type { WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import WebsiteSiteRenderer from "./WebsiteSiteRenderer";
 
 type WebsitePreviewProps = {
   companyName: string;
@@ -26,6 +28,9 @@ type WebsitePreviewProps = {
   websiteEdits?: WebsiteEdits;
   primaryLanguage?: string;
   media?: WebsiteMediaInput;
+  siteDocument?: WebsiteSiteDocument;
+  pagePath?: string;
+  siteBasePath?: string;
 };
 
 export default function WebsitePreview({
@@ -39,7 +44,13 @@ export default function WebsitePreview({
   websiteEdits,
   primaryLanguage = "en",
   media,
+  siteDocument,
+  pagePath = "/",
+  siteBasePath = "",
 }: WebsitePreviewProps) {
+  if (siteDocument) {
+    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} />;
+  }
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
   const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });
 

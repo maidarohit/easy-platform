@@ -61,6 +61,9 @@ export default async function PublishedWebsitePage({
         brandResult={snapshot.websiteOutput}
         websiteEdits={snapshot.websiteEdits}
         media={snapshot.media}
+        siteDocument={snapshot.schemaVersion === 2 ? snapshot.siteDocument : undefined}
+        pagePath="/"
+        siteBasePath={`/published-sites/${encodeURIComponent((await params).slug)}`}
       />
     </main>
   );
