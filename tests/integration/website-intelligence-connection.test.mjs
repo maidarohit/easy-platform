@@ -155,6 +155,45 @@ test("legacy website without saved edits safely normalizes a long website goal i
   assert.equal(result.output.websiteEdits.primaryCtaLink, "#contact");
 });
 
+test("internal strategy labels never reach public hero, headings, CTA, or public sections", () => {
+  const labels = ["Primary:", "Objective:", "Strategy:", "Recommendation:", "Proposed recommendation:", "Goal:", "KPI:", "Funnel:", "Priority:"];
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern" },
+    website: {
+      ...website,
+      websiteOverview: "Primary: Generate qualified leads from homeowners.",
+      websiteGoal: "Objective: Increase enquiries.",
+      designRecommendations: "Strategy: Lead visitors toward conversion.",
+      websiteFeatures: "Priority: Lead capture funnel.",
+      websiteEdits: {
+        ...website.websiteEdits,
+        heroHeadline: "Goal: Generate qualified leads.",
+        heroDescription: "Primary: Generate qualified leads.",
+        aboutText: "Recommendation: Build authority.",
+        servicesText: "Funnel: Convert prospects.",
+        primaryCtaLabel: "KPI: Increase conversions",
+      },
+    },
+  });
+  assert.ok(result);
+  const publicFields = [
+    result.output.websiteEdits.heroHeadline, result.output.websiteEdits.heroDescription,
+    result.output.websiteEdits.aboutText, result.output.websiteEdits.servicesText,
+    result.output.websiteEdits.primaryCtaLabel, result.output.websiteOverview, result.output.websiteGoal,
+  ].join("\n");
+  for (const label of labels) assert.doesNotMatch(publicFields, new RegExp(label, "i"));
+  assert.match(result.output.websiteEdits.heroDescription, /provides interior design services focused on your needs/i);
+  for (const label of labels) {
+    const legacyWebsite = Object.fromEntries(Object.entries(website).filter(([field]) => field !== "websiteEdits"));
+    const labelled = applyLatestWebsiteIntelligence({
+      project: { name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern" },
+      website: { ...legacyWebsite, websiteOverview: `${label} Generate qualified leads.` },
+    });
+    assert.ok(labelled);
+    assert.doesNotMatch(labelled.output.websiteEdits.heroDescription, new RegExp(label, "i"));
+  }
+});
+
 test("legacy website draft is canonicalized on save and then applies successfully", () => {
   const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
   const saved = normalizeWebsiteDraftForPersistence({
@@ -233,4 +272,6 @@ test("all Website AI templates receive connected Branding palette and typography
   assert.match(preview, /connectedFont = brandResult\?\.typography/);
   assert.match(preview, /style=\{connectedThemeStyle\}/);
   assert.match(preview, /backgroundColor: connectedPrimaryColor/);
+  assert.match(preview, /designRecommendations: websiteEdits\.aboutText/);
+  assert.match(preview, /seoRecommendations: websiteEdits\.heroDescription/);
 });

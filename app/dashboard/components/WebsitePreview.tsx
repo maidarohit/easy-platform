@@ -59,15 +59,19 @@ const resolvedHeroHeadline =
     ? brandResult?.websiteGoal || savedHeroHeadline
     : savedHeroHeadline || brandResult?.websiteGoal;
 
+  const editedGoal = websiteEdits?.primaryCtaLabel || websiteGoal;
+
 const editedBrandResult =
   websiteEdits && brandResult
     ? {
         ...brandResult,
         heroHeadline: resolvedHeroHeadline,
         websiteOverview: websiteEdits.heroDescription,
+        websiteGoal: editedGoal,
+        designRecommendations: websiteEdits.aboutText,
+        seoRecommendations: websiteEdits.heroDescription,
       }
     : brandResult;
-  const editedGoal = websiteEdits?.primaryCtaLabel || websiteGoal;
   const previewTranslations = {
   en: { home: "Home", services: "Services", about: "About", contact: "Contact", howWeCanHelp: "How we can help" },
   es: { home: "Inicio", services: "Servicios", about: "Acerca de", contact: "Contacto", howWeCanHelp: "Cómo podemos ayudar" },

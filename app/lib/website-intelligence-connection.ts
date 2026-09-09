@@ -41,6 +41,7 @@ export type WebsiteIntelligenceFailure = Readonly<{
 }>;
 
 const PRIVATE_STRATEGY = /\b(?:strategy|funnel|kpi|campaign timeline|content calendar|lead scoring|internal|implementation|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
+const INTERNAL_STRATEGY_LABEL = /(?:^|\n)\s*(?:primary|objective|strategy|recommendation|proposed recommendation|goal|kpi|funnel|priority)\s*:/i;
 const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
 function parse(value: unknown) {
@@ -87,7 +88,7 @@ function normalizeExistingWebsite(value: unknown) {
 function publicCopy(value: unknown, maximum = 650) {
   if (typeof value !== "string") return null;
   const candidate = concisePublicCopy(value, maximum);
-  return candidate && !PRIVATE_STRATEGY.test(candidate) && !hasUnsupportedPublicClaim(candidate)
+  return candidate && !INTERNAL_STRATEGY_LABEL.test(candidate) && !PRIVATE_STRATEGY.test(candidate) && !hasUnsupportedPublicClaim(candidate)
     ? candidate
     : null;
 }
@@ -146,7 +147,7 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const services = joinPublic([dnaServices(dna), sales?.proposal], 1_500);
   const cta = socialCta
     ?? marketingCta
-    ?? existingEdits?.primaryCtaLabel
+    ?? publicCta(existingEdits?.primaryCtaLabel)
     ?? "Contact us";
   const template = existingEdits?.template
     ?? validateWebsiteTemplate(sources.project.brandStyle)
@@ -155,17 +156,27 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
     ?? existingEdits?.companyName
     ?? publicCopy(sources.project.companyName, 200)
     ?? sources.project.name;
+  const industry = publicCopy(sources.project.industry, 120);
+  const naturalHeroDescription = industry
+    ? `${companyName} provides ${industry.toLowerCase()} services focused on your needs.`
+    : `Explore the services available from ${companyName}.`;
   const heroDescription = seoDescription ?? marketingCopy ?? socialCopy ?? contentCopy
-    ?? existingEdits?.heroDescription ?? String(website.websiteOverview);
+    ?? publicCopy(existingEdits?.heroDescription, 650)
+    ?? publicCopy(website.websiteOverview, 650)
+    ?? naturalHeroDescription;
 
   const websiteEdits = {
     companyName,
-    heroHeadline: existingEdits?.heroHeadline ?? publicCopy(normalized.legacyHeroHeadline, 200) ?? firstPublicCandidate(seo?.metaTitles, 200)
+    heroHeadline: publicCopy(existingEdits?.heroHeadline, 200) ?? publicCopy(normalized.legacyHeroHeadline, 200) ?? firstPublicCandidate(seo?.metaTitles, 200)
       ?? firstPublicCandidate(website.websiteGoal, 200)
       ?? companyName,
     heroDescription,
-    aboutText: about ?? existingEdits?.aboutText ?? String(website.designRecommendations),
-    servicesText: services ?? existingEdits?.servicesText ?? String(website.websiteFeatures),
+    aboutText: about ?? publicCopy(existingEdits?.aboutText, 1_500)
+      ?? publicCopy(website.designRecommendations, 1_500)
+      ?? naturalHeroDescription,
+    servicesText: services ?? publicCopy(existingEdits?.servicesText, 1_500)
+      ?? publicCopy(website.websiteFeatures, 1_500)
+      ?? `Learn more about the services available from ${companyName}.`,
     phone: existingEdits?.phone ?? "",
     email: existingEdits?.email ?? "",
     address: existingEdits?.address ?? "",
