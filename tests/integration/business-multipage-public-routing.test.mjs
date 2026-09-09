@@ -4,6 +4,7 @@ import test from "node:test";
 import { buildPublishedBusinessSnapshot, validatePublishedBusinessSnapshot } from "../../app/lib/business-publication.ts";
 import { adaptLegacyWebsiteToSiteDocument, addWebsitePage } from "../../app/lib/website-site-document.ts";
 import { safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
+import { validateWebsiteOutput } from "../../app/lib/easy-mode-execution-contracts.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const websiteOutput = Object.fromEntries(["websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures", "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations"].map((key) => [key, `${key} value`]));
@@ -33,9 +34,13 @@ test("visible Projects and FAQ pages appear as real-path navigation", () => {
   assert.deepEqual(visibleWebsiteNavigation(value).map((item) => pages.get(item.pageId)), ["/", "/projects", "/faq"]);
 });
 
-test("business publications store the validated site document in the current version", async () => {
+test("republish reads the latest persisted schema-v2 document before the legacy preview adapter", async () => {
   const [api, loader] = await Promise.all([source("app/api/business-publications/route.ts"), source("app/lib/public-business-publication.ts")]);
-  assert.match(api, /validateWebsiteSiteDocument\(latest\.get\("website"\)\?\.output\.siteDocument\)/);
+  const savedDraft = { ...websiteOutput, siteDocument: document() };
+  assert.equal(validateWebsiteOutput(savedDraft), null);
+  assert.match(api, /latestStoredWebsiteSiteDocument\(outputRows\)/);
+  assert.match(api, /JSON\.parse\(row\.result\)[\s\S]*validateWebsiteSiteDocument\(output\.siteDocument\)/);
+  assert.match(api, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\), desc\(projectOutputs\.id\)\)/);
   assert.match(api, /buildPublishedBusinessSnapshot\(preview, contactRows\[0\]\?\.settings \?\? \{\}, siteDocument \?\? undefined\)/);
   assert.match(loader, /businessPublicationVersions\.versionNumber, businessPublications\.currentVersion/);
   assert.doesNotMatch(api + loader, /OpenAI|N8N_|startAiUsage|fetch\s*\(/i);

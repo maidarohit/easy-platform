@@ -16,6 +16,19 @@ import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const MAX_BODY_BYTES = 1_024;
 
+function latestStoredWebsiteSiteDocument(rows: readonly { module: string; result: string }[]) {
+  const row = rows.find((item) => ["website", "website-ai"].includes(item.module.toLowerCase()));
+  if (!row) return null;
+  try {
+    const output: unknown = JSON.parse(row.result);
+    return output && typeof output === "object" && !Array.isArray(output) && "siteDocument" in output
+      ? validateWebsiteSiteDocument(output.siteDocument)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function metadata(site: typeof businessPublications.$inferSelect | undefined) {
   if (!site) return { status: "unpublished" as const };
   return {
@@ -99,7 +112,7 @@ export async function POST(request: Request) {
       if (otherActive) throw new Error("WEBSITE_LIMIT_REACHED");
       const [dnaRows, outputRows, customRows, contactRows] = await Promise.all([
         transaction.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, uid), eq(projectBusinessDna.confirmed, true))).limit(1),
-        transaction.select().from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt)),
+        transaction.select().from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)),
         transaction.select().from(projectPreviewCustomizations).where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, uid))).limit(1),
         transaction.select().from(projectPublicContacts).where(and(eq(projectPublicContacts.projectId, projectId), eq(projectPublicContacts.userId, uid))).limit(1),
       ]);
@@ -122,7 +135,7 @@ export async function POST(request: Request) {
       });
       const revision = businessPreviewRevision(outputRevisions, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
       const preview = applyPreviewOverrides(original, overrides);
-      const siteDocument = validateWebsiteSiteDocument(latest.get("website")?.output.siteDocument);
+      const siteDocument = latestStoredWebsiteSiteDocument(outputRows);
       const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {}, siteDocument ?? undefined);
       if (!mutation.republish && existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
       const now = new Date();
