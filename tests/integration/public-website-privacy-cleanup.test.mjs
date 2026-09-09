@@ -5,7 +5,7 @@ import test from "node:test";
 import { buildPublishedBusinessSnapshot } from "../../app/lib/business-publication.ts";
 import { publicBusinessView, publicContact, publicProcess, publicServices } from "../../app/lib/public-business-presentation.ts";
 import { resolveWebsiteMedia } from "../../app/lib/business-site-visuals.ts";
-import { buildWebsitePublicationSnapshot, publicWebsitePublicationView } from "../../app/lib/website-publication.ts";
+import { buildWebsitePublicationSnapshot, publicWebsitePublicationView, publicWebsiteSeoDescription, publicWebsiteSeoTitle } from "../../app/lib/website-publication.ts";
 
 const preview = (overrides = {}) => ({
   projectId: "private-project",
@@ -119,4 +119,22 @@ test("legacy published-sites renderer strips briefs, implementation fields and u
   assert.equal(view.websiteEdits?.email, "");
   assert.equal(view.websiteEdits?.phone, "");
   assert.doesNotMatch(JSON.stringify(view), /segmentation|keyword research|implementation notes|private@example|private-phone/i);
+});
+
+test("legacy public websites reject fabricated metadata claims", () => {
+  const stored = buildWebsitePublicationSnapshot({
+    companyName: "Northstar - Free Trial", industry: "Consulting", websiteGoal: "Contact", websiteRequirements: "", template: "Modern",
+    websiteOutput: { websiteOverview: "Get 3x leads and 42% more traffic with real results.", websiteGoal: "Contact", recommendedPages: "Home", siteStructure: "Single page", websiteFeatures: "Contact form", designRecommendations: "Clear layout", colourScheme: "Green", typography: "Sans serif", recommendedTechStack: "Web", seoRecommendations: "Search basics" },
+  });
+  assert.ok(stored);
+  const view = publicWebsitePublicationView(stored);
+  assert.equal(publicWebsiteSeoTitle(view), "Business");
+  assert.equal(publicWebsiteSeoDescription(view), undefined);
+});
+
+test("legacy published-sites route exposes safe generated metadata without provider calls", async () => {
+  const page = await readFile("app/published-sites/[slug]/page.tsx", "utf8");
+  assert.match(page, /generateMetadata/); assert.match(page, /publicWebsiteSeoTitle/); assert.match(page, /publicWebsiteSeoDescription/);
+  assert.match(page, /alternates: \{ canonical \}/); assert.match(page, /openGraph/); assert.match(page, /robots: \{ index: pageSeo\?\.index \?\? true, follow: true \}/);
+  assert.doesNotMatch(page, /OpenAI|N8N_|Gemini|startAiUsage|fetch\s*\(/i);
 });

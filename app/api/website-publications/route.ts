@@ -17,11 +17,13 @@ import {
 } from "@/app/lib/request-body";
 import {
   buildWebsitePublicationSnapshot,
+  buildMultiPageWebsitePublicationSnapshot,
   suggestWebsiteSlug,
   validatePublicationMutationBody,
   validateWebsiteAiOutput,
   validateWebsiteEdits,
 } from "@/app/lib/website-publication";
+import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -119,7 +121,10 @@ function snapshotFor(
   overrides?: unknown,
 ) {
   const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
-  return buildWebsitePublicationSnapshot({
+  const storedOutput = parseStoredOutput(outputResult);
+  const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
+    ? validateWebsiteSiteDocument(storedOutput.siteDocument) : null;
+  const input = {
     companyName: websiteEdits?.companyName || project.companyName || project.name,
     industry: project.industry || "Business",
     websiteGoal: project.goal || project.targetAudience || "",
@@ -131,7 +136,8 @@ function snapshotFor(
       hero: (overrides as Record<string, unknown>).heroImage,
       work: (overrides as Record<string, unknown>).secondaryImage,
     } : undefined,
-  });
+  };
+  return siteDocument ? buildMultiPageWebsitePublicationSnapshot({ ...input, siteDocument }) : buildWebsitePublicationSnapshot(input);
 }
 
 export async function GET(request: Request) {

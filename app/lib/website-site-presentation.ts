@@ -25,3 +25,35 @@ export function visibleWebsiteNavigation(document: WebsiteSiteDocument) {
     .filter((item) => item.visibility === "visible" && pages.get(item.pageId)?.visibility === "visible" && Boolean(safeWebsiteBlockText(item.label, 100)))
     .sort((a, b) => a.order - b.order);
 }
+
+function supportedPublicPage(page: WebsitePage) {
+  if (page.path === "/") return page.type === "home";
+  if (page.path === "/about") return page.type === "about";
+  if (page.path === "/services") return page.type === "services";
+  if (/^\/services\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path)) return page.type === "service";
+  if (page.path === "/projects") return page.type === "portfolio";
+  if (/^\/projects\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path)) return page.type === "project";
+  if (page.path === "/process") return page.type === "process";
+  if (page.path === "/faq") return page.type === "faq";
+  if (page.path === "/contact") return page.type === "contact";
+  return false;
+}
+
+export function resolvePublishedWebsitePage(document: WebsiteSiteDocument, path: string) {
+  const page = resolveWebsiteSitePage(document, path);
+  return page && supportedPublicPage(page) ? page : null;
+}
+
+export function visiblePublishedWebsitePages(document: WebsiteSiteDocument) {
+  const validated = validateWebsiteSiteDocument(document);
+  return validated ? validated.pages.filter((page) => page.visibility === "visible" && supportedPublicPage(page)).sort((a, b) => a.order - b.order) : [];
+}
+
+export function publicWebsitePageSeo(document: WebsiteSiteDocument, path: string) {
+  const validated = validateWebsiteSiteDocument(document), page = validated && resolvePublishedWebsitePage(validated, path);
+  if (!validated || !page) return null;
+  const brand = safeWebsiteBlockText(validated.branding.name, 70) || "Business";
+  const title = safeWebsiteBlockText(page.seo.title, 70) || safeWebsiteBlockText(page.title, 70) || brand;
+  const description = safeWebsiteBlockText(page.seo.description, 165) || undefined;
+  return { title, description, canonicalPath: page.path, index: page.seo.index };
+}

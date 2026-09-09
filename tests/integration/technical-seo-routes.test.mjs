@@ -38,7 +38,9 @@ test("sitemap reads only active public slugs and excludes private application ro
   assert.match(source, /publishedWebsites\.slug/);
   assert.match(source, /businessPublications\.status, "active"/);
   assert.match(source, /publishedWebsites\.status, "active"/);
-  assert.doesNotMatch(source, /projects|projectOutputs|snapshot|dashboard|billing|api\//i);
+  assert.doesNotMatch(source, /projectOutputs|dashboard|billing|api\//i);
+  assert.match(source, /websitePublicationVersions\.snapshot/);
+  assert.match(source, /visiblePublishedWebsitePages/);
   assert.match(source, /if \(!origin\) return \[\]/);
 });
 

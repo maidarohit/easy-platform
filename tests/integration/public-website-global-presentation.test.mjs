@@ -47,13 +47,13 @@ test("only explicitly saved contact methods become usable actions", () => {
 
 test("both public systems use shared presentation and retain active-only publication security", async () => {
   const businessPage = await source("app/business/[slug]/page.tsx");
-  const publishedPage = await source("app/published-sites/[slug]/page.tsx");
+  const publishedLoader = await source("app/lib/public-website-publication.ts");
   const preview = await source("app/dashboard/components/WebsitePreview.tsx");
   assert.match(businessPage, /showcaseGridClass\(showcaseVisuals\.length\)/);
   assert.match(businessPage, /eq\(businessPublications\.status, "active"\)/);
   assert.match(businessPage, /<InquiryForm/);
-  assert.match(publishedPage, /publicWebsitePublicationView/);
-  assert.match(publishedPage, /eq\(publishedWebsites\.status, "active"\)/);
+  assert.match(publishedLoader, /publicWebsitePublicationView/);
+  assert.match(publishedLoader, /eq\(publishedWebsites\.status, "active"\)/);
   for (const template of ["Modern", "Luxury", "Corporate", "Creative", "Minimal", "Dark"]) {
     assert.match(preview, new RegExp(`case "${template}"`));
   }

@@ -20,7 +20,7 @@ test("only active subscription status grants ordinary paid access", () => {
 });
 
 test("business publishing and both public routes enforce paid product access server-side", async () => {
-  const [businessApi, businessPage, websiteApi, websitePage] = await Promise.all([source("app/api/business-publications/route.ts"), source("app/business/[slug]/page.tsx"), source("app/api/website-publications/route.ts"), source("app/published-sites/[slug]/page.tsx")]);
+  const [businessApi, businessPage, websiteApi, websitePage] = await Promise.all([source("app/api/business-publications/route.ts"), source("app/business/[slug]/page.tsx"), source("app/api/website-publications/route.ts"), source("app/lib/public-website-publication.ts")]);
   assert.match(businessApi, /requirePaidProductAccess/); assert.match(businessPage, /hasPaidProductAccess/);
   assert.match(websiteApi, /requirePaidProductAccess/); assert.match(websitePage, /hasPaidProductAccess/);
 });

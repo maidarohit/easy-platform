@@ -88,11 +88,12 @@ test("publication route uses server identity, transactions, locks, immutable ver
 
 test("public renderer reads only active immutable snapshots and renders with React", async () => {
   const page = await source("app/published-sites/[slug]/page.tsx");
-  assert.match(page, /eq\(publishedWebsites\.status, "active"\)/);
-  assert.match(page, /websitePublicationVersions\.snapshot/);
-  assert.match(page, /validateWebsitePublicationSnapshot/);
+  const loader = await source("app/lib/public-website-publication.ts");
+  assert.match(loader, /eq\(publishedWebsites\.status, "active"\)/);
+  assert.match(loader, /websitePublicationVersions\.snapshot/);
+  assert.match(loader, /validateWebsitePublicationSnapshot/);
   assert.match(page, /WebsitePreview/);
-  assert.match(page, /hasPaidProductAccess/);
+  assert.match(loader, /hasPaidProductAccess/);
   assert.doesNotMatch(page, /projectMemory|dangerouslySetInnerHTML|eval\(/);
 });
 
