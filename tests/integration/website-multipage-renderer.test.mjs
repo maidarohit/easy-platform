@@ -80,3 +80,28 @@ test("schema-v2 uses one polished shared presentation for preview and public rou
   assert.match(renderer, /pageServices\.length > 0 \? pageServices : suppliedServices/);
   assert.match(preview, /serviceItems=\{serviceItems\}/);
 });
+
+test("verified services and approved contact data enrich the shared schema-v2 presentation", async () => {
+  const [renderer, preview, root, child] = await Promise.all([
+    componentSource(),
+    readFile(new URL("../../app/dashboard/components/WebsitePreview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/[...path]/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(renderer, /services\.slice\(0, pagePath === "\/" \? 6 : services\.length\)/);
+  assert.match(renderer, /data-home-value-section/);
+  assert.match(renderer, /publicContactMethods\(contact\)/);
+  assert.match(renderer, /contact\.location/);
+  assert.match(preview, /contact=\{contact\}/);
+  assert.match(root, /contact=\{snapshot\.contact\}/);
+  assert.match(child, /contact=\{loaded\.snapshot\.contact\}/);
+});
+
+test("sparse schema-v2 pages avoid dead media and unsupported content", async () => {
+  const renderer = await componentSource();
+  assert.match(renderer, /if \(selected\.length === 0\) return null/);
+  assert.match(renderer, /savedItems\.length > 0 \? savedItems/);
+  assert.match(renderer, /Available services include/);
+  assert.doesNotMatch(renderer, /award-winning|years of experience|guaranteed results|trusted by \d+/i);
+  assert.equal(resolveWebsiteMedia({ industry: "Interior design" }).hero, null);
+});

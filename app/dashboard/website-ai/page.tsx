@@ -848,10 +848,11 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={siteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={project?.businessDescription || brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={siteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
 primaryLanguage={projectPrimaryLanguage}
 media={websiteMedia}
 serviceItems={verifiedServices.map((service) => ({ id: service.id, title: service.name, description: service.description, path: service.slug ? `/services/${service.slug}` : null }))}
+contact={{ ...(activeWebsiteEdits?.email ? { email: activeWebsiteEdits.email } : {}), ...(activeWebsiteEdits?.phone ? { phone: activeWebsiteEdits.phone } : {}), ...(activeWebsiteEdits?.whatsapp ? { whatsapp: activeWebsiteEdits.whatsapp } : {}), ...(activeWebsiteEdits?.address ? { location: activeWebsiteEdits.address } : {}) }}
 />
                   </div>
                 </div>

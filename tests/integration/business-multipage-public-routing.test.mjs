@@ -118,6 +118,8 @@ test("shared rendering removes internal instructions and unverified history", ()
   assert.equal(safeWebsiteBlockText("I run a small interior design business."), "");
   assert.equal(safeWebsiteBlockText("The website should showcase projects and generate enquiries."), "");
   assert.equal(safeWebsiteBlockText("Our team of award-winning designers has 20 years of experience."), "");
+  assert.equal(safeWebsiteBlockText("I want the website to showcase premium interior projects."), "");
+  assert.equal(safeWebsiteBlockText("Website requirements: highlight services and contact details."), "");
   const snapshot = buildPublishedBusinessSnapshot(preview, {}, document());
   assert.ok(snapshot.siteDocument);
 });

@@ -16,6 +16,7 @@ import { showcaseGridClass } from "@/app/lib/public-website-presentation";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 import type { WebsiteSiteDocument } from "@/app/lib/website-site-document";
 import WebsiteSiteRenderer, { type WebsiteSiteServiceItem } from "./WebsiteSiteRenderer";
+import type { PublicContactSettings } from "@/app/lib/public-contact";
 
 type WebsitePreviewProps = {
   companyName: string;
@@ -29,6 +30,7 @@ type WebsitePreviewProps = {
   primaryLanguage?: string;
   media?: WebsiteMediaInput;
   serviceItems?: readonly WebsiteSiteServiceItem[];
+  contact?: PublicContactSettings;
   siteDocument?: WebsiteSiteDocument;
   pagePath?: string;
   siteBasePath?: string;
@@ -48,6 +50,7 @@ export default function WebsitePreview({
   primaryLanguage = "en",
   media,
   serviceItems,
+  contact,
   siteDocument,
   pagePath = "/",
   siteBasePath = "",
@@ -55,7 +58,7 @@ export default function WebsitePreview({
   onPageNavigate,
 }: WebsitePreviewProps) {
   if (siteDocument) {
-    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} serviceItems={serviceItems} preview={previewSiteDocument} onNavigate={onPageNavigate} />;
+    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} serviceItems={serviceItems} contact={contact} preview={previewSiteDocument} onNavigate={onPageNavigate} />;
   }
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
   const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });
