@@ -16,6 +16,8 @@ type ProjectIdentity = Readonly<{
   companyName: string | null;
   industry: string | null;
   brandStyle: string | null;
+  brandDescription?: string | null;
+  location?: string | null;
 }>;
 
 export type WebsiteIntelligenceSources = Readonly<{
@@ -42,6 +44,8 @@ export type WebsiteIntelligenceFailure = Readonly<{
 
 const PRIVATE_STRATEGY = /\b(?:strategy|funnel|kpi|campaign timeline|content calendar|lead scoring|internal|implementation|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
 const INTERNAL_STRATEGY_LABEL = /(?:^|\n)\s*(?:primary|objective|strategy|recommendation|proposed recommendation|goal|kpi|funnel|priority)\s*:/i;
+const INTERNAL_INSTRUCTION = /\b(?:describe|mention|include|add|state|claim|write)\b.{0,100}\b(?:only when|if|unless)\b/i;
+const UNVERIFIED_HISTORY_OR_PROOF = /\b(?:we (?:started|began|were founded)|founded (?:in|by)|small team of|years? of experience|award(?:-winning|s?)|testimonials?|client counts?|guarantee[ds]?|certif(?:ied|ication)|case stud(?:y|ies))\b/i;
 const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
 
 function parse(value: unknown) {
@@ -107,6 +111,13 @@ function publicCta(value: unknown) {
   return candidate && candidate.length <= 80 ? candidate : null;
 }
 
+function publicUnverifiedAboutCopy(value: unknown, maximum = 1_500) {
+  const candidate = publicCopy(value, maximum);
+  return candidate && !INTERNAL_INSTRUCTION.test(candidate) && !UNVERIFIED_HISTORY_OR_PROOF.test(candidate)
+    ? candidate
+    : null;
+}
+
 function joinPublic(values: readonly unknown[], maximum = 1_200) {
   const selected = values.map((value) => publicCopy(value, maximum)).filter((value): value is string => Boolean(value));
   if (!selected.length) return null;
@@ -138,12 +149,9 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const marketingCta = publicCta(marketing?.adCopy);
   const contentCopy = publicCopy(content?.content, 650);
   const seoDescription = firstPublicCandidate(seo?.metaDescriptions, 650);
-  const dnaAbout = joinPublic([
-    dna?.founderHistory?.founderStory,
-    dna?.founderHistory?.whyStarted,
-    dna?.offer?.differentiators?.join(". "),
-  ], 1_200);
-  const about = joinPublic([dnaAbout, branding?.story, contentCopy], 1_500);
+  const verifiedProjectDescription = publicCopy(sources.project.brandDescription, 1_500);
+  const dnaAbout = publicUnverifiedAboutCopy(dna?.offer?.differentiators?.join(". "), 1_200);
+  const about = joinPublic([verifiedProjectDescription, dnaAbout, contentCopy], 1_500);
   const services = joinPublic([dnaServices(dna), sales?.proposal], 1_500);
   const cta = socialCta
     ?? marketingCta
@@ -171,8 +179,8 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
       ?? firstPublicCandidate(website.websiteGoal, 200)
       ?? companyName,
     heroDescription,
-    aboutText: about ?? publicCopy(existingEdits?.aboutText, 1_500)
-      ?? publicCopy(website.designRecommendations, 1_500)
+    aboutText: about ?? publicUnverifiedAboutCopy(existingEdits?.aboutText, 1_500)
+      ?? publicUnverifiedAboutCopy(website.designRecommendations, 1_500)
       ?? naturalHeroDescription,
     servicesText: services ?? publicCopy(existingEdits?.servicesText, 1_500)
       ?? publicCopy(website.websiteFeatures, 1_500)
@@ -191,8 +199,9 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
     ...website,
     websiteOverview: heroDescription,
     websiteGoal: cta,
-    ...(uiux?.userFlow && { siteStructure: String(uiux.userFlow) }),
-    ...(uiux?.wireframes && { recommendedPages: String(uiux.wireframes) }),
+    websiteFeatures: websiteEdits.servicesText,
+    recommendedPages: publicCopy(uiux?.wireframes, 4_000) ?? websiteEdits.servicesText,
+    siteStructure: publicCopy(uiux?.userFlow, 4_000) ?? String(website.siteStructure),
     designRecommendations: joinPublic([
       branding?.brandStyleGuide,
       branding?.brandVoice ? `Brand voice: ${branding.brandVoice}` : null,
@@ -204,10 +213,11 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
     ], 4_000) ?? String(website.designRecommendations),
     ...(branding?.colorPalette && { colourScheme: String(branding.colorPalette) }),
     ...(branding?.typography && { typography: String(branding.typography) }),
-    ...(seo && { seoRecommendations: joinPublic([
+    seoRecommendations: seo ? joinPublic([
       firstPublicCandidate(seo.metaTitles, 300) ? `Meta title: ${firstPublicCandidate(seo.metaTitles, 300)}` : null,
       firstPublicCandidate(seo.metaDescriptions, 650) ? `Meta description: ${firstPublicCandidate(seo.metaDescriptions, 650)}` : null,
-    ], 1_000) ?? String(website.seoRecommendations) }),
+    ], 1_000) ?? "Search metadata pending review."
+      : publicUnverifiedAboutCopy(website.seoRecommendations, 1_000) ?? "Search metadata pending review.",
     websiteEdits,
   };
   const validatedOutput = validateWebsiteAiOutput(merged);
@@ -244,7 +254,7 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
     (Boolean(dnaAbout) && output.websiteEdits.aboutText !== existingEdits?.aboutText) ||
     (Boolean(dnaServices(dna)) && output.websiteEdits.servicesText !== existingEdits?.servicesText)
   )) modules.push("Business DNA");
-  return { ok: true, value: { output, changed: modules.length > 0 && changed(output, original), modules } } as const;
+  return { ok: true, value: { output, changed: changed(output, original), modules } } as const;
 }
 
 export function applyLatestWebsiteIntelligence(sources: WebsiteIntelligenceSources) {

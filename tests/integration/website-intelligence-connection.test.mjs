@@ -194,6 +194,40 @@ test("internal strategy labels never reach public hero, headings, CTA, or public
   }
 });
 
+test("sanitation-only changes persist and remove internal instructions and unverified history", () => {
+  const result = applyLatestWebsiteIntelligence({
+    project: {
+      name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern",
+      brandDescription: "Residential interior design and renovation services in Bengaluru.", location: "Bengaluru",
+    },
+    website: {
+      ...website,
+      websiteOverview: "Primary: Generate qualified leads for the business.",
+      websiteFeatures: "Primary: Generate qualified leads.",
+      websiteEdits: {
+        ...website.websiteEdits,
+        heroHeadline: "Primary: Generate qualified leads.",
+        heroDescription: "Objective: Convert more visitors.",
+        servicesText: "Primary: Generate qualified leads.",
+        aboutText: "We started as a small team of architects and craftsmen. Describe operating history only when the business owner provides verified dates or experience.",
+        primaryCtaLabel: "Goal: Increase enquiries",
+      },
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.modules, []);
+  const visible = [
+    result.output.websiteOverview, result.output.websiteGoal, result.output.websiteFeatures,
+    result.output.websiteEdits.heroHeadline, result.output.websiteEdits.heroDescription,
+    result.output.websiteEdits.servicesText, result.output.websiteEdits.aboutText,
+    result.output.websiteEdits.primaryCtaLabel,
+  ].join("\n");
+  assert.doesNotMatch(visible, /Primary:|Objective:|Strategy:|Goal:|Recommendation:|KPI:|Priority:|Funnel:/i);
+  assert.doesNotMatch(visible, /Describe operating history only when|small team of architects and craftsmen/i);
+  assert.match(result.output.websiteEdits.aboutText, /Residential interior design and renovation services in Bengaluru/);
+});
+
 test("legacy website draft is canonicalized on save and then applies successfully", () => {
   const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
   const saved = normalizeWebsiteDraftForPersistence({
@@ -292,5 +326,8 @@ test("all Website AI templates receive connected Branding palette and typography
   assert.match(preview, /style=\{connectedThemeStyle\}/);
   assert.match(preview, /backgroundColor: connectedPrimaryColor/);
   assert.match(preview, /designRecommendations: websiteEdits\.aboutText/);
+  assert.match(preview, /websiteFeatures: websiteEdits\.servicesText/);
+  assert.match(preview, /recommendedPages: websiteEdits\.servicesText/);
   assert.match(preview, /seoRecommendations: websiteEdits\.heroDescription/);
+  assert.match(preview, /resolveWebsiteMedia\(\{ industry, description: websiteRequirements, uploaded: media \}\)/);
 });

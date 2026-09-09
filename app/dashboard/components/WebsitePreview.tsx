@@ -69,6 +69,8 @@ const editedBrandResult =
         websiteOverview: websiteEdits.heroDescription,
         websiteGoal: editedGoal,
         designRecommendations: websiteEdits.aboutText,
+        websiteFeatures: websiteEdits.servicesText,
+        recommendedPages: websiteEdits.servicesText,
         seoRecommendations: websiteEdits.heroDescription,
       }
     : brandResult;
