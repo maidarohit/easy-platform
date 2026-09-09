@@ -54,7 +54,7 @@ function PageRow({ page, document, selected, disabled, onSelect, onSave }: { pag
   </li>;
 }
 
-export default function WebsitePageManager({ document, selectedPath, saving, onSelect, onSave }: { document: WebsiteSiteDocument; selectedPath: string; saving: boolean; onSelect: (path: string) => void; onSave: (document: WebsiteSiteDocument) => Promise<boolean> }) {
+export default function WebsitePageManager({ document, selectedPath, saving, onSelect, onSave, onAddEssentialPages }: { document: WebsiteSiteDocument; selectedPath: string; saving: boolean; onSelect: (path: string) => void; onSave: (document: WebsiteSiteDocument) => Promise<boolean>; onAddEssentialPages?: () => Promise<void> }) {
   const [title, setTitle] = useState("");
   const [path, setPath] = useState("");
   const [type, setType] = useState<Exclude<WebsitePageType, "home">>("custom");
@@ -69,7 +69,7 @@ export default function WebsitePageManager({ document, selectedPath, saving, onS
     if (added) onSelect(added.path);
   };
   return <section className="mb-5 rounded-2xl border border-cyan-400/20 bg-slate-900/85 p-5" aria-labelledby="website-page-manager-title">
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><h4 id="website-page-manager-title" className="font-semibold text-white">Page Manager</h4><p className="mt-1 text-xs text-slate-400">Manage draft pages and preview them here. Live pages are unchanged until a supported republish.</p></div><span className="text-xs text-slate-500">{activePages.length} active page{activePages.length === 1 ? "" : "s"}</span></div>
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><h4 id="website-page-manager-title" className="font-semibold text-white">Page Manager</h4><p className="mt-1 text-xs text-slate-400">Manage draft pages and preview them here. Live pages are unchanged until a supported republish.</p></div><div className="flex items-center gap-3">{onAddEssentialPages && <button type="button" disabled={saving} onClick={onAddEssentialPages} className="rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40">Add essential business pages</button>}<span className="text-xs text-slate-500">{activePages.length} active page{activePages.length === 1 ? "" : "s"}</span></div></div>
     <div className="mt-5 grid gap-3 rounded-xl border border-white/10 bg-slate-950/60 p-4 md:grid-cols-[1fr_1fr_0.8fr_auto]">
       <input aria-label="New page title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Page title" maxLength={200} disabled={saving} className="h-10 rounded-lg border border-white/10 bg-slate-900 px-3 text-sm text-white" />
       <input aria-label="New page path" value={path} onChange={(event) => setPath(event.target.value.toLowerCase().replace(/[^a-z0-9/-]/g, "-"))} placeholder="/page-path" maxLength={160} disabled={saving} className="h-10 rounded-lg border border-white/10 bg-slate-900 px-3 text-sm text-white" />

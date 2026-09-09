@@ -6,6 +6,7 @@ import { resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation 
 import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { websiteThemes } from "./websiteThemes";
+import { websiteMediaReference } from "@/app/lib/website-essential-pages";
 
 function firstHex(value: string) {
   return value.match(/#[0-9a-f]{6}\b/i)?.[0];
@@ -73,8 +74,10 @@ function ServiceDetailBlock({ block }: BlockProps & { block: Extract<WebsiteBloc
 
 function GalleryBlock({ block, media }: BlockProps & { block: Extract<WebsiteBlock, { type: "gallery" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200);
-  if (!heading && media.work.length === 0) return null;
-  return <Section><div data-block-type="gallery" className="mx-auto max-w-6xl">{heading && <Heading>{heading}</Heading>}{media.work.length > 0 && <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{media.work.map((item) => <WebsiteMediaVisual key={item.src} media={item} className="min-h-64 rounded-2xl" />)}</div>}</div></Section>;
+  const available = [...media.work, ...media.services];
+  const selected = block.mediaIds.length > 0 ? available.filter((item) => block.mediaIds.includes(websiteMediaReference(item.src))) : media.work;
+  if (!heading && selected.length === 0) return null;
+  return <Section><div data-block-type="gallery" className="mx-auto max-w-6xl">{heading && <Heading>{heading}</Heading>}{selected.length > 0 && <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{selected.map((item) => <WebsiteMediaVisual key={item.src} media={item} className="min-h-64 rounded-2xl" />)}</div>}</div></Section>;
 }
 
 function ProcessBlock({ block, accent }: BlockProps & { block: Extract<WebsiteBlock, { type: "process" }> }) {

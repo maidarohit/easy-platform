@@ -14,6 +14,7 @@ import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import type { WebsiteMediaInput } from "@/app/lib/business-site-visuals";
 import { adaptLegacyWebsiteToSiteDocument, validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { addEssentialWebsitePages, type VerifiedWebsiteService } from "@/app/lib/website-essential-pages";
 
 type WebsiteDraftOutput = WebsiteAiOutput & { siteDocument?: WebsiteSiteDocument };
 
@@ -124,6 +125,7 @@ const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">
 const [customDomain, setCustomDomain] = useState("");
 const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
 const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
+const [verifiedServices, setVerifiedServices] = useState<VerifiedWebsiteService[]>([]);
 const [previewMode, setPreviewMode] = useState<
   "desktop" | "tablet" | "mobile"
 >("desktop");
@@ -139,6 +141,7 @@ useEffect(() => {
     setBrandResult(null);
     setSiteDocument(null);
     setSelectedPagePath("/");
+    setVerifiedServices([]);
     setWebsiteEdits(null);
     setDraftEdits(null);
     setEditingWebsite(false);
@@ -167,15 +170,25 @@ useEffect(() => {
   let active = true;
   const loadWebsiteMedia = async () => {
     try {
-      const response = await authenticatedFetch(`/api/business-preview?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" });
-      const data = await response.json();
+      const [response, serviceResponse] = await Promise.all([
+        authenticatedFetch(`/api/business-preview?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
+        authenticatedFetch(`/api/store/products?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
+      ]);
+      const [data, serviceData] = await Promise.all([response.json(), serviceResponse.json()]);
       if (!response.ok) throw new Error(data.error || "Unable to load project media.");
       if (!active) return;
+      const services = serviceResponse.ok && Array.isArray(serviceData.products) ? serviceData.products.filter((item: Record<string, unknown>) => item.kind === "service" && item.isActive === true).map((item: Record<string, unknown>) => ({
+        id: String(item.id || ""), name: String(item.name || ""), slug: typeof item.slug === "string" ? item.slug : null,
+        description: typeof item.description === "string" ? item.description : null, imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+      })).filter((item: VerifiedWebsiteService) => item.id && item.name) : [];
+      setVerifiedServices(services);
       setWebsiteMedia({
         hero: data.preview?.website?.heroImage || null,
+        work: data.preview?.website?.secondaryImage || null,
+        services: services.map((service: VerifiedWebsiteService) => service.imageUrl).filter((value: string | null | undefined): value is string => Boolean(value)),
       });
     } catch {
-      if (active) setWebsiteMedia({});
+      if (active) { setWebsiteMedia({}); setVerifiedServices([]); }
     }
   };
   loadWebsiteMedia();
@@ -394,6 +407,15 @@ const initializeMultiPageDraft = async () => {
   if (!brandResult) return;
   const document = adaptLegacyWebsiteToSiteDocument({ companyName: companyName || "Your Business", template: websiteEdits?.template || brandStyle, websiteOutput: brandResult, websiteEdits: websiteEdits || undefined });
   await saveSiteDocument(document);
+};
+const addEssentialBusinessPages = async () => {
+  if (!siteDocument) return;
+  const work = websiteMedia.work;
+  const projectMedia = (Array.isArray(work) ? work : [work]).filter((value): value is string => typeof value === "string" && Boolean(value));
+  const next = addEssentialWebsitePages(siteDocument, { projectDescription: project?.businessDescription || null, services: verifiedServices, projectMedia });
+  if (!next) { toast.error("Essential pages could not be created safely."); return; }
+  if (JSON.stringify(next) === JSON.stringify(siteDocument)) { toast.success("Essential business pages are already set up."); return; }
+  await saveSiteDocument(next);
 };
 const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
 const publicationSlugIsValid = isValidWebsiteSlug(publicationSlug);
@@ -786,7 +808,7 @@ return (
                   </div>
                 </div>
 
-                {siteDocument ? <WebsitePageManager document={siteDocument} selectedPath={selectedPagePath} saving={savingPages} onSelect={setSelectedPagePath} onSave={saveSiteDocument} /> : (
+                {siteDocument ? <WebsitePageManager document={siteDocument} selectedPath={selectedPagePath} saving={savingPages} onSelect={setSelectedPagePath} onSave={saveSiteDocument} onAddEssentialPages={addEssentialBusinessPages} /> : (
                   <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-cyan-400/20 bg-slate-900/85 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="font-semibold text-white">Page Manager</h4><p className="mt-1 text-xs text-slate-400">Create a multi-page draft from this website. Your current website and live publication stay unchanged.</p></div><button type="button" onClick={initializeMultiPageDraft} disabled={savingPages} className={copyButtonClass}>{savingPages ? "Preparing pagesâ€¦" : "Set up pages"}</button></div>
                 )}
 
