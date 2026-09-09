@@ -143,6 +143,18 @@ test("intelligence normalization accepts benign data and file prose", () => {
   }
 });
 
+test("legacy website without saved edits safely normalizes a long website goal into the headline", () => {
+  const legacyWebsite = Object.fromEntries(Object.entries(website).filter(([field]) => field !== "websiteEdits"));
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" },
+    website: { ...legacyWebsite, websiteGoal: "Help customers plan thoughtful interiors. ".repeat(12) },
+    branding,
+  });
+  assert.ok(result);
+  assert.equal(result.output.websiteEdits.heroHeadline.length <= 200, true);
+  assert.equal(result.output.websiteEdits.primaryCtaLink, "#contact");
+});
+
 test("legacy website draft is canonicalized on save and then applies successfully", () => {
   const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
   const saved = normalizeWebsiteDraftForPersistence({

@@ -161,7 +161,8 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const websiteEdits = {
     companyName,
     heroHeadline: existingEdits?.heroHeadline ?? publicCopy(normalized.legacyHeroHeadline, 200) ?? firstPublicCandidate(seo?.metaTitles, 200)
-      ?? String(website.websiteGoal),
+      ?? firstPublicCandidate(website.websiteGoal, 200)
+      ?? companyName,
     heroDescription,
     aboutText: about ?? existingEdits?.aboutText ?? String(website.designRecommendations),
     servicesText: services ?? existingEdits?.servicesText ?? String(website.websiteFeatures),
