@@ -130,6 +130,19 @@ test("legacy website draft applies directly through safe server normalization", 
   assert.equal(result.output.designRecommendations.length <= 4_000, true);
 });
 
+test("intelligence normalization accepts benign data and file prose", () => {
+  for (const seoRecommendations of [
+    "Use structured data: to describe services.",
+    "Maintain a file: naming guide for website assets.",
+  ]) {
+    const result = applyLatestWebsiteIntelligence({
+      project: { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" },
+      website: { ...website, seoRecommendations }, branding,
+    });
+    assert.ok(result);
+  }
+});
+
 test("legacy website draft is canonicalized on save and then applies successfully", () => {
   const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
   const saved = normalizeWebsiteDraftForPersistence({

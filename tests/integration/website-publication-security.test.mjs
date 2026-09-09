@@ -33,6 +33,15 @@ test("strict Website AI output accepts only bounded text fields", () => {
   assert.equal(validateWebsiteAiOutput({ ...output, websiteGoal: "javascript:alert(1)" }), null);
 });
 
+test("plain website prose allows data and file labels without weakening URL fields", () => {
+  assert.ok(validateWebsiteAiOutput({ ...output, seoRecommendations: "Use structured data: for local discovery." }));
+  assert.ok(validateWebsiteAiOutput({ ...output, seoRecommendations: "Keep a file: naming convention for assets." }));
+  assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "data:text/html,unsafe" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "file:///etc/passwd" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "javascript:alert(1)" }), null);
+  assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "vbscript:msgbox(1)" }), null);
+});
+
 test("publication snapshot is exact and template allowlisted", () => {
   const snapshot = buildWebsitePublicationSnapshot({ companyName: "Example", industry: "Retail", websiteGoal: "Leads", websiteRequirements: "Simple", template: "Modern", websiteOutput: output, websiteEdits: edits });
   assert.ok(snapshot);

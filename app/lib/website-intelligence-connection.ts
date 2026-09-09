@@ -9,7 +9,7 @@ import {
 } from "@/app/lib/easy-mode-execution-contracts";
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicServiceText } from "@/app/lib/public-website-presentation";
-import { validateWebsiteAiOutput, validateWebsiteEdits, validateWebsiteTemplate } from "@/app/lib/website-publication";
+import { hasUnsafeWebsitePlainText, validateWebsiteAiOutput, validateWebsiteEdits, validateWebsiteTemplate } from "@/app/lib/website-publication";
 
 type ProjectIdentity = Readonly<{
   name: string;
@@ -54,7 +54,6 @@ const WEBSITE_FIELDS = [
 ] as const;
 const LEGACY_WEBSITE_MAX = 20_000;
 const CANONICAL_WEBSITE_MAX = 4_000;
-const UNSAFE_WEBSITE_TEXT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
 
 function record(value: unknown): Record<string, unknown> | null {
   const parsed = parse(value);
@@ -71,7 +70,7 @@ function normalizeExistingWebsite(value: unknown) {
     const fieldValue = field === "colourScheme" ? candidate[field] ?? candidate.colorScheme : candidate[field];
     if (typeof fieldValue !== "string") return null;
     const normalized = fieldValue.trim();
-    if (!normalized || normalized.length > LEGACY_WEBSITE_MAX || UNSAFE_WEBSITE_TEXT.test(normalized)) return null;
+    if (!normalized || normalized.length > LEGACY_WEBSITE_MAX || hasUnsafeWebsitePlainText(normalized)) return null;
     canonical[field] = normalized.slice(0, CANONICAL_WEBSITE_MAX).trimEnd();
   }
   const website = validateWebsiteAiOutput(canonical);

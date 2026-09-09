@@ -63,7 +63,7 @@ export const RESERVED_WEBSITE_SLUGS = new Set([
 
 const MAX_SHORT = 200;
 const MAX_LONG = 4_000;
-const FORBIDDEN_CONTENT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
+const FORBIDDEN_PLAIN_TEXT = /<\/?[a-z][^>]*>|(?:javascript|vbscript)\s*:/i;
 const EDIT_FIELDS = [
   "companyName", "heroHeadline", "heroDescription", "aboutText", "servicesText",
   "phone", "email", "address", "whatsapp", "primaryCtaLabel", "primaryCtaLink", "template",
@@ -78,10 +78,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function safeString(value: unknown, max: number, required = true): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
-  if ((required && !normalized) || normalized.length > max || FORBIDDEN_CONTENT.test(normalized)) {
+  if ((required && !normalized) || normalized.length > max || hasUnsafeWebsitePlainText(normalized)) {
     return null;
   }
   return normalized;
+}
+
+export function hasUnsafeWebsitePlainText(value: string) {
+  return FORBIDDEN_PLAIN_TEXT.test(value);
 }
 
 function validateWebsiteMedia(value: unknown): WebsiteMediaInput | null {
