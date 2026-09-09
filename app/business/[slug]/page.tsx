@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { cache } from "react";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/app/db";
-import { businessPublications, businessPublicationVersions, projectMerchantPaymentAccounts, projectProducts } from "@/app/db/schema";
-import { validateBusinessSlug, validatePublishedBusinessSnapshot } from "@/app/lib/business-publication";
+import { projectMerchantPaymentAccounts, projectProducts } from "@/app/db/schema";
 import { publicBusinessKind, publicBusinessView, publicCallToAction, publicContact, publicHeroCopy, publicProcess, publicSeoDescription, publicSeoTitle, publicServices, publicServicesSummary, publicStory, publicValuePoints, uniquePublicNavigationItems } from "@/app/lib/public-business-presentation";
 import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
 import { OrderForm } from "@/app/business/[slug]/OrderForm";
 import { BusinessSiteVisual } from "@/app/components/BusinessSiteVisual";
 import { resolveWebsiteMedia, uploadedSrcFromRecord } from "@/app/lib/business-site-visuals";
-import { hasPaidProductAccess } from "@/app/lib/paid-entitlements";
 import { isStoreRazorpayCheckoutEnabled, merchantAccountCanAcceptCheckout } from "@/app/lib/store-checkout-core";
 import { getStoreCheckoutPublicKey } from "@/app/lib/store-checkout-razorpay";
 import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
 import { showcaseGridClass } from "@/app/lib/public-website-presentation";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
+import WebsiteSiteRenderer from "@/app/dashboard/components/WebsiteSiteRenderer";
+import { publicWebsitePageSeo } from "@/app/lib/website-site-presentation";
+import { loadPublishedBusiness } from "@/app/lib/public-business-publication";
 
 export const dynamic = "force-dynamic";
 function formatInr(pricePaise: number) {
@@ -28,19 +28,6 @@ function catalogueLabel(items: readonly { kind: "product" | "service"; category:
   }
   return "Store";
 }
-const loadPublishedBusiness = cache(async (candidate: string) => {
-  const slug = validateBusinessSlug(candidate); if (!slug) return null;
-  const [row] = await db.select({
-    snapshot: businessPublicationVersions.snapshot,
-    userId: businessPublications.userId,
-    projectId: businessPublications.projectId,
-  }).from(businessPublications)
-    .innerJoin(businessPublicationVersions, and(eq(businessPublicationVersions.publicationId, businessPublications.id), eq(businessPublicationVersions.versionNumber, businessPublications.currentVersion)))
-    .where(and(eq(businessPublications.publicSlug, slug), eq(businessPublications.status, "active"))).limit(1);
-  if (!row || !await hasPaidProductAccess(row.userId)) return null;
-  const snapshot = validatePublishedBusinessSnapshot(row.snapshot);
-  return snapshot ? { snapshot, projectId: row.projectId } : null;
-});
 type Props = { params: Promise<{ slug: string }>; searchParams: Promise<{ service?: string | string[]; product?: string | string[] }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -48,8 +35,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const published = await loadPublishedBusiness(decodeURIComponent(slug));
   if (!published) return { title: "Business not found" };
   const snapshot = publicBusinessView(published.snapshot);
-  const title = publicSeoTitle(snapshot);
-  const description = publicSeoDescription(snapshot);
+  const pageSeo = snapshot.siteDocument ? publicWebsitePageSeo(snapshot.siteDocument, "/") : null;
+  const title = pageSeo?.title || publicSeoTitle(snapshot);
+  const description = pageSeo?.description || publicSeoDescription(snapshot);
   const origin = canonicalApplicationOrigin();
   const canonical = origin ? `${origin}/business/${encodeURIComponent(slug)}` : undefined;
   return { title, description, ...(canonical ? { alternates: { canonical } } : {}), robots: { index: true, follow: true }, openGraph: { title, description, ...(canonical ? { url: canonical } : {}), type: "website" } };
@@ -58,6 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessPage({ params, searchParams }: Props) {
   const slug = decodeURIComponent((await params).slug); const published = await loadPublishedBusiness(slug); if (!published) notFound();
   const snapshot = publicBusinessView(published.snapshot);
+  if (snapshot.siteDocument) return <WebsiteSiteRenderer document={snapshot.siteDocument} pagePath="/" basePath={`/business/${encodeURIComponent(slug)}`} industry={snapshot.business.industry ?? ""} description={snapshot.business.description ?? ""} media={{ hero: snapshot.website?.heroImage, work: snapshot.website?.secondaryImage }} />;
   const catalogue = await db.select({
     id: projectProducts.id, name: projectProducts.name, kind: projectProducts.kind, category: projectProducts.category,
     description: projectProducts.description, pricePaise: projectProducts.pricePaise,

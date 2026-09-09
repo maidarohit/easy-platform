@@ -12,6 +12,7 @@ import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 import { hasPaidProductAccess, requirePaidProductAccess } from "@/app/lib/paid-entitlements";
+import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const MAX_BODY_BYTES = 1_024;
 
@@ -121,7 +122,8 @@ export async function POST(request: Request) {
       });
       const revision = businessPreviewRevision(outputRevisions, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
       const preview = applyPreviewOverrides(original, overrides);
-      const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {});
+      const siteDocument = validateWebsiteSiteDocument(latest.get("website")?.output.siteDocument);
+      const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {}, siteDocument ?? undefined);
       if (!mutation.republish && existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
       const now = new Date();
       if (existing) {

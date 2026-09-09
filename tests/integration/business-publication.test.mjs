@@ -43,18 +43,19 @@ test("publication API gates on current approval, owner scopes every mutation, sn
   assert.match(route, /customRows\[0\]\?\.approvedAt/);
   assert.match(route, /existing\?\.status === "active" && existing\.publishedPreviewRevision === revision/);
   assert.match(route, /insert\(businessPublicationVersions\)/);
-  assert.match(route, /buildPublishedBusinessSnapshot\(preview, contactRows\[0\]\?\.settings \?\? \{\}\)/);
+  assert.match(route, /buildPublishedBusinessSnapshot\(preview, contactRows\[0\]\?\.settings \?\? \{\}, siteDocument \?\? undefined\)/);
   assert.match(route, /status: "inactive"/);
   assert.doesNotMatch(route, /update\(projectOutputs\)|update\(projectBusinessDna\)|fetch\(|OpenAI|N8N_|startAiUsage|Build My Business/i);
 });
 
 test("public business page is auth-free, active-only, snapshot-based, and exposes no internal controls", async () => {
   const page = await source("app/business/[slug]/page.tsx");
-  assert.match(page, /eq\(businessPublications\.status, "active"\)/);
-  assert.match(page, /businessPublicationVersions\.snapshot/);
+  const loader = await source("app/lib/public-business-publication.ts");
+  assert.match(loader, /eq\(businessPublications\.status, "active"\)/);
+  assert.match(loader, /businessPublicationVersions\.snapshot/);
   assert.match(page, /generateMetadata/);
-  assert.match(page, /snapshot\.search\?\.title/);
-  assert.doesNotMatch(page, /verifyFirebaseIdToken|projectId|Edit|Approve Preview|Master Workspace|Branding AI|Website AI|SEO AI|UIUX AI|Sales AI|JSON\.stringify|snapshot\.journey/);
+  assert.match(page, /publicSeoTitle\(snapshot\)/);
+  assert.doesNotMatch(page + loader, /verifyFirebaseIdToken|Approve Preview|Master Workspace|Branding AI|Website AI|SEO AI|UIUX AI|Sales AI|JSON\.stringify|snapshot\.journey/);
 });
 
 test("public services reject sitemap labels and prefer explicit saved service names", () => {

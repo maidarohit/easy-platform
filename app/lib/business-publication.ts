@@ -1,5 +1,6 @@
 import { resolveCustomerText, type BusinessPreview } from "@/app/lib/business-preview";
 import { validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
+import { validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 export type PublishedBusinessSnapshot = Readonly<{
   schemaVersion: 1 | 2;
@@ -10,6 +11,7 @@ export type PublishedBusinessSnapshot = Readonly<{
   search: BusinessPreview["search"];
   journey: BusinessPreview["journey"];
   contact?: PublicContactSettings;
+  siteDocument?: WebsiteSiteDocument;
 }>;
 
 const RESERVED = new Set(["admin", "api", "business", "dashboard", "help", "login", "onboarding", "signup", "www", "_next"]);
@@ -25,7 +27,7 @@ export function validateBusinessSlug(value: unknown) {
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && !RESERVED.has(value) ? value : null;
 }
 
-export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact: PublicContactSettings = {}): PublishedBusinessSnapshot {
+export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact: PublicContactSettings = {}, siteDocument?: WebsiteSiteDocument): PublishedBusinessSnapshot {
   const snapshot = structuredClone({
     schemaVersion: 2 as const,
     business: preview.business,
@@ -38,6 +40,7 @@ export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact
       title: preview.search.title, description: preview.search.description } : null,
     journey: null,
     contact,
+    ...(siteDocument && { siteDocument }),
   });
   const validated = validatePublishedBusinessSnapshot(snapshot);
   if (!validated) throw new Error("Invalid business publication snapshot.");
@@ -55,10 +58,10 @@ export function businessPreviewRevision(outputIds: readonly string[], customizat
 }
 
 function safeTree(value: unknown, depth = 0): boolean {
-  if (value === null || typeof value === "string" || typeof value === "number") {
+  if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return typeof value === "string" ? value.length <= 25_000 : typeof value !== "number" || Number.isFinite(value);
   }
-  if (depth > 6) return false;
+  if (depth > 10) return false;
   if (Array.isArray(value)) return value.length <= 50 && value.every((item) => safeTree(item, depth + 1));
   if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return false;
   return Object.entries(value).every(([key, item]) => key !== "__proto__" && key !== "constructor" && safeTree(item, depth + 1));
@@ -67,10 +70,12 @@ function safeTree(value: unknown, depth = 0): boolean {
 export function validatePublishedBusinessSnapshot(value: unknown): PublishedBusinessSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const keys = ["schemaVersion", "business", "brand", "website", "marketing", "search", "journey", "contact"];
+  const keys = ["schemaVersion", "business", "brand", "website", "marketing", "search", "journey", "contact", "siteDocument"];
   if ((record.schemaVersion !== 1 && record.schemaVersion !== 2) || Object.keys(record).some((key) => !keys.includes(key)) || !safeTree(value)) return null;
   if (record.schemaVersion === 1 && Object.hasOwn(record, "contact")) return null;
   if (record.schemaVersion === 2 && (!Object.hasOwn(record, "contact") || !validatePublicContactSettings(record.contact).valid)) return null;
+  const siteDocument = record.siteDocument === undefined ? undefined : validateWebsiteSiteDocument(record.siteDocument);
+  if (record.siteDocument !== undefined && !siteDocument) return null;
   const business = record.business as Record<string, unknown> | undefined;
   if (!business || typeof business.name !== "string" || !business.name.trim()) return null;
   const brand = record.brand && typeof record.brand === "object" && !Array.isArray(record.brand)
@@ -84,6 +89,8 @@ export function validatePublishedBusinessSnapshot(value: unknown): PublishedBusi
     if (!item || typeof item !== "object") return item;
     return Object.fromEntries(Object.entries(item).map(([key, nested]) => [key, sanitize(nested)]));
   };
-  const sanitized = sanitize(value) as PublishedBusinessSnapshot;
-  return { ...sanitized, business: { ...sanitized.business, name: businessName } };
+  const { siteDocument: _siteDocument, ...legacySnapshot } = value as PublishedBusinessSnapshot;
+  void _siteDocument;
+  const sanitized = sanitize(legacySnapshot) as PublishedBusinessSnapshot;
+  return { ...sanitized, business: { ...sanitized.business, name: businessName }, ...(siteDocument && { siteDocument }) };
 }
