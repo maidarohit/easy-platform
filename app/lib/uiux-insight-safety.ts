@@ -8,14 +8,15 @@ const LIVE_CLAIM = /\b(?:the (?:current|live|published) (?:site|website)|website
 const UNVERIFIED_CAPABILITY = /\b(?:dashboard|configurator|e-?sign(?:ature)?|scheduling|calendar|automated? emails?|automation|milestone payments?|3d viewers?|awards?|testimonials?|case stud(?:y|ies)|office locations?|financing|referrals?|client portals?|integrations?)\b/gi;
 const PROPOSED = /^\s*(?:proposed|recommended|consider|optional|hypothetical|suggested)\b/i;
 const BRAND_SYSTEM = /\b(?:colou?r(?:s| scheme)?|palette|fonts?|typeface|typography|brand voice|tone of voice|visual direction|brand direction)\b/i;
-const BRANDING_HEADING = /^\s*(?:branding|brand(?:ing)? system)\s*[:—–-]?\s*$/i;
+const BRANDING_CONTENT = /^\s*(?:branding|brand(?:ing)? system)\b/i;
 const UI_COLOUR_PROPOSAL = /\b(?:ui|interface|interaction|state|surface|background|accent|semantic|feedback|success|warning|error|info|neutral|border|hover|focus|disabled)\b[^.!?\n]{0,100}\b(?:colou?r|palette|#[\da-f]{3,8}\b)/i;
 const UI_COLOUR_LABEL = /^Proposed UI extension colors\s*[—–-]\s*/i;
 
 function cleanFormatting(text: string) {
   return text
-    .replace(/^\s*(Proposed recommendation\s*[—–-])\s*(?:[-*•]\s*)+/i, "$1 ")
-    .replace(/^\s*[-*•]\s+/, "")
+    .replace(/^\s*(?:(?:\d+[.)]|[-*•])\s*)+/, "")
+    .replace(/^(?:Proposed recommendation\s*[—–-]\s*)+/i, "Proposed recommendation — ")
+    .replace(/^(Proposed recommendation\s*—)\s*(?:(?:\d+[.)]|[-*•])\s*)+/i, "$1 ")
     .trim();
 }
 
@@ -50,7 +51,7 @@ export function sanitizeUiuxOutput(value: unknown, context: UiuxBusinessContext)
     const proposedUiColours = key === "designSystem" && context.branding
       ? sentences.filter((sentence) => BRAND_SYSTEM.test(sentence) && UI_COLOUR_PROPOSAL.test(sentence))
       : [];
-    if (context.branding) sentences = sentences.filter((sentence) => !BRAND_SYSTEM.test(sentence) && !(key === "designSystem" && BRANDING_HEADING.test(sentence)));
+    if (context.branding) sentences = sentences.filter((sentence) => !BRAND_SYSTEM.test(sentence) && !(key === "designSystem" && BRANDING_CONTENT.test(sentence)));
     let text = [...new Set(sentences.map((sentence) => sanitizeSentence(sentence, context, corpus)))].join("\n");
     if (key === "colourScheme" && context.branding) text = context.branding.palette;
     if (key === "userPersonas" && !/^Hypothetical \/ Proposed personas:/i.test(text)) text = `Hypothetical / Proposed personas:\n${text}`;

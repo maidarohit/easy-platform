@@ -45,7 +45,7 @@ test("verified Branding replaces conflicting legacy palettes, fonts and directio
 });
 
 test("Design System keeps verified Branding distinct from proposed UI colors without duplication", () => {
-  const proposed = { ...output("Keep content concise."), designSystem: "Branding\nBranding\nTypography: Roboto. UI accent color: Coral #ff7755." };
+  const proposed = { ...output("Keep content concise."), designSystem: "Branding\nBranding: Navy #001122 and Inter.\nTypography: Roboto. UI accent color: Coral #ff7755." };
   const result = sanitizeUiuxOutput(proposed, context);
   assert.equal(result.designSystem.match(/Verified Branding system/g)?.length, 1);
   assert.match(result.designSystem, /^Verified Branding system — palette: Navy #001122; typography: Inter;/);
@@ -53,6 +53,12 @@ test("Design System keeps verified Branding distinct from proposed UI colors wit
   assert.doesNotMatch(result.designSystem, /Roboto|^Branding$/m);
   const restored = readStoredUiuxOutput(JSON.stringify(result), context, validateUiuxOutput);
   assert.equal(restored.designSystem.match(/Proposed UI extension colors/g)?.length, 1);
+});
+
+test("presentation cleanup removes standalone numbering and repeated recommendation labels", () => {
+  const result = sanitizeUiuxOutput(output("1. Add a dashboard.\n2) Proposed recommendation — Proposed recommendation — - Add testimonials."), context);
+  assert.equal(result.uiuxStrategy, "Proposed recommendation — Add a dashboard.\nProposed recommendation — Add testimonials.");
+  assert.doesNotMatch(result.uiuxStrategy, /^(?:\d+[.)]|[-*•])|Proposed recommendation — Proposed recommendation/m);
 });
 
 test("customer proof stays factual only when owner-approved and formatting artifacts are removed", () => {
