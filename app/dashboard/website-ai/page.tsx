@@ -851,6 +851,7 @@ return (
                     <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={siteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
 primaryLanguage={projectPrimaryLanguage}
 media={websiteMedia}
+serviceItems={verifiedServices.map((service) => ({ id: service.id, title: service.name, description: service.description, path: service.slug ? `/services/${service.slug}` : null }))}
 />
                   </div>
                 </div>

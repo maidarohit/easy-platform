@@ -1,7 +1,7 @@
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { validateWebsiteSiteDocument, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
-const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|\b(?:describe|mention|claim|include|add)\b[^.!?\n]{0,160}\bonly when\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt|project brief|original brief|customer brief)\b|\bwe started as\b)/i;
+const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|^(?:i run|i want|we want|our goal is)\b|\bthe website (?:will|should|must|needs? to)\b|\bthe tone (?:will|should|must)\b|\b(?:describe|mention|claim|include|add|write)\b[^.!?\n]{0,160}\b(?:only when|if verified|when verified)\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt|project brief|original brief|customer brief|target audience|conversion goal)\b|\b(?:we started as|we began as|founded by|our founders?|our team of)\b)/i;
 const HTML_OR_SCRIPT = /<\/?[a-z][^>]*>|(?:javascript|vbscript)\s*:/i;
 
 export function safeWebsiteBlockText(value: string, maximum = 4_000) {

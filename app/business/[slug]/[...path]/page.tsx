@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import WebsiteSiteRenderer from "@/app/dashboard/components/WebsiteSiteRenderer";
 import { loadPublishedBusiness } from "@/app/lib/public-business-publication";
-import { publicBusinessView } from "@/app/lib/public-business-presentation";
+import { publicBusinessView, publicServices } from "@/app/lib/public-business-presentation";
 import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
 import { publicWebsitePageSeo, resolvePublishedWebsitePage } from "@/app/lib/website-site-presentation";
 
@@ -32,5 +32,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessChildPage({ params }: Props) {
   const loaded = await loadPage(params);
   if (!loaded) notFound();
-  return <WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} publicPageOnly />;
+  return <WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} serviceItems={publicServices(loaded.snapshot).map((service, index) => ({ id: `published-service-${index + 1}`, title: service.title, description: service.description }))} publicPageOnly />;
 }

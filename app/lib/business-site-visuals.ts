@@ -129,7 +129,7 @@ const WEBSITE_MATCHES: readonly {
     visuals: { hero: [[VISUALS.retail, "Retail products and customer shopping illustration"]] },
   },
   {
-    pattern: /\b(?:photography|photographer|creative studio|design studio|interior design|artist|art studio)\b/i,
+    pattern: /\b(?:photography|photographer|creative studio|design studio|artist|art studio)\b/i,
     visuals: { hero: [[VISUALS.studio, "Creative studio and project work illustration"]] },
   },
 ];
@@ -147,13 +147,16 @@ export function resolveWebsiteMedia(input: Readonly<{
   const context = `${input.industry ?? ""} ${input.description ?? ""}`;
   const matched = WEBSITE_MATCHES.find((entry) => entry.pattern.test(context));
   const used = new Set<string>();
+  const heroUploads = uploadedMediaValues(input.uploaded?.hero);
+  const workUploads = uploadedMediaValues(input.uploaded?.work);
 
   const resolveSlot = (slot: WebsiteMediaSlot): WebsiteMediaVisual[] => {
     // Only media explicitly assigned to a semantic slot is eligible. A saved
     // secondary photo is mapped to Work by the publication adapters; uploads
     // are never guessed into unrelated About or service slots.
-    const uploaded = slot === "hero" || slot === "work" || slot === "services"
-      ? uploadedMediaValues(input.uploaded?.[slot])
+    const uploaded = slot === "hero" ? (heroUploads.length > 0 ? heroUploads : workUploads.slice(0, 1))
+      : slot === "work" ? workUploads
+      : slot === "services" ? uploadedMediaValues(input.uploaded?.services)
       : [];
     const candidates: WebsiteMediaVisual[] = uploaded.map((src) => ({
       src: src.trim(),
