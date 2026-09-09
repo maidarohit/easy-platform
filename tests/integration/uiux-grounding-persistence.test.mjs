@@ -44,6 +44,30 @@ test("verified Branding replaces conflicting legacy palettes, fonts and directio
   assert.match(result.uiuxStrategy, /Proposed recommendation —.*client portal and 3D viewer/i);
 });
 
+test("Design System keeps verified Branding distinct from proposed UI colors without duplication", () => {
+  const proposed = { ...output("Keep content concise."), designSystem: "Branding\nBranding\nTypography: Roboto. UI accent color: Coral #ff7755." };
+  const result = sanitizeUiuxOutput(proposed, context);
+  assert.equal(result.designSystem.match(/Verified Branding system/g)?.length, 1);
+  assert.match(result.designSystem, /^Verified Branding system — palette: Navy #001122; typography: Inter;/);
+  assert.match(result.designSystem, /Proposed UI extension colors — UI accent color: Coral #ff7755\./);
+  assert.doesNotMatch(result.designSystem, /Roboto|^Branding$/m);
+  const restored = readStoredUiuxOutput(JSON.stringify(result), context, validateUiuxOutput);
+  assert.equal(restored.designSystem.match(/Proposed UI extension colors/g)?.length, 1);
+});
+
+test("customer proof stays factual only when owner-approved and formatting artifacts are removed", () => {
+  const unverified = sanitizeUiuxOutput(output("- Awards, testimonials and case studies.\nProposed recommendation — - Add referrals."), context);
+  assert.match(unverified.uiuxStrategy, /Proposed recommendation — Awards, testimonials and case studies\./);
+  assert.match(unverified.uiuxStrategy, /Proposed recommendation — Add referrals\./);
+  assert.doesNotMatch(unverified.uiuxStrategy, /—\s*-/);
+
+  const approved = sanitizeUiuxOutput(output("Show testimonials and case studies."), {
+    ...context,
+    business: { ...context.business, description: "Owner-approved testimonials and case studies are available." },
+  });
+  assert.equal(approved.uiuxStrategy, "Show testimonials and case studies.");
+});
+
 test("owned UI/UX context reads latest owned Branding direction", async () => {
   const contextSource = await source("app/lib/uiux-business-context.ts");
   const route = await source("app/api/uiux-ai/route.ts");
