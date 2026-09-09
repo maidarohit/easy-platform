@@ -181,7 +181,7 @@ export async function POST(request: Request) {
         eq(projectOutputs.projectId, parsed.body.projectId),
         eq(projectOutputs.userId, authorized.uid),
         eq(projectOutputs.module, "website"),
-      )).orderBy(desc(projectOutputs.updatedAt)).limit(1);
+      )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)).limit(1);
       const [customization] = await transaction.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(
         eq(projectPreviewCustomizations.projectId, parsed.body.projectId), eq(projectPreviewCustomizations.userId, authorized.uid),
       )).limit(1);
@@ -232,7 +232,7 @@ export async function PATCH(request: Request) {
       if (!current) throw new Error("NOT_FOUND");
       const [output] = await transaction.select().from(projectOutputs).where(and(
         eq(projectOutputs.projectId, parsed.body.projectId), eq(projectOutputs.userId, authorized.uid), eq(projectOutputs.module, "website"),
-      )).orderBy(desc(projectOutputs.updatedAt)).limit(1);
+      )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)).limit(1);
       const [customization] = await transaction.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(
         eq(projectPreviewCustomizations.projectId, parsed.body.projectId), eq(projectPreviewCustomizations.userId, authorized.uid),
       )).limit(1);
@@ -240,7 +240,12 @@ export async function PATCH(request: Request) {
       if (!snapshot) throw new Error("INVALID_WEBSITE_OUTPUT");
       const nextVersion = current.currentVersion + 1;
       await transaction.insert(websitePublicationVersions).values({ publishedWebsiteId: current.id, versionNumber: nextVersion, action: "republish", snapshot });
-      const [updated] = await transaction.update(publishedWebsites).set({ currentVersion: nextVersion, status: "active", lastPublishedAt: new Date(), unpublishedAt: null, updatedAt: new Date() }).where(eq(publishedWebsites.id, current.id)).returning();
+      const [updated] = await transaction.update(publishedWebsites).set({ currentVersion: nextVersion, status: "active", lastPublishedAt: new Date(), unpublishedAt: null, updatedAt: new Date() }).where(and(
+        eq(publishedWebsites.id, current.id),
+        eq(publishedWebsites.projectId, parsed.body.projectId),
+        eq(publishedWebsites.ownerUid, authorized.uid),
+      )).returning();
+      if (!updated) throw new Error("NOT_FOUND");
       return updated;
     });
     return Response.json({ publication: safeMetadata(site) });
