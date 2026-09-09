@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import Link from "next/link";
 import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 import { resolveWebsiteMedia, type WebsiteMediaInput, type ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
@@ -24,11 +24,12 @@ function siteHref(href: string, basePath: string) {
   return href === "/" ? basePath : `${basePath}${href}`;
 }
 
-function SiteLink({ href, basePath, className, style, children }: { href: string; basePath: string; className?: string; style?: CSSProperties; children: ReactNode }) {
+function SiteLink({ href, basePath, className, style, onNavigate, children }: { href: string; basePath: string; className?: string; style?: CSSProperties; onNavigate?: (path: string) => void; children: ReactNode }) {
   const resolved = siteHref(href, basePath);
+  const onClick = onNavigate && href.startsWith("/") ? (event: MouseEvent<HTMLAnchorElement>) => { event.preventDefault(); onNavigate(href); } : undefined;
   return resolved.startsWith("/")
-    ? <Link href={resolved} className={className} style={style}>{children}</Link>
-    : <a href={resolved} className={className} style={style}>{children}</a>;
+    ? <Link href={resolved} className={className} style={style} onClick={onClick}>{children}</Link>
+    : <a href={resolved} className={className} style={style} onClick={onClick}>{children}</a>;
 }
 
 function Section({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
@@ -117,8 +118,8 @@ export function WebsiteBlockRenderer(props: BlockProps) {
   }
 }
 
-export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput }) {
-  const validated = validateWebsiteSiteDocument(document), page = validated && resolveWebsiteSitePage(validated, pagePath);
+export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, preview = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; preview?: boolean; onNavigate?: (path: string) => void }) {
+  const validated = validateWebsiteSiteDocument(document), page = validated && resolveWebsiteSitePage(validated, pagePath, preview);
   if (!validated || !page) return null;
   const baseTheme = websiteThemes[validated.theme.template] || websiteThemes.Modern;
   const accent = firstHex(validated.theme.colorPalette) || baseTheme.primaryColor;
@@ -134,8 +135,8 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
     ?? (page.blocks.some((block) => block.type === "contact" && block.visibility === "visible") ? "#contact" : "/");
   return <div data-site-document-version="2" data-page-path={page.path} className="min-h-full overflow-hidden" style={shellStyle}>
     <header className="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-5 sm:px-10 lg:px-16">
-      <SiteLink href="/" basePath={basePath} className="text-xl font-bold">{brandLabel}</SiteLink>
-      <nav aria-label="Primary navigation" className="hidden items-center gap-6 md:flex">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} className="text-sm font-medium opacity-75 hover:opacity-100">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>
+      <SiteLink href="/" basePath={basePath} onNavigate={onNavigate} className="text-xl font-bold">{brandLabel}</SiteLink>
+      <nav aria-label="Primary navigation" className="hidden items-center gap-6 md:flex">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-sm font-medium opacity-75 hover:opacity-100">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>
       {headerCta && <SiteLink href={validated.header.ctaHref} basePath={basePath} className="px-4 py-2 text-sm font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: baseTheme.buttonRadius }}>{headerCta}</SiteLink>}
     </header>
     <main>{[...page.blocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} />)}</main>

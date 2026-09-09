@@ -12,6 +12,7 @@ export const WEBSITE_BLOCK_TYPES = [
 ] as const;
 export type WebsiteBlockType = (typeof WEBSITE_BLOCK_TYPES)[number];
 export type WebsiteVisibility = "visible" | "hidden";
+export type WebsitePageVisibility = WebsiteVisibility | "removed";
 
 export type WebsiteSeo = {
   title: string;
@@ -38,7 +39,7 @@ export type WebsitePage = {
   path: string;
   title: string;
   order: number;
-  visibility: WebsiteVisibility;
+  visibility: WebsitePageVisibility;
   seo: WebsiteSeo;
   blocks: WebsiteBlock[];
 };
@@ -84,6 +85,10 @@ function id(value: unknown) {
 
 function visibility(value: unknown): WebsiteVisibility | null {
   return value === "visible" || value === "hidden" ? value : null;
+}
+
+function pageVisibility(value: unknown): WebsitePageVisibility | null {
+  return value === "visible" || value === "hidden" || value === "removed" ? value : null;
 }
 
 function order(value: unknown) {
@@ -167,16 +172,16 @@ export function validateWebsiteSiteDocument(value: unknown): WebsiteSiteDocument
   if ([...themeValues, ...brandValues, ...headerValues, ...footerValues].some((item) => item === null) || !SAFE_HREF.test(headerValues[2]!) || typeof footer.showContact !== "boolean" || value.pages.length < 1 || value.pages.length > 100) return null;
   const pages = value.pages.map((raw): WebsitePage | null => {
     if (!isRecord(raw) || !exact(raw, ["id", "type", "path", "title", "order", "visibility", "seo", "blocks"]) || !id(raw.id) || !WEBSITE_PAGE_TYPES.includes(raw.type as WebsitePageType) || !Array.isArray(raw.blocks)) return null;
-    const path = validateWebsitePagePath(raw.path), pageOrder = order(raw.order), pageVisibility = visibility(raw.visibility);
-    if (!path || pageOrder === null || !pageVisibility || text(raw.title, 200, true) === null || raw.blocks.length > 100) return null;
+    const path = validateWebsitePagePath(raw.path), pageOrder = order(raw.order), validPageVisibility = pageVisibility(raw.visibility);
+    if (!path || pageOrder === null || !validPageVisibility || text(raw.title, 200, true) === null || raw.blocks.length > 100) return null;
     const seo = validateSeo(raw.seo, path), blocks = raw.blocks.map(validateBlock);
     if (!seo || blocks.some((block) => !block) || new Set(blocks.map((block) => block!.id)).size !== blocks.length) return null;
-    return { id: raw.id as string, type: raw.type as WebsitePageType, path, title: text(raw.title, 200, true)!, order: pageOrder, visibility: pageVisibility, seo, blocks: blocks as WebsiteBlock[] };
+    return { id: raw.id as string, type: raw.type as WebsitePageType, path, title: text(raw.title, 200, true)!, order: pageOrder, visibility: validPageVisibility, seo, blocks: blocks as WebsiteBlock[] };
   });
   if (pages.some((page) => !page)) return null;
   const validPages = pages as WebsitePage[], pageIds = new Set(validPages.map((page) => page.id));
   if (pageIds.size !== validPages.length || new Set(validPages.map((page) => page.path)).size !== validPages.length ||
-      validPages.filter((page) => page.type === "home" && page.path === "/").length !== 1 || validPages.some((page) => page.path === "/" && page.type !== "home")) return null;
+      validPages.filter((page) => page.type === "home" && page.path === "/" && page.visibility !== "removed").length !== 1 || validPages.some((page) => page.path === "/" && page.type !== "home")) return null;
   const items = navigation.items.map((raw) => {
     if (!isRecord(raw) || !exact(raw, ["id", "pageId", "label", "order", "visibility"]) || !id(raw.id) || !id(raw.pageId) || !pageIds.has(raw.pageId as string) || text(raw.label, 200, true) === null || order(raw.order) === null || !visibility(raw.visibility)) return null;
     return { id: raw.id as string, pageId: raw.pageId as string, label: text(raw.label, 200, true)!, order: raw.order as number, visibility: raw.visibility as WebsiteVisibility };
@@ -194,7 +199,55 @@ export function validateWebsiteSiteDocument(value: unknown): WebsiteSiteDocument
 export function removeWebsitePage(document: WebsiteSiteDocument, pageId: string): WebsiteSiteDocument | null {
   const current = validateWebsiteSiteDocument(document), target = current?.pages.find((page) => page.id === pageId);
   if (!current || !target || target.type === "home" || target.path === "/") return null;
-  return validateWebsiteSiteDocument({ ...current, pages: current.pages.filter((page) => page.id !== pageId), navigation: { items: current.navigation.items.filter((item) => item.pageId !== pageId) } });
+  return validateWebsiteSiteDocument({ ...current, pages: current.pages.map((page) => page.id === pageId ? { ...page, visibility: "removed" } : page) });
+}
+
+function pageIdFromTitle(document: WebsiteSiteDocument, title: string) {
+  const base = title.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "page";
+  let candidate = `page-${base}`.slice(0, 100).replace(/-$/, "");
+  let suffix = 2;
+  while (document.pages.some((page) => page.id === candidate)) candidate = `page-${base}-${suffix++}`.slice(0, 100).replace(/-$/, "");
+  return candidate;
+}
+
+export function addWebsitePage(document: WebsiteSiteDocument, input: { title: string; path: string; type: Exclude<WebsitePageType, "home"> }): WebsiteSiteDocument | null {
+  const current = validateWebsiteSiteDocument(document), path = validateWebsitePagePath(input.path), title = text(input.title, 200, true);
+  if (!current || !path || path === "/" || !title || !WEBSITE_PAGE_TYPES.includes(input.type) || current.pages.some((page) => page.path === path)) return null;
+  const pageId = pageIdFromTitle(current, title);
+  const page: WebsitePage = { id: pageId, type: input.type, path, title, order: current.pages.length, visibility: "visible", seo: { title: title.slice(0, 70), description: "", canonicalPath: path, index: true }, blocks: [] };
+  return validateWebsiteSiteDocument({ ...current, pages: [...current.pages, page], navigation: { items: [...current.navigation.items, { id: `nav-${pageId.slice(5)}`, pageId, label: title, order: current.navigation.items.length, visibility: "visible" }] } });
+}
+
+export function renameWebsitePage(document: WebsiteSiteDocument, pageId: string, input: { title: string; path: string }): WebsiteSiteDocument | null {
+  const current = validateWebsiteSiteDocument(document), title = text(input.title, 200, true), path = validateWebsitePagePath(input.path);
+  const target = current?.pages.find((page) => page.id === pageId);
+  if (!current || !target || !title || !path || (target.type === "home" && path !== "/") || current.pages.some((page) => page.id !== pageId && page.path === path)) return null;
+  return validateWebsiteSiteDocument({ ...current,
+    pages: current.pages.map((page) => page.id === pageId ? { ...page, title, path, seo: { ...page.seo, title: page.seo.title === page.title.slice(0, 70) ? title.slice(0, 70) : page.seo.title, canonicalPath: path } } : page),
+    navigation: { items: current.navigation.items.map((item) => item.pageId === pageId ? { ...item, label: item.label === target.title ? title : item.label } : item) },
+  });
+}
+
+export function reorderWebsitePages(document: WebsiteSiteDocument, orderedPageIds: string[]): WebsiteSiteDocument | null {
+  const current = validateWebsiteSiteDocument(document);
+  if (!current || orderedPageIds.length !== current.pages.length || new Set(orderedPageIds).size !== current.pages.length || orderedPageIds.some((pageId) => !current.pages.some((page) => page.id === pageId))) return null;
+  const orders = new Map(orderedPageIds.map((pageId, index) => [pageId, index]));
+  return validateWebsiteSiteDocument({ ...current,
+    pages: current.pages.map((page) => ({ ...page, order: orders.get(page.id)! })),
+    navigation: { items: current.navigation.items.map((item) => ({ ...item, order: orders.get(item.pageId)! })) },
+  });
+}
+
+export function setWebsitePageNavigationVisibility(document: WebsiteSiteDocument, pageId: string, visible: boolean): WebsiteSiteDocument | null {
+  const current = validateWebsiteSiteDocument(document), target = current?.pages.find((page) => page.id === pageId);
+  if (!current || !target || target.visibility === "removed") return null;
+  return validateWebsiteSiteDocument({ ...current, navigation: { items: current.navigation.items.map((item) => item.pageId === pageId ? { ...item, visibility: visible ? "visible" : "hidden" } : item) } });
+}
+
+export function restoreWebsitePage(document: WebsiteSiteDocument, pageId: string): WebsiteSiteDocument | null {
+  const current = validateWebsiteSiteDocument(document), target = current?.pages.find((page) => page.id === pageId);
+  if (!current || !target || target.visibility !== "removed") return null;
+  return validateWebsiteSiteDocument({ ...current, pages: current.pages.map((page) => page.id === pageId ? { ...page, visibility: "visible" } : page), navigation: { items: current.navigation.items.map((item) => item.pageId === pageId ? { ...item, visibility: "hidden" } : item) } });
 }
 
 export function adaptLegacyWebsiteToSiteDocument(input: {

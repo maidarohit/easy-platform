@@ -7,11 +7,21 @@ import { downloadPaidBlob } from "@/app/lib/paid-download";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import WebsitePreview from "../components/WebsitePreview";
+import WebsitePageManager from "../components/WebsitePageManager";
 import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 import auth from "../../lib/auth";
 import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import type { WebsiteMediaInput } from "@/app/lib/business-site-visuals";
+import { adaptLegacyWebsiteToSiteDocument, validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+
+type WebsiteDraftOutput = WebsiteAiOutput & { siteDocument?: WebsiteSiteDocument };
+
+function legacyWebsiteOutput(result: WebsiteDraftOutput): WebsiteAiOutput {
+  const { siteDocument: _siteDocument, ...legacy } = result;
+  void _siteDocument;
+  return legacy;
+}
 
 const WEBSITE_GOALS = [
   "Generate Leads",
@@ -98,7 +108,10 @@ const [brandDescription, setBrandDescription] = useState("");
 const [loading, setLoading] = useState(false);
 const [applyingIntelligence, setApplyingIntelligence] = useState(false);
 const [intelligenceUpdate, setIntelligenceUpdate] = useState<{ changed: boolean; modules: string[] } | null>(null);
-const [brandResult, setBrandResult] = useState<WebsiteAiOutput | null>(null);
+const [brandResult, setBrandResult] = useState<WebsiteDraftOutput | null>(null);
+const [siteDocument, setSiteDocument] = useState<WebsiteSiteDocument | null>(null);
+const [selectedPagePath, setSelectedPagePath] = useState("/");
+const [savingPages, setSavingPages] = useState(false);
 const [websiteEdits, setWebsiteEdits] = useState<WebsiteEdits | null>(null);
 const [draftEdits, setDraftEdits] = useState<WebsiteEdits | null>(null);
 const [editingWebsite, setEditingWebsite] = useState(false);
@@ -124,6 +137,8 @@ useEffect(() => {
     const projectGoal = activeProject?.goal || "";
 
     setBrandResult(null);
+    setSiteDocument(null);
+    setSelectedPagePath("/");
     setWebsiteEdits(null);
     setDraftEdits(null);
     setEditingWebsite(false);
@@ -191,8 +206,11 @@ useEffect(() => {
           ? JSON.parse(data.output.result)
           : data.output.result;
 
-      const restoredResult = savedResult as WebsiteAiOutput;
+      const restoredResult = savedResult as WebsiteDraftOutput;
+      const restoredSiteDocument = validateWebsiteSiteDocument(restoredResult.siteDocument);
       setBrandResult(restoredResult);
+      setSiteDocument(restoredSiteDocument);
+      setSelectedPagePath("/");
       setWebsiteEdits(restoredResult.websiteEdits || initialWebsiteEdits(
         project?.companyName || "",
         project?.industry || "",
@@ -327,12 +345,14 @@ const applyLatestBusinessIntelligence = async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId }),
     });
-    const data = await response.json() as { output?: WebsiteAiOutput; changed?: boolean; modules?: string[]; error?: string };
+    const data = await response.json() as { output?: WebsiteDraftOutput; changed?: boolean; modules?: string[]; error?: string };
     if (!response.ok || !data.output) throw new Error(data.error || "Unable to update the website draft.");
     const update = { changed: data.changed === true, modules: Array.isArray(data.modules) ? data.modules : [] };
     setIntelligenceUpdate(update);
     if (update.changed) {
       setBrandResult(data.output);
+      setSiteDocument(validateWebsiteSiteDocument(data.output.siteDocument));
+      setSelectedPagePath("/");
       setWebsiteEdits(data.output.websiteEdits || null);
       setDraftEdits(null);
       setEditingWebsite(false);
@@ -346,6 +366,34 @@ const applyLatestBusinessIntelligence = async () => {
   } finally {
     setApplyingIntelligence(false);
   }
+};
+const saveSiteDocument = async (nextDocument: WebsiteSiteDocument) => {
+  if (!projectId || !brandResult || savingPages) return false;
+  const validated = validateWebsiteSiteDocument(nextDocument);
+  if (!validated) { toast.error("That page change is not valid. Check for duplicate or reserved paths."); return false; }
+  setSavingPages(true);
+  try {
+    const nextResult: WebsiteDraftOutput = { ...brandResult, siteDocument: validated };
+    const response = await authenticatedFetch("/api/project-outputs", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId, module: "website", result: JSON.stringify(nextResult) }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to save page changes.");
+    setBrandResult(nextResult);
+    setSiteDocument(validated);
+    setShowGoLiveReview(false);
+    toast.success("Draft pages saved.");
+    return true;
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Unable to save page changes.");
+    return false;
+  } finally { setSavingPages(false); }
+};
+const initializeMultiPageDraft = async () => {
+  if (!brandResult) return;
+  const document = adaptLegacyWebsiteToSiteDocument({ companyName: companyName || "Your Business", template: websiteEdits?.template || brandStyle, websiteOutput: brandResult, websiteEdits: websiteEdits || undefined });
+  await saveSiteDocument(document);
 };
 const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
 const publicationSlugIsValid = isValidWebsiteSlug(publicationSlug);
@@ -464,7 +512,7 @@ const saveProject = async () => {
     goal: targetAudience,
     brandStyle,
     brandDescription,
-    result: JSON.stringify(brandResult),
+    result: JSON.stringify(legacyWebsiteOutput(brandResult)),
   }),
 });
 
@@ -564,6 +612,8 @@ const parsed = data.output;
 
 console.log("Parsed:", parsed);
 setBrandResult(parsed);
+setSiteDocument(null);
+setSelectedPagePath("/");
 setWebsiteEdits(
   initialWebsiteEdits(
     companyName,
@@ -736,6 +786,10 @@ return (
                   </div>
                 </div>
 
+                {siteDocument ? <WebsitePageManager document={siteDocument} selectedPath={selectedPagePath} saving={savingPages} onSelect={setSelectedPagePath} onSave={saveSiteDocument} /> : (
+                  <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-cyan-400/20 bg-slate-900/85 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="font-semibold text-white">Page Manager</h4><p className="mt-1 text-xs text-slate-400">Create a multi-page draft from this website. Your current website and live publication stay unchanged.</p></div><button type="button" onClick={initializeMultiPageDraft} disabled={savingPages} className={copyButtonClass}>{savingPages ? "Preparing pagesâ€¦" : "Set up pages"}</button></div>
+                )}
+
                 {editingWebsite && draftEdits && (
                   <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-slate-900/85 p-5">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -772,7 +826,7 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined}
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={siteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
 primaryLanguage={projectPrimaryLanguage}
 media={websiteMedia}
 />

@@ -10,6 +10,7 @@ import {
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicServiceText } from "@/app/lib/public-website-presentation";
 import { hasUnsafeWebsitePlainText, validateWebsiteAiOutput, validateWebsiteEdits, validateWebsiteTemplate } from "@/app/lib/website-publication";
+import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 type ProjectIdentity = Readonly<{
   name: string;
@@ -81,11 +82,14 @@ function normalizeExistingWebsite(value: unknown) {
   const website = validateWebsiteAiOutput(canonical);
   if (!website) return null;
   const edits = candidate.websiteEdits === undefined ? null : validateWebsiteEdits(candidate.websiteEdits);
+  const siteDocument = candidate.siteDocument === undefined ? null : validateWebsiteSiteDocument(candidate.siteDocument);
   return {
     website,
     edits,
     hadInvalidEdits: candidate.websiteEdits !== undefined && !edits,
     legacyHeroHeadline: typeof candidate.heroHeadline === "string" ? candidate.heroHeadline : null,
+    siteDocument,
+    hadInvalidSiteDocument: candidate.siteDocument !== undefined && !siteDocument,
   };
 }
 
@@ -134,6 +138,7 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const normalized = normalizeExistingWebsite(sources.website);
   if (!normalized) return { ok: false, code: "INVALID_EXISTING_WEBSITE" } as const;
   if (normalized.hadInvalidEdits) return { ok: false, code: "INVALID_WEBSITE_EDITS" } as const;
+  if (normalized.hadInvalidSiteDocument) return { ok: false, code: "INVALID_EXISTING_WEBSITE" } as const;
   const { website, edits: existingEdits } = normalized;
   const branding = sources.branding ? validateBrandingOutput(parse(sources.branding)) : null;
   const uiux = sources.uiux ? validateUiuxOutput(parse(sources.uiux)) : null;
@@ -223,8 +228,8 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const validatedOutput = validateWebsiteAiOutput(merged);
   const validatedEdits = validateWebsiteEdits(websiteEdits);
   if (!validatedOutput || !validatedEdits) return { ok: false, code: "INVALID_MERGED_WEBSITE" } as const;
-  const output = { ...validatedOutput, websiteEdits: validatedEdits };
-  const original = { ...website, ...(existingEdits && { websiteEdits: existingEdits }) };
+  const output = { ...validatedOutput, websiteEdits: validatedEdits, ...(normalized.siteDocument && { siteDocument: normalized.siteDocument }) };
+  const original = { ...website, ...(existingEdits && { websiteEdits: existingEdits }), ...(normalized.siteDocument && { siteDocument: normalized.siteDocument }) };
   const modules: WebsiteIntelligenceModule[] = [];
   const changed = (left: unknown, right: unknown) => JSON.stringify(left) !== JSON.stringify(right);
   if (branding && (

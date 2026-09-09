@@ -32,7 +32,8 @@ test("valid multi-page documents accept typed pages and blocks", () => {
   assert.deepEqual(validateWebsiteSiteDocument(document), document);
   const removed = removeWebsitePage(document, "page-about");
   assert.ok(removed);
-  assert.equal(removed.pages.length, 1);
+  assert.equal(removed.pages.length, 2);
+  assert.equal(removed.pages.find((page) => page.id === "page-about")?.visibility, "removed");
 });
 
 test("duplicate and reserved paths are rejected", () => {

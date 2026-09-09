@@ -31,6 +31,8 @@ type WebsitePreviewProps = {
   siteDocument?: WebsiteSiteDocument;
   pagePath?: string;
   siteBasePath?: string;
+  previewSiteDocument?: boolean;
+  onPageNavigate?: (path: string) => void;
 };
 
 export default function WebsitePreview({
@@ -47,9 +49,11 @@ export default function WebsitePreview({
   siteDocument,
   pagePath = "/",
   siteBasePath = "",
+  previewSiteDocument = false,
+  onPageNavigate,
 }: WebsitePreviewProps) {
   if (siteDocument) {
-    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} />;
+    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} preview={previewSiteDocument} onNavigate={onPageNavigate} />;
   }
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
   const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });

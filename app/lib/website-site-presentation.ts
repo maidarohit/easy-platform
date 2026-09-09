@@ -10,11 +10,11 @@ export function safeWebsiteBlockText(value: string, maximum = 4_000) {
     !INTERNAL_PUBLIC_TEXT.test(candidate) && !hasUnsupportedPublicClaim(candidate) ? candidate : "";
 }
 
-export function resolveWebsiteSitePage(document: WebsiteSiteDocument, path: string): WebsitePage | null {
+export function resolveWebsiteSitePage(document: WebsiteSiteDocument, path: string, includeHidden = false): WebsitePage | null {
   const validated = validateWebsiteSiteDocument(document);
   if (!validated) return null;
   const normalized = path === "" ? "/" : path.replace(/\/$/, "") || "/";
-  return validated.pages.find((page) => page.path === normalized && page.visibility === "visible") ?? null;
+  return validated.pages.find((page) => page.path === normalized && (page.visibility === "visible" || (includeHidden && page.visibility === "hidden"))) ?? null;
 }
 
 export function visibleWebsiteNavigation(document: WebsiteSiteDocument) {

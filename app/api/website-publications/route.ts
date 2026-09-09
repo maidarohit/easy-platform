@@ -19,6 +19,7 @@ import {
   buildWebsitePublicationSnapshot,
   suggestWebsiteSlug,
   validatePublicationMutationBody,
+  validateWebsiteAiOutput,
   validateWebsiteEdits,
 } from "@/app/lib/website-publication";
 
@@ -103,6 +104,14 @@ function storedWebsiteEdits(result: string) {
     : undefined;
 }
 
+function storedLegacyWebsiteOutput(result: string) {
+  const output = parseStoredOutput(result);
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+  const { websiteEdits: _websiteEdits, siteDocument: _siteDocument, ...legacyOutput } = output as Record<string, unknown>;
+  void _websiteEdits; void _siteDocument;
+  return validateWebsiteAiOutput(legacyOutput);
+}
+
 function snapshotFor(
   project: typeof projects.$inferSelect,
   template: string,
@@ -116,7 +125,7 @@ function snapshotFor(
     websiteGoal: project.goal || project.targetAudience || "",
     websiteRequirements: project.brandDescription || project.originalBrief || "",
     template: websiteEdits?.template || template,
-    websiteOutput: parseStoredOutput(outputResult),
+    websiteOutput: storedLegacyWebsiteOutput(outputResult),
     ...(websiteEdits && { websiteEdits }),
     media: overrides && typeof overrides === "object" && !Array.isArray(overrides) ? {
       hero: (overrides as Record<string, unknown>).heroImage,
