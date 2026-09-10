@@ -5,7 +5,7 @@ import { buildPublishedBusinessSnapshot, refreshPublishedBusinessSnapshotFromWeb
 import { adaptLegacyWebsiteToSiteDocument, addWebsitePage, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
 import { publicWebsitePageBlocks, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
 import { validateWebsiteOutput } from "../../app/lib/easy-mode-execution-contracts.ts";
-import { buildMultiPageWebsitePublicationSnapshot } from "../../app/lib/website-publication.ts";
+import { buildSavedWebsitePublicationSnapshot } from "../../app/lib/website-publication.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const websiteOutput = Object.fromEntries(["websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures", "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations"].map((key) => [key, `${key} value`]));
@@ -108,25 +108,10 @@ test("republish reads the latest persisted schema-v2 document before the legacy 
 
 test("existing published business snapshots pick up the latest Website AI image and style on republish", async () => {
   const current = buildPublishedBusinessSnapshot(preview, {}, document());
-  const nextDocument = validateWebsiteSiteDocument({
-    ...document(),
-    theme: {
-      template: "Luxury",
-      colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
-      typography: "Cormorant Garamond",
-    },
-  });
-  const websitePublication = buildMultiPageWebsitePublicationSnapshot({
-    companyName: "Example Studio",
-    industry: "Design",
-    websiteGoal: "Contact",
-    websiteRequirements: "Show premium work.",
-    template: "Luxury",
-    websiteOutput: {
-      ...websiteOutput,
-      colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
-      typography: "Cormorant Garamond",
-    },
+  const savedWebsiteDraft = JSON.stringify({
+    ...websiteOutput,
+    colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+    typography: "Cormorant Garamond",
     websiteEdits: {
       companyName: "Example Studio",
       heroHeadline: "A more premium presentation",
@@ -141,11 +126,25 @@ test("existing published business snapshots pick up the latest Website AI image 
       primaryCtaLink: "#contact",
       template: "Luxury",
     },
-    media: {
-      hero: "/uploads/fresh-hero.jpg",
-      work: ["/uploads/fresh-secondary.jpg"],
-    },
-    siteDocument: nextDocument,
+    siteDocument: validateWebsiteSiteDocument({
+      ...document(),
+      branding: { ...document().branding, name: "Example Studio" },
+      theme: {
+        template: "Luxury",
+        colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+        typography: "Cormorant Garamond",
+      },
+    }),
+  });
+  const websitePublication = buildSavedWebsitePublicationSnapshot({
+    companyName: "Example",
+    industry: "Design",
+    websiteGoal: "Contact",
+    websiteRequirements: "Show premium work.",
+    fallbackTemplate: "Modern",
+    outputResult: savedWebsiteDraft,
+    overrides: { heroImage: "/uploads/fresh-hero.jpg", secondaryImage: "/uploads/fresh-secondary.jpg" },
+    serviceImageUrls: ["/uploads/service-one.jpg"],
   });
   assert.ok(websitePublication);
   const refreshed = refreshPublishedBusinessSnapshotFromWebsitePublication(current, websitePublication);
@@ -156,10 +155,16 @@ test("existing published business snapshots pick up the latest Website AI image 
   assert.equal(refreshed.siteDocument?.theme.template, "Luxury");
   assert.equal(refreshed.siteDocument?.theme.colorPalette, "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF");
   assert.equal(refreshed.siteDocument?.theme.typography, "Cormorant Garamond");
-  const [api, businessPage] = await Promise.all([source("app/api/website-publications/route.ts"), source("app/business/[slug]/page.tsx")]);
-  assert.match(api, /mirrorBusinessPublicationSnapshot/);
+  const [api, businessPage, loader] = await Promise.all([
+    source("app/api/business-publications/route.ts"),
+    source("app/business/[slug]/page.tsx"),
+    source("app/lib/public-business-publication.ts"),
+  ]);
+  assert.match(api, /mutation\.republish && websiteRow/);
+  assert.match(api, /buildSavedWebsitePublicationSnapshot/);
   assert.match(api, /refreshPublishedBusinessSnapshotFromWebsitePublication/);
-  assert.match(api, /revalidatePath\(`\/business\/\$\{encodeURIComponent\(published\.mirroredBusinessSlug\)\}`\)/);
+  assert.match(api, /await transaction\.insert\(businessPublicationVersions\)\.values\(\{ publicationId: existing\.id, versionNumber: nextVersion, previewRevision: revision, snapshot \}\)/);
+  assert.match(loader, /businessPublicationVersions\.versionNumber, businessPublications\.currentVersion/);
   assert.match(businessPage, /snapshot\.siteDocument[\s\S]*WebsiteSiteRenderer/);
 });
 

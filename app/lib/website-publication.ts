@@ -231,6 +231,62 @@ export function buildMultiPageWebsitePublicationSnapshot(input: {
   return legacy && siteDocument ? { ...legacy, schemaVersion: 2, siteDocument } : null;
 }
 
+function parseStoredWebsiteDraft(result: string): unknown {
+  try { return JSON.parse(result); } catch { return null; }
+}
+
+function storedWebsiteEdits(result: string) {
+  const output = parseStoredWebsiteDraft(result);
+  return output && typeof output === "object" && !Array.isArray(output) && "websiteEdits" in output
+    ? output.websiteEdits
+    : undefined;
+}
+
+function storedLegacyWebsiteOutput(result: string) {
+  const output = parseStoredWebsiteDraft(result);
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+  const { websiteEdits: _websiteEdits, siteDocument: _siteDocument, ...legacyOutput } = output as Record<string, unknown>;
+  void _websiteEdits;
+  void _siteDocument;
+  return validateWebsiteAiOutput(legacyOutput);
+}
+
+export function buildSavedWebsitePublicationSnapshot(input: {
+  companyName: unknown;
+  industry: unknown;
+  websiteGoal: unknown;
+  websiteRequirements: unknown;
+  fallbackTemplate: unknown;
+  outputResult: string;
+  overrides?: unknown;
+  serviceImageUrls?: readonly string[];
+}): WebsitePublicationSnapshot | null {
+  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(input.outputResult));
+  const storedOutput = parseStoredWebsiteDraft(input.outputResult);
+  const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
+    ? validateWebsiteSiteDocument(storedOutput.siteDocument)
+    : null;
+  const snapshotInput = {
+    companyName: websiteEdits?.companyName || input.companyName,
+    industry: input.industry,
+    websiteGoal: input.websiteGoal,
+    websiteRequirements: input.websiteRequirements,
+    template: siteDocument?.theme.template || websiteEdits?.template || input.fallbackTemplate,
+    websiteOutput: storedLegacyWebsiteOutput(input.outputResult),
+    ...(websiteEdits && { websiteEdits }),
+    media: {
+      ...(input.overrides && typeof input.overrides === "object" && !Array.isArray(input.overrides) ? {
+        hero: (input.overrides as Record<string, unknown>).heroImage,
+        work: (input.overrides as Record<string, unknown>).secondaryImage,
+      } : {}),
+      ...(input.serviceImageUrls && input.serviceImageUrls.length > 0 ? { services: input.serviceImageUrls } : {}),
+    },
+  };
+  return siteDocument
+    ? buildMultiPageWebsitePublicationSnapshot({ ...snapshotInput, siteDocument })
+    : buildWebsitePublicationSnapshot(snapshotInput);
+}
+
 const PRIVATE_OR_PLACEHOLDER_TEXT = /(?:\$\s*[xX]\b|\bTBD\b|\b(?:primary objective|segmentation|lead scoring|content calendar|keyword research|sales script|campaign timeline|implementation notes?|recommended tech stack|seo recommendations?)\b|\btestimonials?\b|\b\d+(?:\.\d+)?%\b|\b\d+\+?\s+(?:customers?|clients?|years?)\b|(?:\.\.\.|…|â€¦)\s*$)/i;
 
 function publicWebsiteText(value: string | undefined, maximum: number) {

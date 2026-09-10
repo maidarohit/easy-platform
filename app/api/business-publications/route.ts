@@ -2,16 +2,17 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   businessPublications, businessPublicationVersions, projectBusinessDna,
-  projectOutputs, projectPreviewCustomizations, projectPublicContacts, projects, publishedWebsites,
+  projectOutputs, projectPreviewCustomizations, projectPublicContacts, projectProducts, projects, publishedWebsites,
 } from "@/app/db/schema";
 import { selectLatestWorkspaceOutputs, workspaceProjectPresentation } from "@/app/api/master-workspace/route";
 import { buildBusinessPreview } from "@/app/lib/business-preview";
 import { applyPreviewOverrides, validatePreviewOverrides } from "@/app/lib/business-preview-edits";
-import { buildPublishedBusinessSnapshot, businessPreviewRevision, normalizeBusinessSlug } from "@/app/lib/business-publication";
+import { buildPublishedBusinessSnapshot, businessPreviewRevision, normalizeBusinessSlug, refreshPublishedBusinessSnapshotFromWebsitePublication } from "@/app/lib/business-publication";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 import { hasPaidProductAccess, requirePaidProductAccess } from "@/app/lib/paid-entitlements";
+import { buildSavedWebsitePublicationSnapshot } from "@/app/lib/website-publication";
 import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const MAX_BODY_BYTES = 1_024;
@@ -27,6 +28,10 @@ function latestStoredWebsiteSiteDocument(rows: readonly { module: string; result
   } catch {
     return null;
   }
+}
+
+function latestStoredWebsiteOutput(rows: readonly { module: string; result: string }[]) {
+  return rows.find((item) => ["website", "website-ai"].includes(item.module.toLowerCase())) ?? null;
 }
 
 function metadata(site: typeof businessPublications.$inferSelect | undefined) {
@@ -110,11 +115,12 @@ export async function POST(request: Request) {
       const [otherActive] = await transaction.select({ id: publishedWebsites.id }).from(publishedWebsites)
         .where(and(eq(publishedWebsites.ownerUid, uid), eq(publishedWebsites.status, "active"))).limit(1);
       if (otherActive) throw new Error("WEBSITE_LIMIT_REACHED");
-      const [dnaRows, outputRows, customRows, contactRows] = await Promise.all([
+      const [dnaRows, outputRows, customRows, contactRows, serviceRows] = await Promise.all([
         transaction.select({ dna: projectBusinessDna.dna }).from(projectBusinessDna).where(and(eq(projectBusinessDna.projectId, projectId), eq(projectBusinessDna.userId, uid), eq(projectBusinessDna.confirmed, true))).limit(1),
         transaction.select().from(projectOutputs).where(and(eq(projectOutputs.projectId, projectId), eq(projectOutputs.userId, uid))).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)),
         transaction.select().from(projectPreviewCustomizations).where(and(eq(projectPreviewCustomizations.projectId, projectId), eq(projectPreviewCustomizations.userId, uid))).limit(1),
         transaction.select().from(projectPublicContacts).where(and(eq(projectPublicContacts.projectId, projectId), eq(projectPublicContacts.userId, uid))).limit(1),
+        transaction.select({ imageUrl: projectProducts.imageUrl }).from(projectProducts).where(and(eq(projectProducts.projectId, projectId), eq(projectProducts.userId, uid), eq(projectProducts.kind, "service"), eq(projectProducts.isActive, true))).orderBy(desc(projectProducts.updatedAt), desc(projectProducts.createdAt)),
       ]);
       if (!dnaRows[0]) throw new Error("NO_PREVIEW");
       const latest = selectLatestWorkspaceOutputs(outputRows);
@@ -136,7 +142,24 @@ export async function POST(request: Request) {
       const revision = businessPreviewRevision(outputRevisions, (customRows[0]?.revisionCount ?? 0) + (contactRows[0]?.revisionCount ?? 0), { overrides, contact: contactRows[0]?.settings ?? {} });
       const preview = applyPreviewOverrides(original, overrides);
       const siteDocument = latestStoredWebsiteSiteDocument(outputRows);
-      const snapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {}, siteDocument ?? undefined);
+      const websiteRow = latestStoredWebsiteOutput(outputRows);
+      const serviceImageUrls = serviceRows.map((item) => item.imageUrl).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+      const currentWebsiteSnapshot = mutation.republish && websiteRow
+        ? buildSavedWebsitePublicationSnapshot({
+          companyName: project.companyName || project.name,
+          industry: project.industry || "Business",
+          websiteGoal: project.goal || "",
+          websiteRequirements: project.originalBrief || project.brandDescription || "",
+          fallbackTemplate: project.brandStyle || "Modern",
+          outputResult: websiteRow.result,
+          overrides,
+          serviceImageUrls,
+        })
+        : null;
+      const baseSnapshot = buildPublishedBusinessSnapshot(preview, contactRows[0]?.settings ?? {}, siteDocument ?? undefined);
+      const snapshot = mutation.republish && currentWebsiteSnapshot
+        ? refreshPublishedBusinessSnapshotFromWebsitePublication(baseSnapshot, currentWebsiteSnapshot)
+        : baseSnapshot;
       if (!mutation.republish && existing?.status === "active" && existing.publishedPreviewRevision === revision) return existing;
       const now = new Date();
       if (existing) {

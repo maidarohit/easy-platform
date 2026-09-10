@@ -58,6 +58,7 @@ export function refreshPublishedBusinessSnapshotFromWebsitePublication(
   websitePublication: WebsitePublicationSnapshot,
 ): PublishedBusinessSnapshot {
   const latestWebsite = publicWebsitePublicationView(websitePublication);
+  const secondaryImage = firstWebsiteMedia(websitePublication.media?.work) || firstWebsiteMedia(websitePublication.media?.services);
   const paletteSource = websitePublication.schemaVersion === 2
     ? websitePublication.siteDocument.theme.colorPalette
     : latestWebsite.websiteOutput.colourScheme;
@@ -86,7 +87,7 @@ export function refreshPublishedBusinessSnapshotFromWebsitePublication(
       features: latestWebsite.websiteOutput.websiteFeatures || null,
       contact: current.website?.contact ?? null,
       heroImage: firstWebsiteMedia(websitePublication.media?.hero),
-      secondaryImage: firstWebsiteMedia(websitePublication.media?.work),
+      secondaryImage,
       businessVideo: current.website?.businessVideo ?? null,
     },
     ...(websitePublication.schemaVersion === 2 ? { siteDocument: websitePublication.siteDocument } : { siteDocument: undefined }),
