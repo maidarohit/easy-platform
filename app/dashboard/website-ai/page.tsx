@@ -13,7 +13,7 @@ import auth from "../../lib/auth";
 import { authenticatedFetch } from "../../lib/authenticated-fetch";
 import { useProjectMemory } from "../../hooks/useProjectMemory";
 import type { WebsiteMediaInput } from "@/app/lib/business-site-visuals";
-import { adaptLegacyWebsiteToSiteDocument, validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { adaptLegacyWebsiteToSiteDocument, buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 import { addEssentialWebsitePages, type VerifiedWebsiteService } from "@/app/lib/website-essential-pages";
 
 type WebsiteDraftOutput = WebsiteAiOutput & { siteDocument?: WebsiteSiteDocument };
@@ -435,9 +435,23 @@ const saveWebsiteEdits = async () => {
   }
   setSavingEdits(true);
   try {
-    const nextDocument = withWebsiteTheme(siteDocument, draftEdits.template, draftPalette, draftTypography);
-    if (siteDocument && !nextDocument) throw new Error("The selected website theme is not valid.");
-    const updatedResult: WebsiteDraftOutput = { ...brandResult, websiteEdits: draftEdits, ...(nextDocument && { siteDocument: nextDocument }) };
+    const nextDocument = buildWebsiteSiteDocumentWithTheme({
+      siteDocument,
+      companyName: draftEdits.companyName || companyName || "Your Business",
+      template: draftEdits.template,
+      colorPalette: draftPalette,
+      typography: draftTypography,
+      websiteOutput: legacyWebsiteOutput(brandResult),
+      websiteEdits: draftEdits,
+    });
+    if (!nextDocument) throw new Error("The selected website theme is not valid.");
+    const updatedResult: WebsiteDraftOutput = {
+      ...brandResult,
+      colourScheme: draftPalette,
+      typography: draftTypography,
+      websiteEdits: draftEdits,
+      siteDocument: nextDocument,
+    };
     const response = await authenticatedFetch("/api/project-outputs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -449,7 +463,7 @@ const saveWebsiteEdits = async () => {
     });
     if (!response.ok) throw new Error("Unable to save website changes.");
     setBrandResult(updatedResult);
-    if (nextDocument) setSiteDocument(nextDocument);
+    setSiteDocument(nextDocument);
     setWebsiteEdits(draftEdits);
     setEditingWebsite(false);
     setDraftEdits(null);

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { resolveWebsiteMedia } from "../../app/lib/business-site-visuals.ts";
 import { resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
-import { adaptLegacyWebsiteToSiteDocument } from "../../app/lib/website-site-document.ts";
+import { adaptLegacyWebsiteToSiteDocument, buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
 
 const output = Object.fromEntries(["websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures", "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations"].map((key) => [key, `${key} value`]));
 const input = { companyName: "Example Studio", template: "Modern", websiteOutput: output };
@@ -125,10 +125,29 @@ test("schema-v2 consumes the saved style, full palette, typography and existing 
   assert.match(renderer, /savedPalette\(validated\.theme\.colorPalette, baseTheme\)/);
   assert.match(renderer, /--site-primary/);
   assert.match(renderer, /validated\.theme\.typography/);
-  assert.match(editor, /withWebsiteTheme\(siteDocument, draftEdits\.template, draftPalette, draftTypography\)/);
+  assert.match(editor, /buildWebsiteSiteDocumentWithTheme\(\{/);
   assert.match(editor, /siteDocument: nextDocument/);
   assert.match(renderer, /<InquiryForm slug=\{inquirySlug \|\| ""\}/);
   assert.match(inquiry, /fetch\("\/api\/public-business-inquiries"/);
+});
+
+test("saving a new palette reloads the same schema-v2 theme from the saved site document", () => {
+  const saved = buildWebsiteSiteDocumentWithTheme({
+    siteDocument: null,
+    companyName: "Example Studio",
+    template: "Luxury",
+    colorPalette: "#174A3A, #12372D, #789889, #F5F0E6, #C7A96B, #FFFDF8",
+    typography: "Playfair Display",
+    websiteOutput: output,
+  });
+  assert.ok(saved);
+  assert.deepEqual(saved.theme, {
+    template: "Luxury",
+    colorPalette: "#174A3A, #12372D, #789889, #F5F0E6, #C7A96B, #FFFDF8",
+    typography: "Playfair Display",
+  });
+  const reloaded = validateWebsiteSiteDocument(structuredClone(saved));
+  assert.deepEqual(reloaded?.theme, saved.theme);
 });
 
 test("Website AI reuses the existing owner-photo endpoint for add, replace and remove", async () => {

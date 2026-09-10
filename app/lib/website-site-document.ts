@@ -273,3 +273,28 @@ export function adaptLegacyWebsiteToSiteDocument(input: {
     ] }],
   };
 }
+
+export function buildWebsiteSiteDocumentWithTheme(input: {
+  siteDocument?: WebsiteSiteDocument | null;
+  companyName: string;
+  template: string;
+  colorPalette: string;
+  typography: string;
+  websiteOutput: WebsiteAiOutput;
+  websiteEdits?: WebsiteAiOutput["websiteEdits"];
+}): WebsiteSiteDocument | null {
+  const baseDocument = validateWebsiteSiteDocument(input.siteDocument) ?? adaptLegacyWebsiteToSiteDocument({
+    companyName: input.companyName,
+    template: input.template,
+    websiteOutput: input.websiteOutput,
+    websiteEdits: input.websiteEdits,
+  });
+  return validateWebsiteSiteDocument({
+    ...baseDocument,
+    theme: {
+      template: input.template,
+      colorPalette: input.colorPalette,
+      typography: input.typography,
+    },
+  });
+}
