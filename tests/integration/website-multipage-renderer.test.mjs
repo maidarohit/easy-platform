@@ -209,8 +209,27 @@ test("preview, saved draft, and public publication reuse the same resolved schem
     readFile(new URL("../../app/business/[slug]/[...path]/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(preview, /<WebsiteSiteRenderer document=\{siteDocument\}/);
+  assert.match(preview, /publicPageOnly=\{previewSiteDocument\}/);
   assert.match(root, /<WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
   assert.match(child, /<WebsiteSiteRenderer document=\{loaded\.snapshot\.siteDocument!\}/);
+});
+
+test("preview and public schema-v2 routes share the same public renderer text-color and hero-description inputs", async () => {
+  const [page, preview, renderer, root, child] = await Promise.all([
+    readFile(new URL("../../app/dashboard/website-ai/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/dashboard/components/WebsitePreview.tsx", import.meta.url), "utf8"),
+    componentSource(),
+    readFile(new URL("../../app/business/[slug]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/[...path]/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /const \[savedBusinessDescription, setSavedBusinessDescription\] = useState\(""\)/);
+  assert.match(page, /setSavedBusinessDescription\(typeof data\.preview\?\.business\?\.description === "string" \? data\.preview\.business\.description : ""\)/);
+  assert.match(page, /websiteRequirements=\{savedBusinessDescription \|\| project\?\.businessDescription \|\| brandDescription\}/);
+  assert.match(preview, /publicPageOnly=\{previewSiteDocument\}/);
+  assert.match(renderer, /text-\[var\(--site-section-text\)\]/);
+  assert.match(renderer, /style=\{\{\s*backgroundColor: accent,\s*color: readableTextColor\(accent\),/);
+  assert.match(root, /description=\{snapshot\.business\.description \?\? ""\}/);
+  assert.match(child, /description=\{loaded\.snapshot\.business\.description \?\? ""\}/);
 });
 
 test("Website AI reuses the existing owner-photo endpoint for add, replace and remove", async () => {

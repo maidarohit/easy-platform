@@ -58,7 +58,7 @@ export default function WebsitePreview({
   onPageNavigate,
 }: WebsitePreviewProps) {
   if (siteDocument) {
-    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} serviceItems={serviceItems} contact={contact} preview={previewSiteDocument} onNavigate={onPageNavigate} />;
+    return <WebsiteSiteRenderer document={siteDocument} pagePath={pagePath} basePath={siteBasePath} industry={industry} description={websiteRequirements} media={media} serviceItems={serviceItems} contact={contact} preview={previewSiteDocument} publicPageOnly={previewSiteDocument} onNavigate={onPageNavigate} />;
   }
   const theme = websiteThemes[websiteStyle] || websiteThemes.Modern;
   const resolvedMedia = resolveWebsiteMedia({ industry, description: websiteRequirements, uploaded: media });

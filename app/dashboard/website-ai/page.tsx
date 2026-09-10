@@ -193,6 +193,7 @@ const [showGoLiveReview, setShowGoLiveReview] = useState(false);
 const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">("buzypeezy");
 const [customDomain, setCustomDomain] = useState("");
 const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
+const [savedBusinessDescription, setSavedBusinessDescription] = useState("");
 const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
 const [savedSecondaryPhoto, setSavedSecondaryPhoto] = useState("");
 const [draftPalette, setDraftPalette] = useState("");
@@ -226,6 +227,7 @@ useEffect(() => {
     setSavedBrandingPalette("");
     setShowCustomPaletteInput(false);
     setShowGoLiveReview(false);
+    setSavedBusinessDescription("");
     setCompanyName(activeProject?.companyName || "");
     setIndustry(activeProject?.industry || "");
     setBrandStyle(activeProject?.brandStyle || "Minimal");
@@ -259,6 +261,7 @@ useEffect(() => {
       if (!response.ok) throw new Error(data.error || "Unable to load project media.");
       if (!imageResponse.ok) throw new Error(imageData.error || "Unable to load saved website photos.");
       if (!active) return;
+      setSavedBusinessDescription(typeof data.preview?.business?.description === "string" ? data.preview.business.description : "");
       setSavedBrandingPalette(typeof data.preview?.brand?.colourDirection === "string" ? data.preview.brand.colourDirection : "");
       const services = serviceResponse.ok && Array.isArray(serviceData.products) ? serviceData.products.filter((item: Record<string, unknown>) => item.kind === "service" && item.isActive === true).map((item: Record<string, unknown>) => ({
         id: String(item.id || ""), name: String(item.name || ""), slug: typeof item.slug === "string" ? item.slug : null,
@@ -275,7 +278,7 @@ useEffect(() => {
         services: serviceImages,
       });
     } catch {
-      if (active) { setWebsiteMedia({}); setVerifiedServices([]); setSavedSecondaryPhoto(""); setSavedBrandingPalette(""); }
+      if (active) { setWebsiteMedia({}); setVerifiedServices([]); setSavedSecondaryPhoto(""); setSavedBrandingPalette(""); setSavedBusinessDescription(""); }
     }
   };
   loadWebsiteMedia();
@@ -1155,7 +1158,7 @@ return (
                     <span className="hidden items-center gap-1.5 text-[8px] font-semibold uppercase tracking-[0.16em] text-cyan-300 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300"/>Live</span>
                   </div>
                   <div className="relative flex min-h-[680px] items-start justify-center overflow-auto bg-slate-950/70 px-2 py-5 sm:px-4">
-                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={project?.businessDescription || brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={activeSiteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
+                    <WebsitePreview companyName={companyName} industry={industry} websiteGoal={targetAudience} websiteStyle={activeWebsiteEdits?.template || brandStyle} websiteRequirements={savedBusinessDescription || project?.businessDescription || brandDescription} previewMode={previewMode} brandResult={brandResult} websiteEdits={activeWebsiteEdits || undefined} siteDocument={activeSiteDocument || undefined} pagePath={selectedPagePath} previewSiteDocument onPageNavigate={setSelectedPagePath}
 primaryLanguage={projectPrimaryLanguage}
 media={websiteMedia}
 serviceItems={verifiedServices.map((service) => ({ id: service.id, title: service.name, description: service.description, path: service.slug ? `/services/${service.slug}` : null }))}
