@@ -65,6 +65,40 @@ function developmentStorageDebug(debug: unknown) {
   };
 }
 
+async function authenticatedOwnedProject(request: Request) {
+  let userId: string;
+  try {
+    userId = (await verifyFirebaseIdToken(request)).uid;
+  } catch {
+    return { error: Response.json({ error: "Authentication is required." }, { status: 401 }) } as const;
+  }
+  const projectId = validateEasyModeProjectId(new URL(request.url).searchParams.get("projectId"));
+  if (!projectId) return { error: Response.json({ error: "Invalid project." }, { status: 400 }) } as const;
+  const [project] = await db.select({ id: projects.id }).from(projects).where(and(
+    eq(projects.id, projectId),
+    eq(projects.userId, userId),
+  )).limit(1);
+  if (!project) return { error: Response.json({ error: "Project not found." }, { status: 404 }) } as const;
+  return { userId, projectId } as const;
+}
+
+export async function GET(request: Request) {
+  const owned = await authenticatedOwnedProject(request);
+  if ("error" in owned) return owned.error;
+  const [customization] = await db.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(
+    eq(projectPreviewCustomizations.projectId, owned.projectId),
+    eq(projectPreviewCustomizations.userId, owned.userId),
+  )).limit(1);
+  const overrides: PreviewOverrides = customization?.overrides && typeof customization.overrides === "object" && !Array.isArray(customization.overrides)
+    ? customization.overrides
+    : {};
+  return Response.json({
+    heroImage: overrides.heroImage ?? null,
+    secondaryImage: overrides.secondaryImage ?? null,
+    overrides,
+  }, { headers: { "Cache-Control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   let userId: string;
   try {

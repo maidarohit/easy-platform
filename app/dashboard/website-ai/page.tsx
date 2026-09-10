@@ -250,12 +250,14 @@ useEffect(() => {
   let active = true;
   const loadWebsiteMedia = async () => {
     try {
-      const [response, serviceResponse] = await Promise.all([
+      const [response, imageResponse, serviceResponse] = await Promise.all([
         authenticatedFetch(`/api/business-preview?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
+        authenticatedFetch(`/api/business-preview/images?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
         authenticatedFetch(`/api/store/products?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" }),
       ]);
-      const [data, serviceData] = await Promise.all([response.json(), serviceResponse.json()]);
+      const [data, imageData, serviceData] = await Promise.all([response.json(), imageResponse.json(), serviceResponse.json()]);
       if (!response.ok) throw new Error(data.error || "Unable to load project media.");
+      if (!imageResponse.ok) throw new Error(imageData.error || "Unable to load saved website photos.");
       if (!active) return;
       setSavedBrandingPalette(typeof data.preview?.brand?.colourDirection === "string" ? data.preview.brand.colourDirection : "");
       const services = serviceResponse.ok && Array.isArray(serviceData.products) ? serviceData.products.filter((item: Record<string, unknown>) => item.kind === "service" && item.isActive === true).map((item: Record<string, unknown>) => ({
@@ -263,11 +265,12 @@ useEffect(() => {
         description: typeof item.description === "string" ? item.description : null, imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
       })).filter((item: VerifiedWebsiteService) => item.id && item.name) : [];
       const serviceImages = uniqueWebsiteMedia(services.map((service: VerifiedWebsiteService) => service.imageUrl));
-      const secondaryImage = typeof data.preview?.website?.secondaryImage === "string" ? data.preview.website.secondaryImage : null;
+      const heroImage = typeof imageData.heroImage === "string" ? imageData.heroImage : null;
+      const secondaryImage = typeof imageData.secondaryImage === "string" ? imageData.secondaryImage : null;
       setVerifiedServices(services);
       setSavedSecondaryPhoto(secondaryImage || "");
       setWebsiteMedia({
-        hero: typeof data.preview?.website?.heroImage === "string" ? data.preview.website.heroImage : null,
+        hero: heroImage,
         work: uniqueWebsiteMedia([secondaryImage, ...serviceImages]),
         services: serviceImages,
       });

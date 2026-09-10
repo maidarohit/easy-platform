@@ -221,10 +221,14 @@ test("Website AI reuses the existing owner-photo endpoint for add, replace and r
   assert.match(editor, /Add Photo/);
   assert.match(editor, /Replace Photo/);
   assert.match(editor, /Remove Photo/);
+  assert.match(editor, /authenticatedFetch\(`\/api\/business-preview\/images\?projectId=\$\{encodeURIComponent\(projectId\)\}`/);
   assert.match(editor, /authenticatedFetch\("\/api\/business-preview\/images"/);
   assert.match(editor, /const \[savedSecondaryPhoto, setSavedSecondaryPhoto\] = useState\(""\)/);
+  assert.match(editor, /const heroImage = typeof imageData\.heroImage === "string" \? imageData\.heroImage : null/);
+  assert.match(editor, /const secondaryImage = typeof imageData\.secondaryImage === "string" \? imageData\.secondaryImage : null/);
   assert.match(editor, /work: uniqueWebsiteMedia\(\[secondaryImage, \.\.\.serviceImages\]\)/);
   assert.match(editor, /work: uniqueWebsiteMedia\(\[data\.secondaryImage \|\| null, \.\.\.serviceImages\]\)/);
+  assert.match(imageRoute, /export async function GET/);
   assert.match(imageRoute, /export async function DELETE/);
   assert.match(imageRoute, /eq\(projects\.userId, userId\)/);
 });
