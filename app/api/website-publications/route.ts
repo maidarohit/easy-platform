@@ -1,16 +1,19 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { db } from "@/app/db";
 import {
   projectOutputs,
   projectProducts,
   projects,
   businessPublications,
+  businessPublicationVersions,
   projectPreviewCustomizations,
   publishedWebsites,
   websitePublicationVersions,
 } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { requirePaidProductAccess } from "@/app/lib/paid-entitlements";
+import { refreshPublishedBusinessSnapshotFromWebsitePublication } from "@/app/lib/business-publication";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -145,6 +148,52 @@ function snapshotFor(
   return siteDocument ? buildMultiPageWebsitePublicationSnapshot({ ...input, siteDocument }) : buildWebsitePublicationSnapshot(input);
 }
 
+function savedTemplateFor(outputResult: string, fallbackTemplate: string) {
+  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
+  const storedOutput = parseStoredOutput(outputResult);
+  const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
+    ? validateWebsiteSiteDocument(storedOutput.siteDocument) : null;
+  return siteDocument?.theme.template || websiteEdits?.template || fallbackTemplate;
+}
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function mirrorBusinessPublicationSnapshot(
+  transaction: DbTransaction,
+  projectId: string,
+  uid: string,
+  snapshot: NonNullable<ReturnType<typeof snapshotFor>>,
+) {
+  const [businessSite] = await transaction.select().from(businessPublications).where(and(
+    eq(businessPublications.projectId, projectId),
+    eq(businessPublications.userId, uid),
+  )).limit(1);
+  if (!businessSite) return null;
+  const [liveVersion] = await transaction.select({ snapshot: businessPublicationVersions.snapshot }).from(businessPublicationVersions).where(and(
+    eq(businessPublicationVersions.publicationId, businessSite.id),
+    eq(businessPublicationVersions.versionNumber, businessSite.currentVersion),
+  )).limit(1);
+  if (!liveVersion) return businessSite.publicSlug;
+  const nextVersion = businessSite.currentVersion + 1;
+  const now = new Date();
+  await transaction.insert(businessPublicationVersions).values({
+    publicationId: businessSite.id,
+    versionNumber: nextVersion,
+    previewRevision: businessSite.publishedPreviewRevision,
+    snapshot: refreshPublishedBusinessSnapshotFromWebsitePublication(liveVersion.snapshot, snapshot),
+  });
+  await transaction.update(businessPublications).set({
+    currentVersion: nextVersion,
+    updatedAt: now,
+    ...(businessSite.status === "active" ? { publishedAt: now, unpublishedAt: null } : {}),
+  }).where(and(
+    eq(businessPublications.id, businessSite.id),
+    eq(businessPublications.projectId, projectId),
+    eq(businessPublications.userId, uid),
+  ));
+  return businessSite.publicSlug;
+}
+
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("projectId")?.trim() || "";
   if (!projectId || projectId.length > 128) return Response.json({ error: "Invalid project." }, { status: 400 });
@@ -170,7 +219,7 @@ export async function POST(request: Request) {
   const entitlement = await requirePaidProductAccess(authorized.uid); if (!entitlement.ok) return entitlement.response;
 
   try {
-    const site = await db.transaction(async (transaction) => {
+    const published = await db.transaction(async (transaction) => {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`website-slug:${parsed.body.slug}`}))`);
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`website-project:${parsed.body.projectId}`}))`);
       const [existing] = await transaction.select({ id: publishedWebsites.id }).from(publishedWebsites)
@@ -204,12 +253,13 @@ export async function POST(request: Request) {
         serviceImageUrls,
       );
       if (!snapshot) throw new Error("INVALID_WEBSITE_OUTPUT");
+      const savedTemplate = savedTemplateFor(output.result, parsed.body.template!);
       const now = new Date();
       const [created] = await transaction.insert(publishedWebsites).values({
         ownerUid: authorized.uid,
         projectId: parsed.body.projectId,
         slug: parsed.body.slug!,
-        template: parsed.body.template!,
+        template: savedTemplate,
         currentVersion: 1,
         status: "active",
         firstPublishedAt: now,
@@ -221,9 +271,12 @@ export async function POST(request: Request) {
         action: "publish",
         snapshot,
       });
-      return created;
+      const mirroredBusinessSlug = await mirrorBusinessPublicationSnapshot(transaction, parsed.body.projectId, authorized.uid, snapshot);
+      return { site: created, mirroredBusinessSlug };
     });
-    return Response.json({ publication: safeMetadata(site) }, { status: 201 });
+    revalidatePath(`/published-sites/${encodeURIComponent(published.site.slug)}`);
+    if (published.mirroredBusinessSlug) revalidatePath(`/business/${encodeURIComponent(published.mirroredBusinessSlug)}`);
+    return Response.json({ publication: safeMetadata(published.site) }, { status: 201 });
   } catch (error) {
     if (isUniqueViolation(error)) return Response.json({ error: "That website address is already in use." }, { status: 409 });
     if (error instanceof Error && error.message === "PUBLICATION_EXISTS") return Response.json({ error: "This project already has a website publication." }, { status: 409 });
@@ -241,7 +294,7 @@ export async function PATCH(request: Request) {
   if ("response" in authorized) return authorized.response;
   const entitlement = await requirePaidProductAccess(authorized.uid); if (!entitlement.ok) return entitlement.response;
   try {
-    const site = await db.transaction(async (transaction) => {
+    const published = await db.transaction(async (transaction) => {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`website-project:${parsed.body.projectId}`}))`);
       const [current] = await transaction.select().from(publishedWebsites).where(and(
         eq(publishedWebsites.projectId, parsed.body.projectId), eq(publishedWebsites.ownerUid, authorized.uid),
@@ -267,17 +320,21 @@ export async function PATCH(request: Request) {
         serviceImageUrls,
       );
       if (!snapshot) throw new Error("INVALID_WEBSITE_OUTPUT");
+      const savedTemplate = savedTemplateFor(output.result, current.template);
       const nextVersion = current.currentVersion + 1;
       await transaction.insert(websitePublicationVersions).values({ publishedWebsiteId: current.id, versionNumber: nextVersion, action: "republish", snapshot });
-      const [updated] = await transaction.update(publishedWebsites).set({ currentVersion: nextVersion, status: "active", lastPublishedAt: new Date(), unpublishedAt: null, updatedAt: new Date() }).where(and(
+      const [updated] = await transaction.update(publishedWebsites).set({ currentVersion: nextVersion, status: "active", lastPublishedAt: new Date(), unpublishedAt: null, updatedAt: new Date(), template: savedTemplate }).where(and(
         eq(publishedWebsites.id, current.id),
         eq(publishedWebsites.projectId, parsed.body.projectId),
         eq(publishedWebsites.ownerUid, authorized.uid),
       )).returning();
       if (!updated) throw new Error("NOT_FOUND");
-      return updated;
+      const mirroredBusinessSlug = await mirrorBusinessPublicationSnapshot(transaction, parsed.body.projectId, authorized.uid, snapshot);
+      return { site: updated, mirroredBusinessSlug };
     });
-    return Response.json({ publication: safeMetadata(site) });
+    revalidatePath(`/published-sites/${encodeURIComponent(published.site.slug)}`);
+    if (published.mirroredBusinessSlug) revalidatePath(`/business/${encodeURIComponent(published.mirroredBusinessSlug)}`);
+    return Response.json({ publication: safeMetadata(published.site) });
   } catch (error) {
     if (error instanceof Error && error.message === "NOT_FOUND") return Response.json({ error: "Publication not found." }, { status: 404 });
     if (error instanceof Error && error.message === "INVALID_WEBSITE_OUTPUT") return Response.json({ error: "The Website AI draft is not valid for publication." }, { status: 400 });

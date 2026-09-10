@@ -1,5 +1,6 @@
-import { resolveCustomerText, type BusinessPreview } from "@/app/lib/business-preview";
+import { extractBrandColours, resolveCustomerText, type BusinessPreview } from "@/app/lib/business-preview";
 import { validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
+import { publicWebsitePublicationView, type WebsitePublicationSnapshot } from "@/app/lib/website-publication";
 import { validateWebsiteSiteDocument, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 export type PublishedBusinessSnapshot = Readonly<{
@@ -45,6 +46,53 @@ export function buildPublishedBusinessSnapshot(preview: BusinessPreview, contact
   const validated = validatePublishedBusinessSnapshot(snapshot);
   if (!validated) throw new Error("Invalid business publication snapshot.");
   return validated;
+}
+
+function firstWebsiteMedia(value: string | readonly string[] | null | undefined) {
+  const items = Array.isArray(value) ? value : [value];
+  return items.find((item): item is string => typeof item === "string" && item.trim().length > 0)?.trim() ?? null;
+}
+
+export function refreshPublishedBusinessSnapshotFromWebsitePublication(
+  current: PublishedBusinessSnapshot,
+  websitePublication: WebsitePublicationSnapshot,
+): PublishedBusinessSnapshot {
+  const latestWebsite = publicWebsitePublicationView(websitePublication);
+  const paletteSource = websitePublication.schemaVersion === 2
+    ? websitePublication.siteDocument.theme.colorPalette
+    : latestWebsite.websiteOutput.colourScheme;
+  const typography = websitePublication.schemaVersion === 2
+    ? websitePublication.siteDocument.theme.typography
+    : latestWebsite.websiteOutput.typography;
+  const colors = extractBrandColours(paletteSource);
+  const companyName = latestWebsite.websiteEdits?.companyName || latestWebsite.companyName || current.business.name;
+  const refreshed = validatePublishedBusinessSnapshot({
+    ...current,
+    business: { ...current.business, name: companyName },
+    brand: current.brand ? {
+      ...current.brand,
+      name: companyName,
+      ...(colors.length > 0 ? { colours: colors, colourDirection: paletteSource } : {}),
+      ...(typography ? { typography } : {}),
+    } : current.brand,
+    website: {
+      heroHeadline: latestWebsite.websiteEdits?.heroHeadline || companyName,
+      supportingText: latestWebsite.websiteEdits?.heroDescription || latestWebsite.websiteOutput.websiteOverview || null,
+      primaryCta: latestWebsite.websiteEdits?.primaryCtaLabel || "Contact",
+      services: latestWebsite.websiteEdits?.servicesText || latestWebsite.websiteOutput.recommendedPages || "",
+      serviceCards: current.website?.serviceCards ?? [],
+      trust: current.website?.trust ?? null,
+      about: latestWebsite.websiteEdits?.aboutText || latestWebsite.websiteOutput.designRecommendations || null,
+      features: latestWebsite.websiteOutput.websiteFeatures || null,
+      contact: current.website?.contact ?? null,
+      heroImage: firstWebsiteMedia(websitePublication.media?.hero),
+      secondaryImage: firstWebsiteMedia(websitePublication.media?.work),
+      businessVideo: current.website?.businessVideo ?? null,
+    },
+    ...(websitePublication.schemaVersion === 2 ? { siteDocument: websitePublication.siteDocument } : { siteDocument: undefined }),
+  });
+  if (!refreshed) throw new Error("Invalid business publication snapshot.");
+  return refreshed;
 }
 
 export function businessPreviewRevision(outputIds: readonly string[], customizationRevision: number, overrides: object) {
