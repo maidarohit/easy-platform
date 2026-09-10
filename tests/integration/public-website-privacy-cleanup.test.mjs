@@ -74,10 +74,12 @@ test("owner photos take priority, are not repeated, and absent media creates no 
   assert.deepEqual(resolveWebsiteMedia({ industry: "Unknown field", uploaded: null }), { hero: null, work: [], about: null, services: [] });
 });
 
-test("both owner photo slots are carried into legacy publication snapshots", async () => {
+test("owner photos and verified service images are carried into legacy publication snapshots", async () => {
   const route = await readFile("app/api/website-publications/route.ts", "utf8");
   assert.match(route, /hero: .*\.heroImage/);
   assert.match(route, /work: .*\.secondaryImage/);
+  assert.match(route, /services: serviceImageUrls/);
+  assert.match(route, /eq\(projectProducts\.kind, "service"\)/);
 });
 
 test("pricing is sourced only from active saved catalogue products, never public strategy", async () => {

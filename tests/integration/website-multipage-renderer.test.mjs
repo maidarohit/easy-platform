@@ -56,10 +56,14 @@ test("public text safety omits instructions and unsupported claims while uploade
   assert.equal(media.hero?.src, "/uploads/project.jpg");
   assert.equal(media.hero?.source, "uploaded");
   assert.deepEqual(media.work.map(({ src }) => src), ["/uploads/work.jpg"]);
+  const serviceMedia = resolveWebsiteMedia({ industry: "Interior design", uploaded: { services: ["/uploads/service-one.jpg", "/uploads/service-two.jpg"] } });
+  assert.deepEqual(serviceMedia.services.map(({ src }) => src), ["/uploads/service-one.jpg", "/uploads/service-two.jpg"]);
+  assert.equal(serviceMedia.about?.src ?? null, null);
   assert.equal(resolveWebsiteMedia({ industry: "Interior design" }).hero, null);
   const projectFirst = resolveWebsiteMedia({ industry: "Interior design", uploaded: { work: ["/uploads/interior-one.jpg", "/uploads/interior-two.jpg"] } });
   assert.equal(projectFirst.hero?.src, "/uploads/interior-one.jpg");
   assert.deepEqual(projectFirst.work.map(({ src }) => src), ["/uploads/interior-two.jpg"]);
+  assert.equal(projectFirst.about?.src ?? null, null);
 });
 
 test("schema-v2 uses one polished shared presentation for preview and public routes", async () => {
@@ -88,7 +92,7 @@ test("verified services and approved contact data enrich the shared schema-v2 pr
     readFile(new URL("../../app/business/[slug]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../../app/business/[slug]/[...path]/page.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(renderer, /services\.slice\(0, pagePath === "\/" \? 6 : services\.length\)/);
+  assert.match(renderer, /services[\s\S]*\.slice\(0,\s*pagePath === "\/" \?\s*6 : services\.length\)/);
   assert.match(renderer, /data-home-value-section/);
   assert.match(renderer, /publicContactMethods\(contact\)/);
   assert.match(renderer, /contact\.location/);
@@ -132,6 +136,9 @@ test("Website AI reuses the existing owner-photo endpoint for add, replace and r
   assert.match(editor, /Replace Photo/);
   assert.match(editor, /Remove Photo/);
   assert.match(editor, /authenticatedFetch\("\/api\/business-preview\/images"/);
+  assert.match(editor, /const \[savedSecondaryPhoto, setSavedSecondaryPhoto\] = useState\(""\)/);
+  assert.match(editor, /work: uniqueWebsiteMedia\(\[secondaryImage, \.\.\.serviceImages\]\)/);
+  assert.match(editor, /work: uniqueWebsiteMedia\(\[data\.secondaryImage \|\| null, \.\.\.serviceImages\]\)/);
   assert.match(imageRoute, /export async function DELETE/);
   assert.match(imageRoute, /eq\(projects\.userId, userId\)/);
 });

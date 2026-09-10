@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import {
   projectOutputs,
+  projectProducts,
   projects,
   businessPublications,
   projectPreviewCustomizations,
@@ -119,6 +120,7 @@ function snapshotFor(
   template: string,
   outputResult: string,
   overrides?: unknown,
+  serviceImageUrls?: readonly string[],
 ) {
   const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
   const storedOutput = parseStoredOutput(outputResult);
@@ -132,10 +134,13 @@ function snapshotFor(
     template: websiteEdits?.template || template,
     websiteOutput: storedLegacyWebsiteOutput(outputResult),
     ...(websiteEdits && { websiteEdits }),
-    media: overrides && typeof overrides === "object" && !Array.isArray(overrides) ? {
-      hero: (overrides as Record<string, unknown>).heroImage,
-      work: (overrides as Record<string, unknown>).secondaryImage,
-    } : undefined,
+    media: {
+      ...(overrides && typeof overrides === "object" && !Array.isArray(overrides) ? {
+        hero: (overrides as Record<string, unknown>).heroImage,
+        work: (overrides as Record<string, unknown>).secondaryImage,
+      } : {}),
+      ...(serviceImageUrls && serviceImageUrls.length > 0 ? { services: serviceImageUrls } : {}),
+    },
   };
   return siteDocument ? buildMultiPageWebsitePublicationSnapshot({ ...input, siteDocument }) : buildWebsitePublicationSnapshot(input);
 }
@@ -182,10 +187,22 @@ export async function POST(request: Request) {
         eq(projectOutputs.userId, authorized.uid),
         eq(projectOutputs.module, "website"),
       )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)).limit(1);
+      const serviceImages = await transaction.select({ imageUrl: projectProducts.imageUrl }).from(projectProducts).where(and(
+        eq(projectProducts.projectId, parsed.body.projectId),
+        eq(projectProducts.isActive, true),
+        eq(projectProducts.kind, "service"),
+      )).orderBy(desc(projectProducts.updatedAt), desc(projectProducts.createdAt));
+      const serviceImageUrls = serviceImages.map((item) => item.imageUrl).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
       const [customization] = await transaction.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(
         eq(projectPreviewCustomizations.projectId, parsed.body.projectId), eq(projectPreviewCustomizations.userId, authorized.uid),
       )).limit(1);
-      const snapshot = output && snapshotFor(authorized.project, parsed.body.template!, output.result, customization?.overrides);
+      const snapshot = output && snapshotFor(
+        authorized.project,
+        parsed.body.template!,
+        output.result,
+        customization?.overrides,
+        serviceImageUrls,
+      );
       if (!snapshot) throw new Error("INVALID_WEBSITE_OUTPUT");
       const now = new Date();
       const [created] = await transaction.insert(publishedWebsites).values({
@@ -233,10 +250,22 @@ export async function PATCH(request: Request) {
       const [output] = await transaction.select().from(projectOutputs).where(and(
         eq(projectOutputs.projectId, parsed.body.projectId), eq(projectOutputs.userId, authorized.uid), eq(projectOutputs.module, "website"),
       )).orderBy(desc(projectOutputs.updatedAt), desc(projectOutputs.createdAt), desc(projectOutputs.id)).limit(1);
+      const serviceImages = await transaction.select({ imageUrl: projectProducts.imageUrl }).from(projectProducts).where(and(
+        eq(projectProducts.projectId, parsed.body.projectId),
+        eq(projectProducts.isActive, true),
+        eq(projectProducts.kind, "service"),
+      )).orderBy(desc(projectProducts.updatedAt), desc(projectProducts.createdAt));
+      const serviceImageUrls = serviceImages.map((item) => item.imageUrl).filter((value): value is string => typeof value === "string" && value.trim().length > 0);
       const [customization] = await transaction.select({ overrides: projectPreviewCustomizations.overrides }).from(projectPreviewCustomizations).where(and(
         eq(projectPreviewCustomizations.projectId, parsed.body.projectId), eq(projectPreviewCustomizations.userId, authorized.uid),
       )).limit(1);
-      const snapshot = output && snapshotFor(authorized.project, current.template, output.result, customization?.overrides);
+      const snapshot = output && snapshotFor(
+        authorized.project,
+        current.template,
+        output.result,
+        customization?.overrides,
+        serviceImageUrls,
+      );
       if (!snapshot) throw new Error("INVALID_WEBSITE_OUTPUT");
       const nextVersion = current.currentVersion + 1;
       await transaction.insert(websitePublicationVersions).values({ publishedWebsiteId: current.id, versionNumber: nextVersion, action: "republish", snapshot });

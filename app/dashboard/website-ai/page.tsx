@@ -98,6 +98,10 @@ function paletteSwatches(value: string, fallbackValue = "") {
   return [...new Set([...colors, ...extractPaletteColors(fallbackValue)])].slice(0, 6);
 }
 
+function uniqueWebsiteMedia(items: readonly (string | null | undefined)[]) {
+  return [...new Set(items.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim()))];
+}
+
 function isValidWebsiteSlug(value: string) {
   return value.length >= 3 && value.length <= 63 &&
     /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && !RESERVED_WEBSITE_SLUGS.has(value);
@@ -178,6 +182,7 @@ const [publishingOption, setPublishingOption] = useState<"buzypeezy" | "custom">
 const [customDomain, setCustomDomain] = useState("");
 const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
 const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
+const [savedSecondaryPhoto, setSavedSecondaryPhoto] = useState("");
 const [draftPalette, setDraftPalette] = useState("");
 const [draftTypography, setDraftTypography] = useState("");
 const [savedBrandingPalette, setSavedBrandingPalette] = useState("");
@@ -205,6 +210,7 @@ useEffect(() => {
     setWebsiteEdits(null);
     setDraftEdits(null);
     setEditingWebsite(false);
+    setSavedSecondaryPhoto("");
     setSavedBrandingPalette("");
     setShowCustomPaletteInput(false);
     setShowGoLiveReview(false);
@@ -244,14 +250,17 @@ useEffect(() => {
         id: String(item.id || ""), name: String(item.name || ""), slug: typeof item.slug === "string" ? item.slug : null,
         description: typeof item.description === "string" ? item.description : null, imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
       })).filter((item: VerifiedWebsiteService) => item.id && item.name) : [];
+      const serviceImages = uniqueWebsiteMedia(services.map((service: VerifiedWebsiteService) => service.imageUrl));
+      const secondaryImage = typeof data.preview?.website?.secondaryImage === "string" ? data.preview.website.secondaryImage : null;
       setVerifiedServices(services);
+      setSavedSecondaryPhoto(secondaryImage || "");
       setWebsiteMedia({
-        hero: data.preview?.website?.heroImage || null,
-        work: data.preview?.website?.secondaryImage || null,
-        services: services.map((service: VerifiedWebsiteService) => service.imageUrl).filter((value: string | null | undefined): value is string => Boolean(value)),
+        hero: typeof data.preview?.website?.heroImage === "string" ? data.preview.website.heroImage : null,
+        work: uniqueWebsiteMedia([secondaryImage, ...serviceImages]),
+        services: serviceImages,
       });
     } catch {
-      if (active) { setWebsiteMedia({}); setVerifiedServices([]); setSavedBrandingPalette(""); }
+      if (active) { setWebsiteMedia({}); setVerifiedServices([]); setSavedSecondaryPhoto(""); setSavedBrandingPalette(""); }
     }
   };
   loadWebsiteMedia();
@@ -530,7 +539,18 @@ const updateWebsitePhoto = async (slot: "hero" | "secondary", file?: File) => {
       : await authenticatedFetch("/api/business-preview/images", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, slot }) });
     const data = await response.json() as { heroImage?: string | null; secondaryImage?: string | null; error?: string };
     if (!response.ok) throw new Error(data.error || "Unable to update that photo.");
-    setWebsiteMedia((current) => ({ ...current, hero: data.heroImage || null, work: data.secondaryImage || null }));
+    setSavedSecondaryPhoto(data.secondaryImage || "");
+    setWebsiteMedia((current) => {
+      const serviceImages = uniqueWebsiteMedia(
+        Array.isArray(current.services) ? current.services : current.services ? [current.services] : [],
+      );
+      return {
+        ...current,
+        hero: data.heroImage || null,
+        work: uniqueWebsiteMedia([data.secondaryImage || null, ...serviceImages]),
+        services: serviceImages,
+      };
+    });
     setShowGoLiveReview(false);
     toast.success(file ? "Photo saved to the website draft." : "Photo removed from the website draft.");
   } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to update that photo."); }
@@ -1091,7 +1111,7 @@ return (
                       </div>
                       <label className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">Typography</span><input value={draftTypography} onChange={(event) => setDraftTypography(event.target.value)} maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
                       <div className="md:col-span-2 grid gap-4 sm:grid-cols-2">
-                        {([ ["hero", "Hero photo", heroPhotoInput, websiteMedia.hero], ["secondary", "Project / gallery photo", projectPhotoInput, websiteMedia.work] ] as const).map(([slot, label, inputRef, current]) => <div key={slot} className="rounded-xl border border-white/10 p-4"><p className="text-sm font-semibold text-white">{label}</p><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void updateWebsitePhoto(slot, file); }} /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => inputRef.current?.click()} className={copyButtonClass}>{uploadingPhoto === slot ? "Uploading…" : current ? "Replace Photo" : "Add Photo"}</button>{current && <button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => void updateWebsitePhoto(slot)} className="min-h-9 rounded-xl border border-red-400/35 px-3.5 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Remove Photo</button>}</div></div>)}
+                        {([ ["hero", "Hero photo", heroPhotoInput, websiteMedia.hero], ["secondary", "Project / gallery photo", projectPhotoInput, savedSecondaryPhoto] ] as const).map(([slot, label, inputRef, current]) => <div key={slot} className="rounded-xl border border-white/10 p-4"><p className="text-sm font-semibold text-white">{label}</p><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void updateWebsitePhoto(slot, file); }} /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => inputRef.current?.click()} className={copyButtonClass}>{uploadingPhoto === slot ? "Uploading…" : current ? "Replace Photo" : "Add Photo"}</button>{current && <button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => void updateWebsitePhoto(slot)} className="min-h-9 rounded-xl border border-red-400/35 px-3.5 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Remove Photo</button>}</div></div>)}
                       </div>
                     </div>
                   </div>

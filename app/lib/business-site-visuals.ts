@@ -149,15 +149,24 @@ export function resolveWebsiteMedia(input: Readonly<{
   const used = new Set<string>();
   const heroUploads = uploadedMediaValues(input.uploaded?.hero);
   const workUploads = uploadedMediaValues(input.uploaded?.work);
+  const aboutUploads = uploadedMediaValues(input.uploaded?.about);
+  const serviceUploads = uploadedMediaValues(input.uploaded?.services);
+
+  const uploadedBySlot = (slot: WebsiteMediaSlot) => {
+    switch (slot) {
+      case "hero":
+        return heroUploads.length > 0 ? heroUploads : workUploads.slice(0, 1);
+      case "work":
+        return workUploads;
+      case "about":
+        return aboutUploads.length > 0 ? aboutUploads : workUploads;
+      case "services":
+        return serviceUploads;
+    }
+  };
 
   const resolveSlot = (slot: WebsiteMediaSlot): WebsiteMediaVisual[] => {
-    // Only media explicitly assigned to a semantic slot is eligible. A saved
-    // secondary photo is mapped to Work by the publication adapters; uploads
-    // are never guessed into unrelated About or service slots.
-    const uploaded = slot === "hero" ? (heroUploads.length > 0 ? heroUploads : workUploads.slice(0, 1))
-      : slot === "work" ? workUploads
-      : slot === "services" ? uploadedMediaValues(input.uploaded?.services)
-      : [];
+    const uploaded = uploadedBySlot(slot);
     const candidates: WebsiteMediaVisual[] = uploaded.map((src) => ({
       src: src.trim(),
       alt: `${slot === "work" ? "Project work" : slot} visual for ${input.industry || "the business"}`,
