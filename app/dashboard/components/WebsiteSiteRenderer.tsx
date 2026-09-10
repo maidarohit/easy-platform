@@ -23,8 +23,25 @@ type BlockProps = { block: WebsiteBlock; media: ResolvedWebsiteMedia; accent: st
 function savedPalette(value: string, theme: (typeof websiteThemes)[string]) {
   const colors = value.match(/#[0-9a-f]{6}\b/gi) ?? [];
   const primary = colors[0] || theme.primaryColor;
-  return { primary, secondary: colors[1] || theme.secondaryColor, light: colors[2] || theme.sectionBackground,
-    dark: colors[3] || (readableTextColor(primary) === "#ffffff" ? primary : "#0f172a") };
+
+  const lightSurface =
+    [...colors].reverse().find(
+      (color) => readableTextColor(color) === "#0f172a"
+    ) || theme.pageBackground;
+
+  const darkSurface =
+    colors.find(
+      (color) => readableTextColor(color) === "#ffffff"
+    ) || primary || "#0f172a";
+
+  return {
+    primary,
+    secondary: colors[1] || theme.secondaryColor,
+    light: colors[2] || theme.sectionBackground,
+    page: lightSurface,
+    card: lightSurface,
+    dark: darkSurface,
+  };
 }
 
 function siteHref(href: string, basePath: string) {
@@ -64,14 +81,121 @@ function ContentBlock({ block, fallbackDescription, pagePath }: BlockProps & { b
   return <Section muted><div data-block-type="content" className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[.7fr_1.3fr] lg:gap-14">{heading && <Heading>{heading}</Heading>}<p className="max-w-3xl whitespace-pre-wrap text-lg leading-8 opacity-75">{body}</p></div></Section>;
 }
 
-function ServicesBlock({ block, media, services, accent, basePath, pagePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "services" }> }) {
-  const heading = safeWebsiteBlockText(block.heading, 200), introduction = safeWebsiteBlockText(block.introduction);
-  if (!heading && !introduction && media.services.length === 0 && services.length === 0) return null;
-  return <Section><div data-block-type="services" className="mx-auto max-w-7xl">{heading && <Heading>{heading}</Heading>}{introduction && <p className="mt-5 max-w-3xl text-lg leading-8 opacity-75">{introduction}</p>}
-    {services.length > 0 && <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{services.slice(0, pagePath === "/" ? 6 : services.length).map((service) => <article key={service.id} className="rounded-2xl border border-slate-200 bg-white p-7 text-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><h3 className="text-xl font-bold">{service.title}</h3>{service.body && <p className="mt-3 line-clamp-4 leading-7 text-slate-600">{service.body}</p>}<SiteLink href={service.path} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center text-sm font-bold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Learn more <span aria-hidden="true" className="ml-2">→</span></SiteLink></article>)}</div>}
-    {media.services.length > 0 && <div className="mt-8 grid gap-5 md:grid-cols-2">{media.services.map((item) => <WebsiteMediaVisual key={item.src} media={item} className="aspect-[4/3] min-h-64 rounded-2xl" />)}</div>}
-    {pagePath === "/" && services.length > 0 && <div data-home-value-section className="mt-14 rounded-[2rem] border border-slate-200 bg-slate-950 p-8 text-white shadow-lg sm:p-10"><p className="text-xs font-bold uppercase tracking-[0.2em] text-white/60">Why choose us</p><h3 className="mt-3 text-3xl font-bold tracking-tight">A coordinated approach to your project</h3><div className="mt-8 grid gap-5 md:grid-cols-3">{services.slice(0, 3).map((service) => <div key={`value-${service.id}`} className="rounded-2xl border border-white/15 bg-white/5 p-5"><h4 className="font-semibold">{service.title}</h4><p className="mt-2 text-sm leading-6 text-white/65">{service.body || `Discuss ${service.title.toLowerCase()} around your confirmed requirements.`}</p></div>)}</div></div>}
-  </div></Section>;
+function ServicesBlock({
+  block,
+  media,
+  services,
+  accent,
+  basePath,
+  pagePath,
+}: BlockProps & {
+  block: Extract<WebsiteBlock, { type: "services" }>;
+}) {
+  const heading = safeWebsiteBlockText(block.heading, 200);
+  const introduction = safeWebsiteBlockText(block.introduction);
+
+  if (
+    !heading &&
+    !introduction &&
+    media.services.length === 0 &&
+    services.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <Section>
+      <div data-block-type="services" className="mx-auto max-w-7xl">
+        {heading && <Heading>{heading}</Heading>}
+
+        {introduction && (
+          <p className="mt-5 max-w-3xl text-lg leading-8 opacity-75">
+            {introduction}
+          </p>
+        )}
+
+        {services.length > 0 && (
+          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {services
+              .slice(0, pagePath === "/" ? 6 : services.length)
+              .map((service) => (
+                <article
+                  key={service.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-7 text-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <h3 className="text-xl font-bold">{service.title}</h3>
+
+                  {service.body && (
+                    <p className="mt-3 line-clamp-4 leading-7 text-slate-600">
+                      {service.body}
+                    </p>
+                  )}
+
+                  <SiteLink
+                    href={service.path}
+                    basePath={basePath}
+                    className="mt-6 inline-flex min-h-11 items-center text-sm font-bold focus-visible:outline-none focus-visible:ring-2"
+                    style={{ color: accent }}
+                  >
+                    Learn more
+                    <span aria-hidden="true" className="ml-2">
+                      →
+                    </span>
+                  </SiteLink>
+                </article>
+              ))}
+          </div>
+        )}
+
+        {media.services.length > 0 && (
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            {media.services.map((item) => (
+              <WebsiteMediaVisual
+                key={item.src}
+                media={item}
+                className="aspect-[4/3] min-h-64 rounded-2xl"
+              />
+            ))}
+          </div>
+        )}
+
+        {pagePath === "/" && services.length > 0 && (
+          <div
+            data-home-value-section
+            className="mt-14 rounded-[2rem] border border-slate-200 p-8 shadow-lg sm:p-10"
+            style={{
+              backgroundColor: accent,
+              color: readableTextColor(accent),
+            }}
+          >
+            <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">
+              Why choose us
+            </p>
+
+            <h3 className="mt-3 text-3xl font-bold tracking-tight">
+              A coordinated approach to your project
+            </h3>
+
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {services.slice(0, 3).map((service) => (
+                <div
+                  key={`value-${service.id}`}
+                  className="rounded-2xl border border-white/20 bg-white/10 p-5"
+                >
+                  <h4 className="font-semibold">{service.title}</h4>
+
+                  <p className="mt-2 text-sm leading-6 opacity-70">
+                    {service.body ||
+                      `Discuss ${service.title.toLowerCase()} around your confirmed requirements.`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
 }
 
 function ServiceDetailBlock({ block }: BlockProps & { block: Extract<WebsiteBlock, { type: "serviceDetail" }> }) {
@@ -120,10 +244,55 @@ function ContactBlock({ block, contact, services, accent, inquirySlug, preview }
   return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 opacity-70">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm opacity-60">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
 }
 
-function CtaBlock({ block, accent, accentText, basePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "cta" }> }) {
-  const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body), label = safeWebsiteBlockText(block.label, 100);
+function CtaBlock({
+  block,
+  accent,
+  accentText,
+  basePath,
+}: BlockProps & {
+  block: Extract<WebsiteBlock, { type: "cta" }>;
+}) {
+  const heading = safeWebsiteBlockText(block.heading, 200);
+  const body = safeWebsiteBlockText(block.body);
+  const label = safeWebsiteBlockText(block.label, 80);
+
   if (!heading && !body && !label) return null;
-  return <Section><div data-block-type="cta" className="mx-auto max-w-5xl rounded-3xl bg-slate-950 px-8 py-12 text-center text-white">{heading && <Heading>{heading}</Heading>}{body && <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 text-slate-300">{body}</p>}{label && <SiteLink href={block.href} basePath={basePath} className="mt-7 inline-flex px-6 py-3 font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: "0.75rem" }}>{label}</SiteLink>}</div></Section>;
+
+  return (
+    <Section>
+      <div
+        data-block-type="cta"
+        className="mx-auto max-w-5xl rounded-3xl px-8 py-12 text-center"
+        style={{
+          backgroundColor: accent,
+          color: accentText,
+        }}
+      >
+        {heading && <Heading>{heading}</Heading>}
+
+        {body && (
+          <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 opacity-75">
+            {body}
+          </p>
+        )}
+
+        {label && (
+          <SiteLink
+            href={block.href}
+            basePath={basePath}
+            className="mt-7 inline-flex px-6 py-3 font-semibold"
+            style={{
+              backgroundColor: accentText,
+              color: accent,
+              borderRadius: "0.75rem",
+            }}
+          >
+            {label}
+          </SiteLink>
+        )}
+      </div>
+    </Section>
+  );
 }
 
 export function WebsiteBlockRenderer(props: BlockProps) {
@@ -162,13 +331,36 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
   const palette = savedPalette(validated.theme.colorPalette, baseTheme);
   const accent = palette.primary;
   const accentText = readableTextColor(accent);
+  const isDarkTemplate = validated.theme.template === "Dark";
+const pageBackground = isDarkTemplate
+  ? baseTheme.pageBackground
+  : palette.page;
+
+const textColor = isDarkTemplate
+  ? baseTheme.textColor
+  : readableTextColor(pageBackground);
+
+const cardBackground = isDarkTemplate
+  ? baseTheme.cardBackground
+  : palette.card;
   const font = validated.theme.typography.split(/[,;\n]|\s+and\s+/i)[0]?.replace(/[^a-zA-Z0-9 '-]/g, "").trim();
-  const shellStyle = { backgroundColor: baseTheme.pageBackground, color: baseTheme.textColor, fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont,
-    "--site-primary": palette.primary, "--site-secondary": palette.secondary, "--site-page": baseTheme.pageBackground,
-    "--site-section": palette.light, "--site-section-text": readableTextColor(palette.light), "--site-dark": palette.dark, "--site-card": baseTheme.cardBackground,
-    "--site-text": baseTheme.textColor, "--site-muted": baseTheme.mutedTextColor, "--site-border": baseTheme.borderColor,
-    "--site-card-radius": baseTheme.cardRadius,
-  } as CSSProperties;
+  const shellStyle = {
+  backgroundColor: pageBackground,
+  color: textColor,
+  fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont,
+
+  "--site-primary": palette.primary,
+  "--site-secondary": palette.secondary,
+  "--site-page": pageBackground,
+  "--site-section": palette.light,
+  "--site-section-text": readableTextColor(palette.light),
+  "--site-dark": palette.dark,
+  "--site-card": cardBackground,
+  "--site-text": textColor,
+  "--site-muted": baseTheme.mutedTextColor,
+  "--site-border": baseTheme.borderColor,
+  "--site-card-radius": baseTheme.cardRadius,
+} as CSSProperties;
   const pages = new Map(validated.pages.map((item) => [item.id, item]));
   const navigation = visibleWebsiteNavigation(validated);
   const pageBlocks = publicWebsitePageBlocks(validated, page.path, !publicPageOnly && preview);
