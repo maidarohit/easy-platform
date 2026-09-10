@@ -28,6 +28,18 @@ function withWebsiteTheme(document: WebsiteSiteDocument | null, template: string
   return document ? validateWebsiteSiteDocument({ ...document, theme: { template, colorPalette, typography } }) : null;
 }
 
+function restoreWebsiteDraftOutput(value: unknown) {
+  const savedResult =
+    typeof value === "string"
+      ? JSON.parse(value)
+      : value;
+  const restoredResult = savedResult as WebsiteDraftOutput;
+  return {
+    result: restoredResult,
+    siteDocument: validateWebsiteSiteDocument(restoredResult.siteDocument),
+  };
+}
+
 const WEBSITE_GOALS = [
   "Generate Leads",
   "Sell Products",
@@ -461,10 +473,12 @@ const saveWebsiteEdits = async () => {
         result: JSON.stringify(updatedResult),
       }),
     });
-    if (!response.ok) throw new Error("Unable to save website changes.");
-    setBrandResult(updatedResult);
-    setSiteDocument(nextDocument);
-    setWebsiteEdits(draftEdits);
+    const data = await response.json() as { output?: { result?: unknown }; error?: string };
+    if (!response.ok) throw new Error(data.error || "Unable to save website changes.");
+    const restored = data.output?.result ? restoreWebsiteDraftOutput(data.output.result) : null;
+    setBrandResult(restored?.result || updatedResult);
+    setSiteDocument(restored?.siteDocument || nextDocument);
+    setWebsiteEdits(restored?.result.websiteEdits || draftEdits);
     setEditingWebsite(false);
     setDraftEdits(null);
     setShowGoLiveReview(true);

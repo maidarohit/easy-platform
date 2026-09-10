@@ -241,6 +241,48 @@ test("legacy website draft is canonicalized on save and then applies successfull
   assert.equal(result.changed, true);
 });
 
+test("Save Changes persistence rewrites stale saved theme fields before reload", async () => {
+  const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
+  const inputTheme = {
+    template: "Dark",
+    colorPalette: "#010203, #0A7C86, #D9E7E8, #FAF6F0, #B68C5A, #FDFDFD",
+    typography: "Fraunces",
+  };
+  const staleSiteDocument = {
+    schemaVersion: 2,
+    theme: {
+      template: "Modern",
+      colorPalette: "#AAAAAA, #BBBBBB, #CCCCCC, #DDDDDD, #EEEEEE, #FFFFFF",
+      typography: "Old Font",
+    },
+    branding: { name: "Acme", voice: "" },
+    navigation: { items: [{ id: "nav-home", pageId: "page-home", label: "Home", order: 0, visibility: "visible" }] },
+    header: { brandLabel: "Acme", ctaLabel: "Contact", ctaHref: "#contact" },
+    footer: { businessName: "Acme", description: "Existing description", showContact: true },
+    pages: [{ id: "page-home", type: "home", path: "/", title: "Home", order: 0, visibility: "visible", seo: { title: "Acme", description: "Existing description", canonicalPath: "/", index: true }, blocks: [
+      { id: "block-home-hero", type: "hero", order: 0, visibility: "visible", headline: "Existing headline", description: "Existing description", ctaLabel: "Contact", ctaHref: "#contact" },
+      { id: "block-home-content", type: "content", order: 1, visibility: "visible", heading: "About", body: "Existing about" },
+      { id: "block-home-services", type: "services", order: 2, visibility: "visible", heading: "Services", introduction: "Existing services", serviceIds: [] },
+      { id: "block-home-contact", type: "contact", order: 3, visibility: "visible", heading: "Contact", body: "" },
+    ] }],
+  };
+  const persisted = normalizeWebsiteDraftForPersistence({
+    project,
+    website: {
+      ...website,
+      colourScheme: inputTheme.colorPalette,
+      typography: inputTheme.typography,
+      websiteEdits: { ...website.websiteEdits, template: inputTheme.template },
+      siteDocument: staleSiteDocument,
+    },
+  });
+  assert.deepEqual(persisted.siteDocument.theme, inputTheme);
+  const page = await source("app/dashboard/website-ai/page.tsx");
+  assert.match(page, /const restored = data\.output\?\.result \? restoreWebsiteDraftOutput\(data\.output\.result\) : null/);
+  assert.match(page, /setBrandResult\(restored\?\.result \|\| updatedResult\)/);
+  assert.match(page, /setSiteDocument\(restored\?\.siteDocument \|\| nextDocument\)/);
+});
+
 test("apply route is owner-scoped, updates only an existing draft, and cannot publish or call providers", async () => {
   const route = await source("app/api/website-ai/apply-intelligence/route.ts");
   assert.match(route, /verifyFirebaseIdToken/);
