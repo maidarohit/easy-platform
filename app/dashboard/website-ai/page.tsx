@@ -42,12 +42,61 @@ const WEBSITE_GOALS = [
 ] as const;
 
 const WEBSITE_TEMPLATES = ["Modern", "Luxury", "Corporate", "Creative", "Minimal", "Dark"] as const;
+const WEBSITE_STYLE_OPTIONS = [
+  { value: "Modern", label: "Clean and conversion-focused" },
+  { value: "Luxury", label: "Refined editorial polish" },
+  { value: "Minimal", label: "Quiet, spacious simplicity" },
+  { value: "Creative", label: "Expressive and energetic" },
+  { value: "Corporate", label: "Structured and trustworthy" },
+  { value: "Dark", label: "Bold contrast and depth" },
+] as const satisfies ReadonlyArray<{ value: (typeof WEBSITE_TEMPLATES)[number]; label: string }>;
+const PALETTE_PRESETS = [
+  {
+    id: "forest-luxe",
+    name: "Forest Luxe",
+    label: "Premium green / cream",
+    value: "#174A3A, #12372D, #789889, #F5F0E6, #C7A96B, #FFFDF8",
+  },
+  {
+    id: "warm-minimal",
+    name: "Warm Minimal",
+    label: "Soft neutrals / clay warmth",
+    value: "#463F3A, #BCB8B1, #F4F3EE, #E0AFA0, #8A817C, #FFFFFF",
+  },
+  {
+    id: "modern-teal",
+    name: "Modern Teal",
+    label: "Fresh teal / airy neutrals",
+    value: "#0F5257, #00A4A6, #9AA8B2, #F4F8F8, #D8E2E2, #FFFFFF",
+  },
+  {
+    id: "dark-premium",
+    name: "Dark Premium",
+    label: "Charcoal / gold contrast",
+    value: "#1F2933, #374151, #A67C52, #F5F0E6, #111827, #FFFFFF",
+  },
+] as const;
+const DEFAULT_PALETTE_PRESET = "warm-minimal";
 const FORBIDDEN_EDIT_CONTENT = /<\/?[a-z][^>]*>|(?:javascript|vbscript|data|file)\s*:/i;
 const RESERVED_WEBSITE_SLUGS = new Set([
   "admin", "api", "assets", "billing", "boss", "contact-support", "dashboard", "favicon",
   "forgot-password", "help", "login", "logout", "onboarding", "privacy", "published-sites",
   "refund-cancellation", "robots", "signup", "sitemap", "support", "terms", "verify-email", "www", "_next",
 ]);
+
+function extractPaletteColors(value: string) {
+  return [...new Set(value.match(/#[0-9A-Fa-f]{6}\b/g) ?? [])].slice(0, 6).map((hex) => hex.toUpperCase());
+}
+
+function normalizePaletteValue(value: string) {
+  return extractPaletteColors(value).join(",");
+}
+
+function paletteSwatches(value: string, fallbackValue = "") {
+  const colors = extractPaletteColors(value);
+  if (colors.length >= 5 || !fallbackValue) return colors;
+  return [...new Set([...colors, ...extractPaletteColors(fallbackValue)])].slice(0, 6);
+}
 
 function isValidWebsiteSlug(value: string) {
   return value.length >= 3 && value.length <= 63 &&
@@ -131,6 +180,8 @@ const [showOwnedDomainSetup, setShowOwnedDomainSetup] = useState(false);
 const [websiteMedia, setWebsiteMedia] = useState<WebsiteMediaInput>({});
 const [draftPalette, setDraftPalette] = useState("");
 const [draftTypography, setDraftTypography] = useState("");
+const [savedBrandingPalette, setSavedBrandingPalette] = useState("");
+const [showCustomPaletteInput, setShowCustomPaletteInput] = useState(false);
 const [uploadingPhoto, setUploadingPhoto] = useState<"hero" | "secondary" | null>(null);
 const heroPhotoInput = useRef<HTMLInputElement>(null);
 const projectPhotoInput = useRef<HTMLInputElement>(null);
@@ -154,6 +205,8 @@ useEffect(() => {
     setWebsiteEdits(null);
     setDraftEdits(null);
     setEditingWebsite(false);
+    setSavedBrandingPalette("");
+    setShowCustomPaletteInput(false);
     setShowGoLiveReview(false);
     setCompanyName(activeProject?.companyName || "");
     setIndustry(activeProject?.industry || "");
@@ -186,6 +239,7 @@ useEffect(() => {
       const [data, serviceData] = await Promise.all([response.json(), serviceResponse.json()]);
       if (!response.ok) throw new Error(data.error || "Unable to load project media.");
       if (!active) return;
+      setSavedBrandingPalette(typeof data.preview?.brand?.colourDirection === "string" ? data.preview.brand.colourDirection : "");
       const services = serviceResponse.ok && Array.isArray(serviceData.products) ? serviceData.products.filter((item: Record<string, unknown>) => item.kind === "service" && item.isActive === true).map((item: Record<string, unknown>) => ({
         id: String(item.id || ""), name: String(item.name || ""), slug: typeof item.slug === "string" ? item.slug : null,
         description: typeof item.description === "string" ? item.description : null, imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
@@ -197,7 +251,7 @@ useEffect(() => {
         services: services.map((service: VerifiedWebsiteService) => service.imageUrl).filter((value: string | null | undefined): value is string => Boolean(value)),
       });
     } catch {
-      if (active) { setWebsiteMedia({}); setVerifiedServices([]); }
+      if (active) { setWebsiteMedia({}); setVerifiedServices([]); setSavedBrandingPalette(""); }
     }
   };
   loadWebsiteMedia();
@@ -298,8 +352,40 @@ const updatePublication = async (method: "POST" | "PATCH" | "DELETE") => {
     setPublicationLoading(false);
   }
 };
+const isStrongestInteriorsContext = [
+  project?.companyName,
+  project?.name,
+  companyName,
+  websiteEdits?.companyName,
+].some((value) => /strongest\s+interiors/i.test(value || ""));
+const fallbackPaletteValue = (isStrongestInteriorsContext
+  ? PALETTE_PRESETS.find((preset) => preset.id === "forest-luxe")
+  : PALETTE_PRESETS.find((preset) => preset.id === DEFAULT_PALETTE_PRESET)
+)?.value || PALETTE_PRESETS[0].value;
+const brandingPaletteValue = savedBrandingPalette || siteDocument?.theme.colorPalette || brandResult?.colourScheme || "";
+const hasSavedBrandingPalette = extractPaletteColors(savedBrandingPalette).length > 0;
+const paletteOptions = [
+  ...PALETTE_PRESETS,
+  {
+    id: "branding-ai",
+    name: "Branding AI Palette",
+    label: hasSavedBrandingPalette
+      ? "Saved Branding / project colors"
+      : normalizePaletteValue(brandingPaletteValue)
+      ? "Current saved website palette"
+      : "Default starting palette",
+    value: normalizePaletteValue(brandingPaletteValue) ? brandingPaletteValue : fallbackPaletteValue,
+  },
+] as const;
+const paletteMatchesOption = (value: string) => {
+  const normalized = normalizePaletteValue(value);
+  return normalized
+    ? paletteOptions.some((palette) => normalizePaletteValue(palette.value) === normalized)
+    : false;
+};
 const beginEditingWebsite = () => {
   if (!brandResult) return;
+  const nextPalette = siteDocument?.theme.colorPalette || brandResult.colourScheme || fallbackPaletteValue;
   setDraftEdits(
   websiteEdits ||
     initialWebsiteEdits(
@@ -310,8 +396,9 @@ const beginEditingWebsite = () => {
       projectPrimaryLanguage
     )
 );
-  setDraftPalette(siteDocument?.theme.colorPalette || brandResult.colourScheme || "");
+  setDraftPalette(nextPalette);
   setDraftTypography(siteDocument?.theme.typography || brandResult.typography || "");
+  setShowCustomPaletteInput(!paletteMatchesOption(nextPalette));
   setEditingWebsite(true);
   setShowGoLiveReview(false);
 };
@@ -319,6 +406,7 @@ const cancelEditingWebsite = () => {
   setDraftEdits(null);
   setDraftPalette("");
   setDraftTypography("");
+  setShowCustomPaletteInput(false);
   setEditingWebsite(false);
 };
 const updateDraftEdit = (field: keyof WebsiteEdits, value: string) => {
@@ -456,6 +544,8 @@ const activeWebsiteEdits = editingWebsite ? draftEdits : websiteEdits;
 const activeSiteDocument = siteDocument && editingWebsite && draftEdits
   ? withWebsiteTheme(siteDocument, draftEdits.template, draftPalette, draftTypography) || siteDocument
   : siteDocument;
+const selectedDraftPalette = normalizePaletteValue(draftPalette);
+const usingCustomDraftPalette = Boolean(selectedDraftPalette) && !paletteMatchesOption(draftPalette);
 const publicationSlugIsValid = isValidWebsiteSlug(publicationSlug);
 const customDomainIsValid = isValidCustomDomain(customDomain.trim().toLowerCase());
 const colors =
@@ -782,7 +872,37 @@ return (
               <label className="block"><span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Business Name</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Identity / 01</span></span><input type="text" placeholder="Example: Buzypeezy" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="h-13 w-full rounded-xl border border-white/[0.08] bg-slate-950/80 px-4 text-sm text-white outline-none transition-all placeholder:text-slate-600 hover:border-red-500/20 focus:border-red-400/50 focus:shadow-[0_0_20px_rgba(239,68,68,0.1)]"/></label>
               <label className="group/industry block"><span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Industry</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Sector / 02</span></span><span className="relative block"><select value={industry} onChange={(e) => setIndustry(e.target.value)} className="h-13 w-full appearance-none rounded-xl border border-white/[0.08] bg-slate-950/80 px-4 pr-12 text-sm text-white outline-none transition-all hover:border-red-500/25 focus:border-red-400/50 focus:shadow-[0_0_20px_rgba(239,68,68,0.1)]"><option value="">Select Industry</option><option>AI & Technology</option><option>Digital Marketing</option><option>Healthcare</option><option>Finance</option><option>Education</option><option>Real Estate</option><option>E-commerce</option><option>Interior Design</option><option>Food & Beverage</option><option>Legal</option><option>Manufacturing</option><option>Other</option></select><span className="pointer-events-none absolute right-3.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] text-cyan-300 group-focus-within/industry:border-red-400/35 group-focus-within/industry:text-red-300"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="m4 6 4 4 4-4"/></svg></span></span></label>
               <label className="group/goal block"><span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Website Goal</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Objective / 03</span></span><span className="relative block"><select value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className="h-13 w-full appearance-none rounded-xl border border-white/[0.08] bg-slate-950/80 px-4 pr-12 text-sm text-white outline-none transition-all hover:border-red-500/25 focus:border-red-400/50 focus:shadow-[0_0_20px_rgba(239,68,68,0.1)]"><option value="">Select Website Goal</option><option>Generate Leads</option><option>Sell Products</option><option>Showcase Portfolio</option><option>Book Appointments</option><option>Build Brand Awareness</option><option>Provide Information</option><option>Grow Online Presence</option><option>Offer Online Services</option><option>Community & Membership</option><option>Other</option></select><span className="pointer-events-none absolute right-3.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] text-cyan-300 group-focus-within/goal:border-red-400/35 group-focus-within/goal:text-red-300"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="m4 6 4 4 4-4"/></svg></span></span></label>
-              <label className="group/style block"><span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Website Style</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Aesthetic / 04</span></span><span className="relative block"><select value={brandStyle} onChange={(e) => setBrandStyle(e.target.value)} className="h-13 w-full appearance-none rounded-xl border border-white/[0.08] bg-slate-950/80 px-4 pr-12 text-sm text-white outline-none transition-all hover:border-red-500/25 focus:border-red-400/50 focus:shadow-[0_0_20px_rgba(239,68,68,0.1)]"><option>Minimal</option><option>Modern</option><option>Corporate</option><option>Luxury</option><option>Creative</option><option>Dark</option><option>Light</option><option>Glassmorphism</option><option>Neumorphism</option><option>Futuristic</option></select><span className="pointer-events-none absolute right-3.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/[0.05] text-cyan-300 group-focus-within/style:border-red-400/35 group-focus-within/style:text-red-300"><svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="1.5"><path d="m4 6 4 4 4-4"/></svg></span></span></label>
+              <div className="block md:col-span-2">
+                <span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Website Style</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Aesthetic / 04</span></span>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {WEBSITE_STYLE_OPTIONS.map((option) => {
+                    const selected = brandStyle === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => setBrandStyle(option.value)}
+                        className={selected
+                          ? "rounded-2xl border border-red-300/60 bg-red-500/15 p-4 text-left shadow-[0_0_24px_rgba(239,68,68,0.14)]"
+                          : "rounded-2xl border border-white/[0.08] bg-slate-950/80 p-4 text-left transition hover:border-red-500/25 hover:bg-slate-900/80"}
+                      >
+                        <span className="flex items-start justify-between gap-3">
+                          <span>
+                            <span className="block text-sm font-semibold text-white">{option.value}</span>
+                            <span className="mt-1 block text-xs leading-5 text-slate-400">{option.label}</span>
+                          </span>
+                          <span className={selected ? "flex h-6 w-6 items-center justify-center rounded-full border border-red-300/60 bg-red-500/20 text-red-100" : "flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-transparent"}>
+                            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2">
+                              <path d="m3.5 8.5 3 3 6-7" />
+                            </svg>
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="block md:col-span-2"><span className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Website Requirements</span><span className="text-[8px] uppercase tracking-[0.16em] text-cyan-400/70">Requirements / 05</span></span><textarea rows={5} placeholder="Describe your website, required pages, features, design preferences, and any special requirements..." value={brandDescription} onChange={(e) => setBrandDescription(e.target.value)} className="min-h-40 w-full resize-y rounded-xl border border-white/[0.08] bg-slate-950/80 p-4 text-sm leading-6 text-white outline-none transition-all placeholder:text-slate-600 hover:border-red-500/20 focus:border-red-400/50 focus:shadow-[0_0_24px_rgba(239,68,68,0.1)]"/></label>
             </div>
 
@@ -874,8 +994,101 @@ return (
                       ], ["aboutText", "About text"], ["servicesText", "Services text"]] as const).map(([field, label]) => (
                         <label key={field} className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">{label}</span><textarea value={draftEdits[field]} onChange={(event) => updateDraftEdit(field, event.target.value)} maxLength={4_000} required rows={4} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
                       ))}
-                      <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">Website template / style</span><select value={draftEdits.template} onChange={(event) => updateDraftEdit("template", event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50">{WEBSITE_TEMPLATES.map((template) => <option key={template}>{template}</option>)}</select></label>
-                      <label className="block"><span className="mb-2 block text-xs font-semibold text-slate-300">Brand palette</span><input value={draftPalette} onChange={(event) => setDraftPalette(event.target.value)} placeholder="#173D32, #D4AF37, #F8F5EE, #102A23" maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
+                      <div className="block md:col-span-2">
+                        <span className="mb-2 block text-xs font-semibold text-slate-300">Website template / style</span>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          {WEBSITE_STYLE_OPTIONS.map((option) => {
+                            const selected = draftEdits.template === option.value;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => updateDraftEdit("template", option.value)}
+                                className={selected
+                                  ? "rounded-2xl border border-cyan-300/60 bg-cyan-400/[0.08] p-4 text-left shadow-[0_0_24px_rgba(34,211,238,0.12)]"
+                                  : "rounded-2xl border border-white/10 bg-slate-950 p-4 text-left transition hover:border-cyan-400/30 hover:bg-slate-900"}
+                              >
+                                <span className="flex items-start justify-between gap-3">
+                                  <span>
+                                    <span className="block text-sm font-semibold text-white">{option.value}</span>
+                                    <span className="mt-1 block text-xs leading-5 text-slate-400">{option.label}</span>
+                                  </span>
+                                  <span className={selected ? "flex h-6 w-6 items-center justify-center rounded-full border border-cyan-300/60 bg-cyan-400/15 text-cyan-100" : "flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-transparent"}>
+                                    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2">
+                                      <path d="m3.5 8.5 3 3 6-7" />
+                                    </svg>
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="block md:col-span-2">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-slate-300">Brand palette</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomPaletteInput((current) => !current)}
+                            className="rounded-full border border-white/10 px-3 py-1 text-[11px] font-semibold text-slate-300 transition hover:border-cyan-400/35 hover:text-white"
+                          >
+                            Advanced / Custom colors
+                          </button>
+                        </div>
+                        <div className="grid gap-3 xl:grid-cols-2">
+                          {paletteOptions.map((palette) => {
+                            const selected = selectedDraftPalette !== "" && selectedDraftPalette === normalizePaletteValue(palette.value);
+                            const swatches = paletteSwatches(palette.value, fallbackPaletteValue);
+                            const showBrandingRecommended = palette.id === "branding-ai" && hasSavedBrandingPalette;
+                            const showForestRecommended = palette.id === "forest-luxe" && isStrongestInteriorsContext;
+                            return (
+                              <button
+                                key={palette.id}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => setDraftPalette(palette.value)}
+                                className={selected
+                                  ? "rounded-2xl border border-cyan-300/60 bg-cyan-400/[0.08] p-4 text-left shadow-[0_0_24px_rgba(34,211,238,0.12)]"
+                                  : "rounded-2xl border border-white/10 bg-slate-950 p-4 text-left transition hover:border-cyan-400/30 hover:bg-slate-900"}
+                              >
+                                <span className="flex items-start justify-between gap-3">
+                                  <span>
+                                    <span className="block text-sm font-semibold text-white">{palette.name}</span>
+                                    <span className="mt-1 block text-xs leading-5 text-slate-400">{palette.label}</span>
+                                  </span>
+                                  <span className={selected ? "flex h-6 w-6 items-center justify-center rounded-full border border-cyan-300/60 bg-cyan-400/15 text-cyan-100" : "flex h-6 w-6 items-center justify-center rounded-full border border-white/10 text-transparent"}>
+                                    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth="2">
+                                      <path d="m3.5 8.5 3 3 6-7" />
+                                    </svg>
+                                  </span>
+                                </span>
+                                {(showBrandingRecommended || showForestRecommended) && (
+                                  <span className="mt-3 inline-flex rounded-full border border-amber-300/35 bg-amber-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">Recommended</span>
+                                )}
+                                <span className="mt-4 flex flex-wrap gap-2">
+                                  {swatches.map((color, index) => (
+                                    <span
+                                      key={`${palette.id}-${color}-${index}`}
+                                      className="h-9 w-9 rounded-full border border-white/15 shadow-[0_0_14px_rgba(255,255,255,0.08)]"
+                                      style={{ backgroundColor: color }}
+                                    />
+                                  ))}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {usingCustomDraftPalette && (
+                          <p className="mt-3 text-xs text-amber-200">Custom palette active. You can keep it or pick a visual preset.</p>
+                        )}
+                        {showCustomPaletteInput && (
+                          <label className="mt-4 block">
+                            <span className="mb-2 block text-xs font-semibold text-slate-300">Custom palette value</span>
+                            <input value={draftPalette} onChange={(event) => setDraftPalette(event.target.value)} placeholder="#173D32, #D4AF37, #F8F5EE, #102A23" maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" />
+                          </label>
+                        )}
+                      </div>
                       <label className="block md:col-span-2"><span className="mb-2 block text-xs font-semibold text-slate-300">Typography</span><input value={draftTypography} onChange={(event) => setDraftTypography(event.target.value)} maxLength={500} className="h-12 w-full rounded-xl border border-white/10 bg-slate-950 px-3 text-sm text-white outline-none focus:border-cyan-400/50" /></label>
                       <div className="md:col-span-2 grid gap-4 sm:grid-cols-2">
                         {([ ["hero", "Hero photo", heroPhotoInput, websiteMedia.hero], ["secondary", "Project / gallery photo", projectPhotoInput, websiteMedia.work] ] as const).map(([slot, label, inputRef, current]) => <div key={slot} className="rounded-xl border border-white/10 p-4"><p className="text-sm font-semibold text-white">{label}</p><input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void updateWebsitePhoto(slot, file); }} /><div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => inputRef.current?.click()} className={copyButtonClass}>{uploadingPhoto === slot ? "Uploading…" : current ? "Replace Photo" : "Add Photo"}</button>{current && <button type="button" disabled={Boolean(uploadingPhoto)} onClick={() => void updateWebsitePhoto(slot)} className="min-h-9 rounded-xl border border-red-400/35 px-3.5 py-2 text-xs font-semibold text-red-200 disabled:opacity-50">Remove Photo</button>}</div></div>)}
