@@ -4,6 +4,8 @@ import test from "node:test";
 import { resolveWebsiteMedia } from "../../app/lib/business-site-visuals.ts";
 import { resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
 import { adaptLegacyWebsiteToSiteDocument, buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
+import { normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
+import { buildSavedWebsitePublicationSnapshot } from "../../app/lib/website-publication.ts";
 
 const output = Object.fromEntries(["websiteOverview", "websiteGoal", "recommendedPages", "siteStructure", "websiteFeatures", "designRecommendations", "colourScheme", "typography", "recommendedTechStack", "seoRecommendations"].map((key) => [key, `${key} value`]));
 const input = { companyName: "Example Studio", template: "Modern", websiteOutput: output };
@@ -148,6 +150,67 @@ test("saving a new palette reloads the same schema-v2 theme from the saved site 
   });
   const reloaded = validateWebsiteSiteDocument(structuredClone(saved));
   assert.deepEqual(reloaded?.theme, saved.theme);
+});
+
+test("preview, saved draft, and public publication reuse the same resolved schema-v2 theme", async () => {
+  const customTheme = {
+    template: "Dark",
+    colorPalette: "#010203, #0A7C86, #D9E7E8, #FAF6F0, #B68C5A, #FDFDFD",
+    typography: "Fraunces",
+  };
+  const staleDocument = validateWebsiteSiteDocument({
+    ...adaptLegacyWebsiteToSiteDocument(input),
+    theme: {
+      template: "Modern",
+      colorPalette: "#AAAAAA, #BBBBBB, #CCCCCC, #DDDDDD, #EEEEEE, #FFFFFF",
+      typography: "Old Font",
+    },
+  });
+  const savedDraft = normalizeWebsiteDraftForPersistence({
+    project: { name: "Example Studio", companyName: "Example Studio", industry: "Design", brandStyle: "Modern" },
+    website: {
+      ...output,
+      colourScheme: customTheme.colorPalette,
+      typography: customTheme.typography,
+      websiteEdits: {
+        companyName: "Example Studio",
+        heroHeadline: "Distinctive spaces, clearly presented",
+        heroDescription: "Updated hero copy",
+        aboutText: "Updated about copy",
+        servicesText: "Updated services copy",
+        phone: "",
+        email: "",
+        address: "",
+        whatsapp: "",
+        primaryCtaLabel: "Book now",
+        primaryCtaLink: "#contact",
+        template: customTheme.template,
+      },
+      siteDocument: staleDocument,
+    },
+  });
+  assert.ok(savedDraft?.siteDocument);
+  const savedTheme = savedDraft.siteDocument.theme;
+  assert.deepEqual(savedTheme, customTheme);
+  const publication = buildSavedWebsitePublicationSnapshot({
+    companyName: "Example Studio",
+    industry: "Design",
+    websiteGoal: "Book consultations",
+    websiteRequirements: "Show modern design work.",
+    fallbackTemplate: "Modern",
+    outputResult: JSON.stringify(savedDraft),
+  });
+  assert.equal(publication?.schemaVersion, 2);
+  const publicTheme = publication?.schemaVersion === 2 ? publication.siteDocument.theme : null;
+  assert.deepEqual(publicTheme, savedTheme);
+  const [preview, root, child] = await Promise.all([
+    readFile(new URL("../../app/dashboard/components/WebsitePreview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../app/business/[slug]/[...path]/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(preview, /<WebsiteSiteRenderer document=\{siteDocument\}/);
+  assert.match(root, /<WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
+  assert.match(child, /<WebsiteSiteRenderer document=\{loaded\.snapshot\.siteDocument!\}/);
 });
 
 test("Website AI reuses the existing owner-photo endpoint for add, replace and remove", async () => {

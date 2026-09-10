@@ -10,7 +10,7 @@ import {
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicServiceText } from "@/app/lib/public-website-presentation";
 import { hasUnsafeWebsitePlainText, validateWebsiteAiOutput, validateWebsiteEdits, validateWebsiteTemplate } from "@/app/lib/website-publication";
-import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 type ProjectIdentity = Readonly<{
   name: string;
@@ -228,7 +228,18 @@ export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntellige
   const validatedOutput = validateWebsiteAiOutput(merged);
   const validatedEdits = validateWebsiteEdits(websiteEdits);
   if (!validatedOutput || !validatedEdits) return { ok: false, code: "INVALID_MERGED_WEBSITE" } as const;
-  const output = { ...validatedOutput, websiteEdits: validatedEdits, ...(normalized.siteDocument && { siteDocument: normalized.siteDocument }) };
+  const syncedSiteDocument = normalized.siteDocument
+    ? buildWebsiteSiteDocumentWithTheme({
+      siteDocument: normalized.siteDocument,
+      companyName,
+      template: validatedEdits.template,
+      colorPalette: validatedOutput.colourScheme,
+      typography: validatedOutput.typography,
+      websiteOutput: validatedOutput,
+      websiteEdits: validatedEdits,
+    })
+    : null;
+  const output = { ...validatedOutput, websiteEdits: validatedEdits, ...(syncedSiteDocument && { siteDocument: syncedSiteDocument }) };
   const original = { ...website, ...(existingEdits && { websiteEdits: existingEdits }), ...(normalized.siteDocument && { siteDocument: normalized.siteDocument }) };
   const modules: WebsiteIntelligenceModule[] = [];
   const changed = (left: unknown, right: unknown) => JSON.stringify(left) !== JSON.stringify(right);
