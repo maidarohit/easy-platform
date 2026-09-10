@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import WebsiteSiteRenderer from "@/app/dashboard/components/WebsiteSiteRenderer";
 import { loadPublishedBusiness } from "@/app/lib/public-business-publication";
-import { publicBusinessView, publicServices } from "@/app/lib/public-business-presentation";
+import { publicServices } from "@/app/lib/public-business-presentation";
 import { canonicalApplicationOrigin } from "@/app/lib/public-app-url";
 import { publicWebsitePageSeo, resolvePublishedWebsitePage } from "@/app/lib/website-site-presentation";
 
@@ -14,7 +14,7 @@ async function loadPage(params: Props["params"]) {
   if (!Array.isArray(segments) || segments.length < 1 || segments.length > 2) return null;
   const slug = decodeURIComponent(encodedSlug);
   const published = await loadPublishedBusiness(slug);
-  const snapshot = published && publicBusinessView(published.snapshot);
+  const snapshot = published?.snapshot ?? null;
   const path = `/${segments.map((segment) => decodeURIComponent(segment)).join("/")}`;
   if (!snapshot?.siteDocument || !resolvePublishedWebsitePage(snapshot.siteDocument, path)) return null;
   return { slug, path, snapshot };

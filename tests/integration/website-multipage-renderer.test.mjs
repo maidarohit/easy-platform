@@ -76,6 +76,10 @@ test("schema-v2 uses one polished shared presentation for preview and public rou
   assert.match(preview, /<WebsiteSiteRenderer document=\{siteDocument\}/);
   assert.match(root, /<WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
   assert.match(child, /<WebsiteSiteRenderer document=\{loaded\.snapshot\.siteDocument!\}/);
+  assert.match(root, /const snapshot = published\.snapshot/);
+  assert.match(root, /if \(snapshot\.siteDocument\) return <WebsiteSiteRenderer/);
+  assert.match(root, /const publicSnapshot = publicBusinessView\(snapshot\)/);
+  assert.match(child, /const snapshot = published\?\.snapshot \?\? null/);
   assert.match(renderer, /max-w-7xl/);
   assert.match(renderer, /PageIntro/);
   assert.match(renderer, /Mobile navigation/);
