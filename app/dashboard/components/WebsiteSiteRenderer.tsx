@@ -10,10 +10,31 @@ import { websiteThemes } from "./websiteThemes";
 import { websiteMediaReference } from "@/app/lib/website-essential-pages";
 import { publicContactMethods, validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
 import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
+import { OrderForm } from "@/app/business/[slug]/OrderForm";
 
 type SiteService = { id: string; title: string; body: string; path: string };
 export type WebsiteSiteServiceItem = { id: string; title: string; description?: string | null; path?: string | null };
+export type WebsiteCatalogueItem = {
+  id: string;
+  name: string;
+  kind: "product" | "service";
+  category?: string | null;
+  description?: string | null;
+  pricePaise: number;
+};
 type BlockProps = { block: WebsiteBlock; media: ResolvedWebsiteMedia; accent: string; accentText: string; basePath: string; services: SiteService[]; fallbackHeadline: string; fallbackDescription: string; pagePath: string; secondaryHref: string | null; contact: PublicContactSettings; inquirySlug?: string; preview: boolean };
+
+function formatInr(pricePaise: number) {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(pricePaise / 100);
+}
+
+function catalogueLabel(items: readonly WebsiteCatalogueItem[]) {
+  if (items.every((item) => item.kind === "product")) return "Products";
+  if (items.every((item) => item.kind === "service")) {
+    return items.some((item) => /package|plan|bundle/i.test(`${item.category ?? ""} ${item.name}`)) ? "Packages" : "Services";
+  }
+  return "Store";
+}
 
 function savedPalette(value: string, theme: (typeof websiteThemes)[string]) {
   const colors = value.match(/#[0-9a-f]{6}\b/gi) ?? [];
@@ -320,7 +341,12 @@ function PageEmptyState({ type, contactHref, basePath, accent }: { type: Website
   return <section className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-4xl rounded-2xl border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-center text-[var(--site-card-text)] shadow-sm"><p className="mx-auto max-w-2xl leading-7 text-[var(--site-card-muted)]">{copy}</p><SiteLink href={contactHref} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center font-semibold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Contact us</SiteLink></div></section>;
 }
 
-export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], contact: suppliedContact = {}, inquirySlug, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; contact?: PublicContactSettings; inquirySlug?: string; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
+function StoreSection({ items, selectedProductId, slug, accent, checkoutReady }: { items: readonly WebsiteCatalogueItem[]; selectedProductId: string; slug: string; accent: string; checkoutReady: boolean }) {
+  const label = catalogueLabel(items);
+  return <Section muted><div id="store" data-block-type="store" className="mx-auto max-w-7xl"><p className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>{label}</p><h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">{label} available to request.</h2><p className="mt-4 max-w-2xl leading-7 text-[var(--site-section-muted)]">{checkoutReady ? "Choose an item and complete your purchase securely." : "Choose an item and send a request to the business."}</p><div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{items.map((item) => <article key={item.id} className="rounded-2xl border border-[var(--site-border)] bg-[var(--site-card)] p-7 text-[var(--site-card-text)] shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--site-card-muted)]">{item.kind === "service" ? "Service" : "Product"}</p><h3 className="mt-4 text-2xl font-semibold" style={{ color: accent }}>{item.name}</h3>{item.category && <p className="mt-2 text-sm text-[var(--site-card-muted)]">{item.category}</p>}{item.description && <p className="mt-4 leading-7 text-[var(--site-card-muted)]">{item.description}</p>}<p className="mt-5 text-lg font-semibold">{formatInr(item.pricePaise)}</p><a href={`?product=${encodeURIComponent(item.id)}#order`} className="mt-6 inline-flex text-sm font-bold" style={{ color: accent }}>{checkoutReady ? "Buy" : "Enquire"} <span aria-hidden="true" className="ml-2">→</span></a></article>)}</div><div className="mx-auto mt-10 max-w-3xl"><OrderForm slug={slug} products={items.map((item) => ({ id: item.id, name: item.name, kind: item.kind }))} selectedProductId={selectedProductId} primary={accent} checkoutReady={checkoutReady} /></div></div></Section>;
+}
+
+export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], catalogueItems = [], selectedProductId = "", contact: suppliedContact = {}, inquirySlug, checkoutReady = false, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; catalogueItems?: readonly WebsiteCatalogueItem[]; selectedProductId?: string; contact?: PublicContactSettings; inquirySlug?: string; checkoutReady?: boolean; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
   const validated = validateWebsiteSiteDocument(document), page = validated && (publicPageOnly ? resolvePublishedWebsitePage(validated, pagePath) : resolveWebsiteSitePage(validated, pagePath, preview));
   if (!validated || !page) return null;
   const baseTheme = websiteThemes[validated.theme.template] || websiteThemes.Modern;
@@ -409,7 +435,7 @@ const darkForeground = resolveWebsiteSurfaceForeground(palette.dark);
       <nav aria-label="Primary navigation" className="hidden items-center gap-6 md:flex">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`border-b-2 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 ${href === page.path ? "border-current opacity-100" : "border-transparent opacity-65 hover:opacity-100"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav>
       {headerCta && <SiteLink href={publicPageOnly ? contactHref : validated.header.ctaHref} basePath={basePath} className="px-4 py-2 text-sm font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: baseTheme.buttonRadius }}>{headerCta}</SiteLink>}
     </div><nav aria-label="Mobile navigation" className="mx-auto mt-3 flex max-w-7xl gap-5 overflow-x-auto pb-1 md:hidden">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`shrink-0 py-1 text-sm font-semibold ${href === page.path ? "opacity-100" : "opacity-60"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav></header>
-    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} fallbackDescription={fallbackDescription} pagePath={page.path} secondaryHref={secondaryHref} contact={contact} inquirySlug={inquirySlug} preview={preview} />)}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
+    <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} fallbackDescription={fallbackDescription} pagePath={page.path} secondaryHref={secondaryHref} contact={contact} inquirySlug={inquirySlug} preview={preview} />)}{publicPageOnly && page.path === "/" && inquirySlug && catalogueItems.length > 0 && <StoreSection items={catalogueItems} selectedProductId={selectedProductId} slug={inquirySlug} accent={accent} checkoutReady={checkoutReady} />}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
     <footer className="border-t border-[var(--site-border)] bg-[var(--site-dark)] px-5 py-12 text-[var(--site-dark-text)] sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--site-dark-muted)]">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-[var(--site-dark-muted)] hover:text-[var(--site-dark-text)]">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-[var(--site-dark-text)]">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-[var(--site-dark-muted)]" /></footer>
   </div>;
 }

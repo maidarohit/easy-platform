@@ -40,6 +40,10 @@ test("schema-v2 business root uses the shared multi-page renderer", async () => 
   const root = await source("app/business/[slug]/page.tsx");
   assert.match(root, /snapshot\.siteDocument[\s\S]*WebsiteSiteRenderer[\s\S]*pagePath="\/"[\s\S]*basePath=\{`\/business\/[\s\S]*publicPageOnly/);
   assert.match(root, /inquirySlug=\{slug\}/);
+  assert.match(root, /const catalogue = await db\.select/);
+  assert.match(root, /catalogueItems=\{catalogue\}/);
+  assert.match(root, /selectedProductId=\{selectedProductId\}/);
+  assert.match(root, /checkoutReady=\{checkoutReady\}/);
 });
 
 test("schema-v2 business child routes resolve only published document pages", async () => {
@@ -92,6 +96,21 @@ test("preview and live supply the same verified service-card boundary", async ()
   assert.match(preview, /serviceItems=\{serviceItems\}/);
   assert.match(root, /serviceItems=\{publicServices\(snapshot\)\.map/);
   assert.match(child, /serviceItems=\{publicServices\(loaded\.snapshot\)\.map/);
+});
+
+test("schema-v2 published business pages render the live active catalogue without republish and fall back to enquiry when checkout is unavailable", async () => {
+  const [root, renderer] = await Promise.all([
+    source("app/business/[slug]/page.tsx"),
+    source("app/dashboard/components/WebsiteSiteRenderer.tsx"),
+  ]);
+  assert.match(root, /const catalogue = await db\.select/);
+  assert.match(root, /eq\(projectProducts\.projectId, published\.projectId\)/);
+  assert.match(root, /eq\(projectProducts\.isActive, true\)/);
+  assert.match(root, /if \(snapshot\.siteDocument\) return <WebsiteSiteRenderer[\s\S]*catalogueItems=\{catalogue\}[\s\S]*checkoutReady=\{checkoutReady\}/);
+  assert.match(renderer, /publicPageOnly && page\.path === "\/" && inquirySlug && catalogueItems\.length > 0 && <StoreSection/);
+  assert.match(renderer, /<OrderForm slug=\{slug\} products=\{items\.map/);
+  assert.match(renderer, /checkoutReady \? "Buy" : "Enquire"/);
+  assert.match(renderer, /checkoutReady \? "Choose an item and complete your purchase securely\." : "Choose an item and send a request to the business\."/);
 });
 
 test("republish reads the latest persisted schema-v2 document before the legacy preview adapter", async () => {

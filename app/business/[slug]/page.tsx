@@ -47,8 +47,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessPage({ params, searchParams }: Props) {
   const slug = decodeURIComponent((await params).slug); const published = await loadPublishedBusiness(slug); if (!published) notFound();
   const snapshot = published.snapshot;
-  if (snapshot.siteDocument) return <WebsiteSiteRenderer document={snapshot.siteDocument} pagePath="/" basePath={`/business/${encodeURIComponent(slug)}`} industry={snapshot.business.industry ?? ""} description={snapshot.business.description ?? ""} media={{ hero: snapshot.website?.heroImage, work: snapshot.website?.secondaryImage }} serviceItems={publicServices(snapshot).map((service, index) => ({ id: `published-service-${index + 1}`, title: service.title, description: service.description }))} contact={snapshot.contact} inquirySlug={slug} publicPageOnly />;
-  const publicSnapshot = publicBusinessView(snapshot);
   const catalogue = await db.select({
     id: projectProducts.id, name: projectProducts.name, kind: projectProducts.kind, category: projectProducts.category,
     description: projectProducts.description, pricePaise: projectProducts.pricePaise,
@@ -67,14 +65,17 @@ export default async function PublicBusinessPage({ params, searchParams }: Props
     && isStoreRazorpayCheckoutEnabled()
     && getStoreCheckoutPublicKey()
     && merchantAccountCanAcceptCheckout({ ...merchant, expectedProjectId: published.projectId }));
+  const query = await searchParams;
+  const requestedProduct = query.product; const selectedProductId = typeof requestedProduct === "string" && catalogue.some((item) => item.id === requestedProduct) ? requestedProduct : "";
+  if (snapshot.siteDocument) return <WebsiteSiteRenderer document={snapshot.siteDocument} pagePath="/" basePath={`/business/${encodeURIComponent(slug)}`} industry={snapshot.business.industry ?? ""} description={snapshot.business.description ?? ""} media={{ hero: snapshot.website?.heroImage, work: snapshot.website?.secondaryImage }} serviceItems={publicServices(snapshot).map((service, index) => ({ id: `published-service-${index + 1}`, title: service.title, description: service.description }))} catalogueItems={catalogue} selectedProductId={selectedProductId} contact={snapshot.contact} inquirySlug={slug} checkoutReady={checkoutReady} publicPageOnly />;
+  const publicSnapshot = publicBusinessView(snapshot);
   const storeLabel = catalogueLabel(catalogue);
   const primary = publicSnapshot.brand?.colours[0] || "#173D32"; const accent = publicSnapshot.brand?.colours[1] || "#E9E4D8";
   const cta = publicCallToAction(publicSnapshot); const contact = publicContact(publicSnapshot); const services = publicServices(publicSnapshot);
   const summary = publicServicesSummary(publicSnapshot); const process = publicProcess(publicSnapshot);
   const values = publicValuePoints(publicSnapshot); const story = publicStory(publicSnapshot); const kind = publicBusinessKind(publicSnapshot);
   const heroCopy = publicHeroCopy(publicSnapshot); const offeringLabel = kind.workLabel === "Featured range" ? "Products" : "Services";
-  const query = await searchParams; const requestedService = query.service; const selectedService = typeof requestedService === "string" && services.some((item) => item.title === requestedService) ? requestedService : "";
-  const requestedProduct = query.product; const selectedProductId = typeof requestedProduct === "string" && catalogue.some((item) => item.id === requestedProduct) ? requestedProduct : "";
+  const requestedService = query.service; const selectedService = typeof requestedService === "string" && services.some((item) => item.title === requestedService) ? requestedService : "";
   const visualContext = { industry: publicSnapshot.business.industry, description: publicSnapshot.business.description };
   const media = resolveWebsiteMedia({ ...visualContext, uploaded: {
     hero: uploadedSrcFromRecord(publicSnapshot.website, "hero"),

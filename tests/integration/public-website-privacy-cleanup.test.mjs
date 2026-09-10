@@ -89,6 +89,7 @@ test("pricing is sourced only from active saved catalogue products, never public
   ]);
   assert.match(page, /projectProducts\.isActive, true/);
   assert.match(page, /formatInr\(item\.pricePaise\)/);
+  assert.match(page, /catalogueItems=\{catalogue\}/);
   assert.doesNotMatch(presentation, /pricingRecommendations|Free Plan|Growth Plan|Pro Plan/);
 });
 
