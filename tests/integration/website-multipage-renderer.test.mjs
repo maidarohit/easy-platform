@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { resolveWebsiteMedia } from "../../app/lib/business-site-visuals.ts";
+import { readableTextColor, resolveWebsiteSurfaceForeground } from "../../app/lib/website-theme-foreground.ts";
 import { resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
 import { adaptLegacyWebsiteToSiteDocument, buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
 import { normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
@@ -227,9 +228,29 @@ test("preview and public schema-v2 routes share the same public renderer text-co
   assert.match(page, /websiteRequirements=\{savedBusinessDescription \|\| project\?\.businessDescription \|\| brandDescription\}/);
   assert.match(preview, /publicPageOnly=\{previewSiteDocument\}/);
   assert.match(renderer, /text-\[var\(--site-section-text\)\]/);
-  assert.match(renderer, /style=\{\{\s*backgroundColor: accent,\s*color: readableTextColor\(accent\),/);
+  assert.match(renderer, /const accentForeground = resolveWebsiteSurfaceForeground\(accent\)/);
+  assert.match(renderer, /style=\{\{\s*backgroundColor: accent,\s*color: accentText,/);
   assert.match(root, /description=\{snapshot\.business\.description \?\? ""\}/);
   assert.match(child, /description=\{loaded\.snapshot\.business\.description \?\? ""\}/);
+});
+
+test("preview and public reuse the same shared text-contrast resolver for section, card, and CTA foregrounds", async () => {
+  const [preview, renderer] = await Promise.all([
+    readFile(new URL("../../app/dashboard/components/WebsitePreview.tsx", import.meta.url), "utf8"),
+    componentSource(),
+  ]);
+  assert.match(preview, /readableTextColor/);
+  assert.match(renderer, /resolveWebsiteSurfaceForeground/);
+  assert.match(renderer, /text-\[var\(--site-card-text\)\]/);
+  assert.match(renderer, /text-\[var\(--site-card-muted\)\]/);
+  assert.match(renderer, /text-\[var\(--site-page-muted\)\]/);
+  const section = resolveWebsiteSurfaceForeground("#12372D");
+  const card = resolveWebsiteSurfaceForeground("#F5F0E6");
+  const cta = resolveWebsiteSurfaceForeground("#174A3A");
+  assert.equal(section.text, "#ffffff");
+  assert.equal(card.text, "#0f172a");
+  assert.equal(cta.text, readableTextColor("#174A3A"));
+  assert.equal(cta.text, "#ffffff");
 });
 
 test("Website AI reuses the existing owner-photo endpoint for add, replace and remove", async () => {

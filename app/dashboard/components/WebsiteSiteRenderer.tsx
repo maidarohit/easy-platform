@@ -4,17 +4,12 @@ import { PoweredByBuzypeezy } from "@/app/components/PoweredByBuzypeezy";
 import { resolveWebsiteMedia, type WebsiteMediaInput, type ResolvedWebsiteMedia } from "@/app/lib/business-site-visuals";
 import { publicWebsitePageBlocks, resolvePublishedWebsitePage, resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "@/app/lib/website-site-presentation";
 import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
+import { readableTextColor, resolveWebsiteSurfaceForeground } from "@/app/lib/website-theme-foreground";
 import WebsiteMediaVisual from "./WebsiteMediaVisual";
 import { websiteThemes } from "./websiteThemes";
 import { websiteMediaReference } from "@/app/lib/website-essential-pages";
 import { publicContactMethods, validatePublicContactSettings, type PublicContactSettings } from "@/app/lib/public-contact";
 import { InquiryForm } from "@/app/business/[slug]/InquiryForm";
-
-function readableTextColor(background: string) {
-  const value = Number.parseInt(background.slice(1), 16);
-  const luminance = (0.299 * ((value >> 16) & 255) + 0.587 * ((value >> 8) & 255) + 0.114 * (value & 255)) / 255;
-  return luminance > 0.58 ? "#0f172a" : "#ffffff";
-}
 
 type SiteService = { id: string; title: string; body: string; path: string };
 export type WebsiteSiteServiceItem = { id: string; title: string; description?: string | null; path?: string | null };
@@ -58,7 +53,7 @@ function SiteLink({ href, basePath, className, style, onNavigate, children }: { 
 }
 
 function Section({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
-  return <section className={muted ? "border-y border-[var(--site-border)] bg-[var(--site-section)] px-5 py-16 text-[var(--site-section-text)] sm:px-8 sm:py-20 lg:px-12" : "bg-[var(--site-page)] px-5 py-16 sm:px-8 sm:py-20 lg:px-12"}>{children}</section>;
+  return <section className={muted ? "border-y border-[var(--site-border)] bg-[var(--site-section)] px-5 py-16 text-[var(--site-section-text)] sm:px-8 sm:py-20 lg:px-12" : "bg-[var(--site-page)] px-5 py-16 text-[var(--site-page-text)] sm:px-8 sm:py-20 lg:px-12"}>{children}</section>;
 }
 
 function Heading({ children }: { children: string }) {
@@ -70,7 +65,7 @@ function HeroBlock({ block, media, accent, accentText, basePath, fallbackHeadlin
   const label = safeWebsiteBlockText(block.ctaLabel, 100);
   return <section className="px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28" style={!media.hero ? { background: `linear-gradient(145deg, ${accent}18, transparent 68%)` } : undefined}><div data-block-type="hero" className={`mx-auto grid max-w-7xl items-center gap-10 lg:gap-16 ${media.hero ? "lg:grid-cols-[1.05fr_.95fr]" : ""}`}><div className={media.hero ? "" : "max-w-4xl"}>
     <h1 className="text-4xl font-extrabold leading-[1.02] tracking-[-0.055em] sm:text-6xl lg:text-7xl">{headline || fallbackHeadline}</h1>
-    {description && <p className="mt-5 max-w-2xl text-lg leading-8 opacity-75">{description}</p>}
+    {description && <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--site-page-muted)]">{description}</p>}
     <div className="mt-8 flex flex-wrap gap-3">{label && <SiteLink href={block.ctaHref} basePath={basePath} className="inline-flex min-h-12 items-center px-7 py-3 font-semibold shadow-sm transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2" style={{ backgroundColor: accent, color: accentText, borderRadius: "0.75rem" }}>{label}</SiteLink>}{secondaryHref && <SiteLink href={secondaryHref} basePath={basePath} className="inline-flex min-h-12 items-center rounded-xl border border-current px-7 py-3 font-semibold transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2">Explore services</SiteLink>}</div>
   </div>{media.hero && <WebsiteMediaVisual media={media.hero} className="aspect-[4/3] min-h-72 rounded-[2rem] shadow-xl" />}</div></section>;
 }
@@ -78,7 +73,7 @@ function HeroBlock({ block, media, accent, accentText, basePath, fallbackHeadlin
 function ContentBlock({ block, fallbackDescription, pagePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "content" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body) || (pagePath === "/" ? fallbackDescription : "");
   if (!body) return null;
-  return <Section muted><div data-block-type="content" className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[.7fr_1.3fr] lg:gap-14">{heading && <Heading>{heading}</Heading>}<p className="max-w-3xl whitespace-pre-wrap text-lg leading-8 opacity-75">{body}</p></div></Section>;
+  return <Section muted><div data-block-type="content" className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[.7fr_1.3fr] lg:gap-14">{heading && <Heading>{heading}</Heading>}<p className="max-w-3xl whitespace-pre-wrap text-lg leading-8 text-[var(--site-section-muted)]">{body}</p></div></Section>;
 }
 
 function ServicesBlock({
@@ -86,6 +81,7 @@ function ServicesBlock({
   media,
   services,
   accent,
+  accentText,
   basePath,
   pagePath,
 }: BlockProps & {
@@ -109,7 +105,7 @@ function ServicesBlock({
         {heading && <Heading>{heading}</Heading>}
 
         {introduction && (
-          <p className="mt-5 max-w-3xl text-lg leading-8 opacity-75">
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--site-page-muted)]">
             {introduction}
           </p>
         )}
@@ -121,12 +117,12 @@ function ServicesBlock({
               .map((service) => (
                 <article
                   key={service.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-7 text-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                  className="rounded-2xl border border-[var(--site-border)] bg-[var(--site-card)] p-7 text-[var(--site-card-text)] shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
                 >
                   <h3 className="text-xl font-bold">{service.title}</h3>
 
                   {service.body && (
-                    <p className="mt-3 line-clamp-4 leading-7 text-slate-600">
+                    <p className="mt-3 line-clamp-4 leading-7 text-[var(--site-card-muted)]">
                       {service.body}
                     </p>
                   )}
@@ -165,10 +161,10 @@ function ServicesBlock({
             className="mt-14 rounded-[2rem] border border-slate-200 p-8 shadow-lg sm:p-10"
             style={{
               backgroundColor: accent,
-              color: readableTextColor(accent),
+              color: accentText,
             }}
           >
-            <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60">
+            <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: resolveWebsiteSurfaceForeground(accent).muted }}>
               Why choose us
             </p>
 
@@ -184,7 +180,7 @@ function ServicesBlock({
                 >
                   <h4 className="font-semibold">{service.title}</h4>
 
-                  <p className="mt-2 text-sm leading-6 opacity-70">
+                  <p className="mt-2 text-sm leading-6" style={{ color: resolveWebsiteSurfaceForeground(accent).muted }}>
                     {service.body ||
                       `Discuss ${service.title.toLowerCase()} around your confirmed requirements.`}
                   </p>
@@ -201,7 +197,7 @@ function ServicesBlock({
 function ServiceDetailBlock({ block }: BlockProps & { block: Extract<WebsiteBlock, { type: "serviceDetail" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body);
   if (!heading && !body) return null;
-  return <Section muted><article data-block-type="serviceDetail" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}{body && <p className="mt-5 text-lg leading-8 opacity-75">{body}</p>}</article></Section>;
+  return <Section muted><article data-block-type="serviceDetail" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}{body && <p className="mt-5 text-lg leading-8 text-[var(--site-section-muted)]">{body}</p>}</article></Section>;
 }
 
 function GalleryBlock({ block, media }: BlockProps & { block: Extract<WebsiteBlock, { type: "gallery" }> }) {
@@ -222,7 +218,7 @@ function ProcessBlock({ block, accent }: BlockProps & { block: Extract<WebsiteBl
     { id: "generic-next-step", title: "Move ahead", body: "Continue with the agreed service and next step." },
   ];
   if (!heading && steps.length === 0) return null;
-  return <Section muted><div data-block-type="process" className="mx-auto max-w-7xl">{heading && <Heading>{heading}</Heading>}<ol className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">{steps.map((step, index) => <li key={step.id} className="rounded-2xl border border-slate-200 bg-white p-7 text-slate-900 shadow-sm"><span className="text-sm font-bold" style={{ color: accent }}>{String(index + 1).padStart(2, "0")}</span>{step.title && <h3 className="mt-3 text-xl font-semibold">{step.title}</h3>}{step.body && <p className="mt-3 leading-7 text-slate-600">{step.body}</p>}</li>)}</ol></div></Section>;
+  return <Section muted><div data-block-type="process" className="mx-auto max-w-7xl">{heading && <Heading>{heading}</Heading>}<ol className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">{steps.map((step, index) => <li key={step.id} className="rounded-2xl border border-[var(--site-border)] bg-[var(--site-card)] p-7 text-[var(--site-card-text)] shadow-sm"><span className="text-sm font-bold" style={{ color: accent }}>{String(index + 1).padStart(2, "0")}</span>{step.title && <h3 className="mt-3 text-xl font-semibold">{step.title}</h3>}{step.body && <p className="mt-3 leading-7 text-[var(--site-card-muted)]">{step.body}</p>}</li>)}</ol></div></Section>;
 }
 
 function FaqBlock({ block, services, contact }: BlockProps & { block: Extract<WebsiteBlock, { type: "faq" }> }) {
@@ -235,13 +231,13 @@ function FaqBlock({ block, services, contact }: BlockProps & { block: Extract<We
     ...(publicContactMethods(contact).length > 0 ? [{ id: "verified-contact", question: "How can I enquire?", answer: "Use one of the approved contact methods on the Contact page to discuss your requirements." }] : []),
   ];
   if (items.length === 0) return null;
-  return <Section><div data-block-type="faq" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}<div className="mt-8 space-y-4">{items.map((item) => <details key={item.id} className="rounded-xl border border-slate-200 p-5"><summary className="cursor-pointer font-semibold">{item.question}</summary><p className="mt-3 leading-7 opacity-75">{item.answer}</p></details>)}</div></div></Section>;
+  return <Section><div data-block-type="faq" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}<div className="mt-8 space-y-4">{items.map((item) => <details key={item.id} className="rounded-xl border border-[var(--site-border)] p-5"><summary className="cursor-pointer font-semibold">{item.question}</summary><p className="mt-3 leading-7 text-[var(--site-page-muted)]">{item.answer}</p></details>)}</div></div></Section>;
 }
 
 function ContactBlock({ block, contact, services, accent, inquirySlug, preview }: BlockProps & { block: Extract<WebsiteBlock, { type: "contact" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body);
   const methods = publicContactMethods(contact);
-  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 opacity-70">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider opacity-55">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm opacity-60">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
+  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-card-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--site-card-muted)]">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm text-[var(--site-card-muted)]">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
 }
 
 function CtaBlock({
@@ -265,13 +261,13 @@ function CtaBlock({
         className="mx-auto max-w-5xl rounded-3xl px-8 py-12 text-center"
         style={{
           backgroundColor: accent,
-          color: readableTextColor(accent),
+          color: accentText,
         }}
       >
         {heading && <Heading>{heading}</Heading>}
 
         {body && (
-          <p className="mx-auto mt-4 max-w-2xl text-lg leading-8 opacity-75">
+          <p className="mx-auto mt-4 max-w-2xl text-lg leading-8" style={{ color: resolveWebsiteSurfaceForeground(accent).muted }}>
             {body}
           </p>
         )}
@@ -311,7 +307,7 @@ export function WebsiteBlockRenderer(props: BlockProps) {
 }
 
 function PageIntro({ title, description, accent }: { title: string; description: string; accent: string }) {
-  return <section className="border-b border-slate-200/70 bg-slate-500/[0.07] px-5 py-14 sm:px-8 sm:py-20 lg:px-12"><div className="mx-auto max-w-7xl"><p className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Explore</p><h1 className="mt-4 max-w-4xl text-4xl font-extrabold leading-tight tracking-[-0.05em] sm:text-6xl">{title}</h1>{description && <p className="mt-5 max-w-2xl text-lg leading-8 opacity-70">{description}</p>}</div></section>;
+  return <section className="border-b border-slate-200/70 bg-slate-500/[0.07] px-5 py-14 text-[var(--site-page-text)] sm:px-8 sm:py-20 lg:px-12"><div className="mx-auto max-w-7xl"><p className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: accent }}>Explore</p><h1 className="mt-4 max-w-4xl text-4xl font-extrabold leading-tight tracking-[-0.05em] sm:text-6xl">{title}</h1>{description && <p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--site-page-muted)]">{description}</p>}</div></section>;
 }
 
 function PageEmptyState({ type, contactHref, basePath, accent }: { type: WebsitePage["type"]; contactHref: string; basePath: string; accent: string }) {
@@ -321,7 +317,7 @@ function PageEmptyState({ type, contactHref, basePath, accent }: { type: Website
     : type === "services" || type === "service" ? "Contact us to discuss the service that best fits your needs."
     : null;
   if (!copy) return null;
-  return <section className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-900 shadow-sm"><p className="mx-auto max-w-2xl leading-7 text-slate-600">{copy}</p><SiteLink href={contactHref} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center font-semibold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Contact us</SiteLink></div></section>;
+  return <section className="px-5 py-12 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-4xl rounded-2xl border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-center text-[var(--site-card-text)] shadow-sm"><p className="mx-auto max-w-2xl leading-7 text-[var(--site-card-muted)]">{copy}</p><SiteLink href={contactHref} basePath={basePath} className="mt-6 inline-flex min-h-11 items-center font-semibold focus-visible:outline-none focus-visible:ring-2" style={{ color: accent }}>Contact us</SiteLink></div></section>;
 }
 
 export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath = "", industry = "", description = "", media: uploadedMedia, serviceItems = [], contact: suppliedContact = {}, inquirySlug, preview = false, publicPageOnly = false, onNavigate }: { document: WebsiteSiteDocument; pagePath?: string; basePath?: string; industry?: string; description?: string; media?: WebsiteMediaInput; serviceItems?: readonly WebsiteSiteServiceItem[]; contact?: PublicContactSettings; inquirySlug?: string; preview?: boolean; publicPageOnly?: boolean; onNavigate?: (path: string) => void }) {
@@ -330,33 +326,44 @@ export default function WebsiteSiteRenderer({ document, pagePath = "/", basePath
   const baseTheme = websiteThemes[validated.theme.template] || websiteThemes.Modern;
   const palette = savedPalette(validated.theme.colorPalette, baseTheme);
   const accent = palette.primary;
-  const accentText = readableTextColor(accent);
+  const accentForeground = resolveWebsiteSurfaceForeground(accent);
+  const accentText = accentForeground.text;
   const isDarkTemplate = validated.theme.template === "Dark";
 const pageBackground = isDarkTemplate
   ? baseTheme.pageBackground
   : palette.page;
 
-const textColor = isDarkTemplate
-  ? baseTheme.textColor
-  : readableTextColor(pageBackground);
+const pageForeground = isDarkTemplate
+  ? { text: baseTheme.textColor, muted: resolveWebsiteSurfaceForeground(baseTheme.pageBackground).muted }
+  : resolveWebsiteSurfaceForeground(pageBackground);
+const sectionForeground = resolveWebsiteSurfaceForeground(palette.light);
 
 const cardBackground = isDarkTemplate
   ? baseTheme.cardBackground
   : palette.card;
+const cardForeground = resolveWebsiteSurfaceForeground(cardBackground);
+const darkForeground = resolveWebsiteSurfaceForeground(palette.dark);
   const font = validated.theme.typography.split(/[,;\n]|\s+and\s+/i)[0]?.replace(/[^a-zA-Z0-9 '-]/g, "").trim();
   const shellStyle = {
   backgroundColor: pageBackground,
-  color: textColor,
+  color: pageForeground.text,
   fontFamily: font ? `'${font}', sans-serif` : baseTheme.bodyFont,
 
   "--site-primary": palette.primary,
   "--site-secondary": palette.secondary,
   "--site-page": pageBackground,
   "--site-section": palette.light,
-  "--site-section-text": readableTextColor(palette.light),
+  "--site-page-text": pageForeground.text,
+  "--site-page-muted": pageForeground.muted,
+  "--site-section-text": sectionForeground.text,
+  "--site-section-muted": sectionForeground.muted,
   "--site-dark": palette.dark,
   "--site-card": cardBackground,
-  "--site-text": textColor,
+  "--site-card-text": cardForeground.text,
+  "--site-card-muted": cardForeground.muted,
+  "--site-dark-text": darkForeground.text,
+  "--site-dark-muted": darkForeground.muted,
+  "--site-text": pageForeground.text,
   "--site-muted": baseTheme.mutedTextColor,
   "--site-border": baseTheme.borderColor,
   "--site-card-radius": baseTheme.cardRadius,
@@ -403,6 +410,6 @@ const cardBackground = isDarkTemplate
       {headerCta && <SiteLink href={publicPageOnly ? contactHref : validated.header.ctaHref} basePath={basePath} className="px-4 py-2 text-sm font-semibold" style={{ backgroundColor: accent, color: accentText, borderRadius: baseTheme.buttonRadius }}>{headerCta}</SiteLink>}
     </div><nav aria-label="Mobile navigation" className="mx-auto mt-3 flex max-w-7xl gap-5 overflow-x-auto pb-1 md:hidden">{navigation.map((item) => { const href = pages.get(item.pageId)!.path; return <SiteLink key={item.id} href={href} basePath={basePath} onNavigate={onNavigate} className={`shrink-0 py-1 text-sm font-semibold ${href === page.path ? "opacity-100" : "opacity-60"}`}>{safeWebsiteBlockText(item.label, 100)}</SiteLink>; })}</nav></header>
     <main>{page.path !== "/" && <PageIntro title={fallbackHeadline} description={pageDescription} accent={accent} />}{[...pageBlocks].sort((a, b) => a.order - b.order).map((block) => <WebsiteBlockRenderer key={block.id} block={block} media={resolvedMedia} accent={accent} accentText={accentText} basePath={basePath} services={services} fallbackHeadline={fallbackHeadline} fallbackDescription={fallbackDescription} pagePath={page.path} secondaryHref={secondaryHref} contact={contact} inquirySlug={inquirySlug} preview={preview} />)}{page.path !== "/" && !hasPageContent && <PageEmptyState type={page.type} contactHref={contactHref} basePath={basePath} accent={accent} />}</main>
-    <footer className="border-t border-[var(--site-border)] bg-[var(--site-dark)] px-5 py-12 text-white sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-white/65">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-white/70 hover:text-white">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-white">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-white/70" /></footer>
+    <footer className="border-t border-[var(--site-border)] bg-[var(--site-dark)] px-5 py-12 text-[var(--site-dark-text)] sm:px-8 lg:px-12"><div className="mx-auto grid max-w-7xl gap-8 md:grid-cols-[1.2fr_1fr_auto]"><div><p className="text-lg font-semibold">{safeWebsiteBlockText(validated.footer.businessName, 200) || brandLabel}</p>{safeWebsiteBlockText(validated.footer.description, 650) && <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--site-dark-muted)]">{safeWebsiteBlockText(validated.footer.description, 650)}</p>}</div><nav aria-label="Footer navigation" className="flex flex-wrap content-start gap-x-5 gap-y-3 text-sm">{navigation.map((item) => <SiteLink key={item.id} href={pages.get(item.pageId)!.path} basePath={basePath} onNavigate={onNavigate} className="text-[var(--site-dark-muted)] hover:text-[var(--site-dark-text)]">{safeWebsiteBlockText(item.label, 100)}</SiteLink>)}</nav>{validated.footer.showContact && <SiteLink href={contactHref} basePath={basePath} className="text-sm font-semibold text-[var(--site-dark-text)]">Contact</SiteLink>}</div><PoweredByBuzypeezy className="mx-auto mt-8 max-w-7xl text-xs text-[var(--site-dark-muted)]" /></footer>
   </div>;
 }

@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import type { WebsiteAiOutput, WebsiteEdits } from "../../lib/ai";
 import { resolveWebsiteMedia, type WebsiteMediaInput } from "@/app/lib/business-site-visuals";
+import { readableTextColor } from "@/app/lib/website-theme-foreground";
 
 import { websiteThemes } from "./websiteThemes";
 import ModernTemplate from "./website-templates/ModernTemplate";
@@ -69,6 +70,7 @@ export default function WebsitePreview({
   const connectedThemeStyle: CSSProperties = {
     borderColor: connectedPrimaryColor,
     boxShadow: `0 0 70px ${connectedPrimaryColor}29`,
+    color: readableTextColor(theme.pageBackground),
     ...(connectedFont && { fontFamily: `'${connectedFont}', sans-serif` }),
   };
   const businessName = websiteEdits?.companyName || companyName || "Your Business";
