@@ -6,12 +6,23 @@ import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const runId = "11111111-1111-4111-8111-111111111111";
 
-test("partially completed Business Build never starts recovery on page refresh", async () => {
+test("Business Build page keeps re-entering the guarded runner until persisted state changes", async () => {
   const page = await source("app/business-build/page.tsx");
+  assert.match(page, /requestInFlight/);
+  assert.match(page, /window\.setInterval\(\(\) => void refreshRun\(\), 3_000\)/);
   assert.match(page, /\["queued", "running"\]\.includes\(loaded\.run\.status\)/);
+  assert.match(page, /\/api\/easy-mode\/runs\/\$\{encodeURIComponent\(runId\)\}\/execute-next/);
+  assert.doesNotMatch(page, /executionStarted/);
   assert.doesNotMatch(page, /\["queued", "running", "partially_completed"\]/);
   assert.match(page, /"Retry final phase"/);
   assert.match(page, /disabled=\{retrying\}/);
+});
+
+test("stale Business Build work cannot poll forever without surfacing support state", async () => {
+  const page = await source("app/business-build/page.tsx");
+  assert.match(page, /setError\("Your completed work is safe, but this build needs support\."\)/);
+  assert.match(page, /needsAttention = Boolean\(view && \["failed", "partially_completed"\]\.includes\(view\.run\.status\)\)/);
+  assert.match(page, /Your build needs support\./);
 });
 
 test("uncertain recovery route reconciles first and only then prepares the named failed task", async () => {

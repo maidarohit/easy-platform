@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 
@@ -24,7 +24,6 @@ function BusinessBuildContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
-  const executionStarted = useRef(false);
 
   const fetchBuild = useCallback(async () => {
     if (!projectId) throw new Error("Open a valid business project.");
@@ -37,24 +36,48 @@ function BusinessBuildContent() {
 
   useEffect(() => {
     let active = true;
-    void fetchBuild().then((loaded) => {
-      if (active) setView(loaded);
-      if (!active || executionStarted.current || !["queued", "running"].includes(loaded.run.status)) return;
-      executionStarted.current = true;
-      void authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(loaded.run.id)}/execute-next`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
-      }).then(() => fetchBuild()).then((updated) => { if (active) setView(updated); })
-        .catch(() => { if (active) setError("Your completed work is safe, but this build needs support."); });
-    }).catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open this build."); })
+    void fetchBuild().then((loaded) => { if (active) setView(loaded); })
+      .catch((loadError) => { if (active) setError(loadError instanceof Error ? loadError.message : "Unable to open this build."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [fetchBuild]);
 
   useEffect(() => {
-    if (!view || !["queued", "running"].includes(view.run.status)) return;
-    const interval = window.setInterval(() => void fetchBuild().then(setView).catch(() => undefined), 3_000);
-    return () => window.clearInterval(interval);
-  }, [fetchBuild, view]);
+    if (!view?.run.id || !["queued", "running"].includes(view.run.status)) return;
+    const runId = view.run.id;
+    let active = true;
+    let requestInFlight = false;
+
+    async function refreshRun() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const loaded = await fetchBuild();
+        if (!active) return;
+        setView(loaded);
+        if (["queued", "running"].includes(loaded.run.status)) {
+          await authenticatedFetch(`/api/easy-mode/runs/${encodeURIComponent(runId)}/execute-next`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          const updated = await fetchBuild();
+          if (active) setView(updated);
+        }
+      } catch {
+        if (active) setError("Your completed work is safe, but this build needs support.");
+      } finally {
+        requestInFlight = false;
+      }
+    }
+
+    void refreshRun();
+    const intervalId = window.setInterval(() => void refreshRun(), 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [fetchBuild, view?.run.id, view?.run.status]);
 
   const retryTask = view?.tasks.find((task) => task.canRetry);
   const retryFinalPhase = async () => {

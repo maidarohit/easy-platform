@@ -6,6 +6,7 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { syncEasyModeAiManagerTask } from "@/app/lib/easy-mode-ai-manager";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
+import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -42,6 +43,28 @@ type ValidCallbackBody =
   | { jobId: string; status: "completed"; output: AiManagerStrategy }
   | { jobId: string; status: "failed"; error?: string };
 
+function validateAiManagerStrategyCandidate(value: unknown): AiManagerStrategy | null {
+  const validatedOutput = getModuleAdapter("ai-manager")?.validateOutput?.(value);
+  if (!validatedOutput || !isRecord(validatedOutput)) return null;
+
+  const sections: Partial<Record<keyof AiManagerStrategy, string>> = {};
+  for (const key of strategyKeys) {
+    if (typeof validatedOutput[key] !== "string") return null;
+    sections[key] = validatedOutput[key] as string;
+  }
+
+  return {
+    overview: sections.overview!,
+    branding: sections.branding!,
+    website: sections.website!,
+    marketing: sections.marketing!,
+    seo: sections.seo!,
+    uiux: sections.uiux!,
+    sales: sections.sales!,
+    analytics: sections.analytics!,
+  };
+}
+
 export function validateAiManagerCallbackBody(
   value: unknown,
   expectedJobId: string
@@ -51,23 +74,24 @@ export function validateAiManagerCallbackBody(
 
   const jobId = text(value.jobId);
   if (jobId !== expectedJobId || jobId.length > MAX_JOB_ID_LENGTH) return null;
+  const normalizedStatus = text(value.status).toLowerCase() === "success"
+    ? "completed"
+    : text(value.status).toLowerCase();
 
-  if (value.status === "failed") {
-    if (Object.keys(value).some((key) => !["jobId", "status", "error"].includes(key))) {
-      return null;
-    }
+  if (normalizedStatus === "failed") {
     if (value.error !== undefined && typeof value.error !== "string") return null;
     const error = value.error === undefined ? undefined : value.error.trim();
     if (error && error.length > MAX_ERROR_LENGTH) return null;
     return { jobId, status: "failed", ...(error ? { error } : {}) };
   }
 
-  if (value.status !== "completed") return null;
-  if (Object.keys(value).some((key) => !["jobId", "status", "output"].includes(key))) {
-    return null;
-  }
-  const output = value.output;
-  if (!isRecord(output)) return null;
+  if (normalizedStatus !== "completed") return null;
+  const wrappedOutput = validateWrappedWebhookOutput(
+    value,
+    (candidate) => getModuleAdapter("ai-manager")?.validateOutput?.(candidate) ?? null,
+  );
+  const output = validateAiManagerStrategyCandidate(wrappedOutput);
+  if (!output) return null;
   if (
     Object.keys(output).length !== strategyKeys.length ||
     Object.keys(output).some((key) => !strategyKeys.includes(key as keyof AiManagerStrategy))
@@ -83,9 +107,7 @@ export function validateAiManagerCallbackBody(
       return null;
     }
   }
-  const validatedOutput = getModuleAdapter("ai-manager")?.validateOutput?.(output);
-  if (!validatedOutput) return null;
-  return { jobId, status: "completed", output: validatedOutput as unknown as AiManagerStrategy };
+  return { jobId, status: "completed", output };
 }
 
 type JobRouteContext = { params: Promise<{ jobId: string }> };

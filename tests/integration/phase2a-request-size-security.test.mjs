@@ -135,6 +135,37 @@ test("AI Manager callback validates bounded success and failure shapes", () => {
     status: "failed",
     error: "x".repeat(2_001),
   }, "job-1"), null);
+  assert.deepEqual(validateAiManagerCallbackBody({
+    jobId: "job-1",
+    status: "success",
+    projectId: "project-1",
+    userId: "user-1",
+    result: validStrategy,
+  }, "job-1"), {
+    jobId: "job-1",
+    status: "completed",
+    output: validStrategy,
+  });
+  assert.deepEqual(validateAiManagerCallbackBody({
+    jobId: "job-1",
+    status: "completed",
+    callbackUrl: "https://example.test/callback",
+    data: { output: validStrategy },
+  }, "job-1"), {
+    jobId: "job-1",
+    status: "completed",
+    output: validStrategy,
+  });
+  assert.equal(validateAiManagerCallbackBody({
+    jobId: "job-2",
+    status: "completed",
+    output: validStrategy,
+  }, "job-1"), null);
+  assert.equal(validateAiManagerCallbackBody({
+    jobId: "job-1",
+    status: "completed",
+    output: { overview: "Only one section" },
+  }, "job-1"), null);
 });
 
 test("AI Manager callback rejects oversized bodies and invalid auth", async () => {

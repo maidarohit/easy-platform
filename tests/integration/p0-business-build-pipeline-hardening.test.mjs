@@ -144,14 +144,19 @@ test("timeout after Sales dispatch becomes delivery-uncertain and never issues a
 });
 
 test("six completed outputs stay untouched and polling resumes through the guarded runner", async () => {
-  const [attempts, page, runs] = await Promise.all([
+  const [attempts, easyPage, buildPage, runs] = await Promise.all([
     source("app/lib/easy-mode-task-attempts.ts"),
     source("app/easy-mode/page.tsx"),
+    source("app/business-build/page.tsx"),
     source("app/api/easy-mode/runs/route.ts"),
   ]);
   assert.doesNotMatch(attempts, /delete\(projectOutputs\)|update\(projectOutputs\)/);
-  assert.match(page, /requestInFlight/);
-  assert.match(page, /execute-next/);
+  assert.match(easyPage, /requestInFlight/);
+  assert.match(easyPage, /execute-next/);
+  assert.match(buildPage, /requestInFlight/);
+  assert.match(buildPage, /execute-next/);
+  assert.match(buildPage, /if \(\["queued", "running"\]\.includes\(loaded\.run\.status\)\)/);
+  assert.doesNotMatch(buildPage, /executionStarted/);
   assert.match(runs, /onConflictDoNothing/);
   assert.match(runs, /easyModeRuns_owner_project_idempotency_unique|idempotencyKey/);
 });
