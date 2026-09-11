@@ -47,7 +47,7 @@ function isValidTokenCount(value: unknown): value is number {
   );
 }
 
-function normalizeMetadata(value: unknown): AiUsageMetadata | null {
+export function validateAiUsageMetadataCandidate(value: unknown): AiUsageMetadata | null {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ["version", "components"]) ||
@@ -125,7 +125,7 @@ export function parseAiUsageMetadata(
       decodedBytes
     );
 
-    return normalizeMetadata(JSON.parse(decoded));
+    return validateAiUsageMetadataCandidate(JSON.parse(decoded));
   } catch {
     return null;
   }

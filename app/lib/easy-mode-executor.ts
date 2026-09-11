@@ -5,9 +5,7 @@ import { db } from "@/app/db";
 import {
   easyModeRuns,
   easyModeTasks,
-  projectMemory,
   projectOutputs,
-  projects,
 } from "@/app/db/schema";
 import {
   BRANDING_AI_WORKFLOW,
@@ -34,7 +32,6 @@ import {
   buildBrandingContext,
   getModuleAdapter,
   type ModuleExecutionInput,
-  type NormalizedModuleOutput,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
 import {
@@ -44,7 +41,9 @@ import {
 } from "@/app/lib/logo-execution";
 import {
   SpecialistExecutionError,
+  type SpecialistAsyncDispatchContext,
   type ProviderFailureCategory,
+  type SpecialistProviderModule,
   type SpecialistExecutionResult,
 } from "@/app/lib/specialist-execution";
 import {
@@ -67,10 +66,19 @@ import {
   reconcileUncertainEasyModeAttempt,
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
+import {
+  buildSpecialistCallbackUrl,
+} from "@/app/lib/easy-mode-specialist-callbacks";
+import {
+  persistBrandingContextOutput,
+  persistBrandingOutputAndMemory,
+  persistContentOutputAndMemory,
+  persistLogoOutputAndMemory,
+  persistTextSpecialistOutputAndMemory,
+  type PersistedOutput,
+} from "@/app/lib/easy-mode-specialist-persistence";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 import { isSubscriptionRequiredResponse } from "@/app/lib/subscription-required";
-import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
-import { sanitizeUiuxOutput } from "@/app/lib/uiux-insight-safety";
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 type LoggedProviderFailureCategory = ProviderFailureCategory | "persistence_failure" | "unknown";
@@ -93,7 +101,6 @@ type InternalExecuteResult = ExecuteNextResult & Readonly<{
   uncertainAttemptId?: string;
 }>;
 
-type PersistedOutput = Readonly<{ id: string }>;
 type ExecuteInput = Readonly<{ runId: string; userId: string }>;
 
 type ExecutorDependencies = Readonly<{
@@ -180,6 +187,24 @@ async function safeProgress(dependencies: ExecutorDependencies, runId: string, u
   }
 }
 
+function specialistAsyncDispatch(
+  claim: ClaimedEasyModeTask,
+  module: SpecialistProviderModule,
+): SpecialistAsyncDispatchContext | undefined {
+  const callbackUrl = buildSpecialistCallbackUrl(claim.attemptId);
+  if (!callbackUrl) return undefined;
+  return {
+    runId: claim.runId,
+    taskId: claim.taskId,
+    attemptId: claim.attemptId,
+    executionKey: claim.executionKey,
+    projectId: claim.context.projectId,
+    module,
+    callbackUrl,
+    correlationId: claim.executionKey,
+  };
+}
+
 function logProviderBackedTaskFailure(input: Readonly<{
   claim: ClaimedEasyModeTask;
   module: string;
@@ -206,6 +231,28 @@ function logProviderBackedTaskFailure(input: Readonly<{
     failureCategory,
     upstreamStatus,
     elapsedMs: Math.max(0, input.elapsedMs),
+  });
+}
+
+function logAsyncDispatchAcknowledged(input: Readonly<{
+  claim: ClaimedEasyModeTask;
+  module: string;
+  callbackStatus: "accepted" | "queued" | "processing";
+  providerExecutionId: string | null;
+  elapsedMs: number;
+}>) {
+  console.info("Easy Mode provider-backed task dispatched asynchronously.", {
+    runId: input.claim.runId,
+    taskId: input.claim.taskId,
+    attemptId: input.claim.attemptId,
+    module: input.module,
+    providerExecutionId: input.providerExecutionId,
+    dispatchMode: "async",
+    previousStatus: "dispatching",
+    nextStatus: "running",
+    callbackStatus: input.callbackStatus,
+    elapsedMs: Math.max(0, input.elapsedMs),
+    failureCategory: null,
   });
 }
 
@@ -268,7 +315,12 @@ export async function executeNextEasyModeTask(
     return executeAdditionalSpecialistTask(claim, dependencies, {
       module: "logo", workflow: LOGO_AI_WORKFLOW, label: "Logo",
       loadInput: dependencies.loadLogoInput,
-      execute: dependencies.executeLogo,
+      execute: (options) => {
+        const { asyncDispatch, ...syncOptions } = options;
+        return asyncDispatch
+          ? dependencies.executeLogo({ ...syncOptions, asyncDispatch })
+          : dependencies.executeLogo(syncOptions);
+      },
       persist: dependencies.persistLogo,
     });
   }
@@ -276,7 +328,12 @@ export async function executeNextEasyModeTask(
     return executeAdditionalSpecialistTask(claim, dependencies, {
       module: "content", workflow: CONTENT_AI_WORKFLOW, label: "Content",
       loadInput: dependencies.loadContentInput,
-      execute: dependencies.executeContent,
+      execute: (options) => {
+        const { asyncDispatch, ...syncOptions } = options;
+        return asyncDispatch
+          ? dependencies.executeContent({ ...syncOptions, asyncDispatch })
+          : dependencies.executeContent(syncOptions);
+      },
       persist: dependencies.persistContent,
     });
   }
@@ -285,7 +342,12 @@ export async function executeNextEasyModeTask(
   return executeAdditionalSpecialistTask(claim, dependencies, {
     module: specialistModule, workflow: config.workflow, label: config.label,
     loadInput: (context) => dependencies.loadTextInput(context, specialistModule),
-    execute: (options) => dependencies.executeText({ ...options, module: specialistModule }),
+    execute: (options) => {
+      const { asyncDispatch, ...syncOptions } = options;
+      return asyncDispatch
+        ? dependencies.executeText({ ...syncOptions, module: specialistModule, asyncDispatch })
+        : dependencies.executeText({ ...syncOptions, module: specialistModule });
+    },
     persist: (context, value) => dependencies.persistText(context, specialistModule, value),
   });
 }
@@ -450,12 +512,36 @@ async function executeBrandingTask(
     await dependencies.bindUsage({ ...lease, usageId });
     await dependencies.markDispatching(lease);
     providerStarted = true;
-    const result = await dependencies.executeBranding({ context: claim.context, input: brandingInput });
+    const asyncDispatch = specialistAsyncDispatch(claim, "branding");
+    const result = asyncDispatch
+      ? await dependencies.executeBranding({
+          context: claim.context,
+          input: brandingInput,
+          asyncDispatch,
+        })
+      : await dependencies.executeBranding({
+          context: claim.context,
+          input: brandingInput,
+        });
     providerCompleted = true;
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
     });
+    if (result.dispatchMode === "async") {
+      logAsyncDispatchAcknowledged({
+        claim,
+        module: "branding",
+        callbackStatus: result.callbackStatus,
+        providerExecutionId: result.providerExecutionId ?? null,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return {
+        state: "in_progress",
+        message: "Brand identity is in progress.",
+        progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      };
+    }
     const persisted = await dependencies.persistBranding(claim.context, result.output);
     persistedOutputId = persisted.id;
     usageFinalized = true;
@@ -517,6 +603,7 @@ type AdditionalSpecialistConfig = Readonly<{
   execute: (options: Readonly<{
     context: TrustedModuleExecutionContext;
     input?: unknown;
+    asyncDispatch?: SpecialistAsyncDispatchContext;
   }>) => Promise<SpecialistExecutionResult>;
   persist: (context: TrustedModuleExecutionContext, value: unknown) => Promise<PersistedOutput>;
 }>;
@@ -550,12 +637,36 @@ async function executeAdditionalSpecialistTask(
     await dependencies.bindUsage({ ...lease, usageId });
     await dependencies.markDispatching(lease);
     providerStarted = true;
-    const result = await config.execute({ context: claim.context, input: moduleInput });
+    const asyncDispatch = specialistAsyncDispatch(claim, config.module);
+    const result = await config.execute(asyncDispatch
+      ? {
+          context: claim.context,
+          input: moduleInput,
+          asyncDispatch,
+        }
+      : {
+          context: claim.context,
+          input: moduleInput,
+        });
     providerCompleted = true;
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
     });
+    if (result.dispatchMode === "async") {
+      logAsyncDispatchAcknowledged({
+        claim,
+        module: config.module,
+        callbackStatus: result.callbackStatus,
+        providerExecutionId: result.providerExecutionId ?? null,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return {
+        state: "in_progress",
+        message: `${config.label} is in progress.`,
+        progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
+      };
+    }
     const persisted = await config.persist(claim.context, result.output);
     persistedOutputId = persisted.id;
     usageFinalized = true;
@@ -618,159 +729,6 @@ async function executeAdditionalSpecialistTask(
   }
 }
 
-async function insertProjectOutput(
-  transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  context: TrustedModuleExecutionContext,
-  module: "branding" | "branding-context" | "logo" | "content" | TextSpecialistModule,
-  output: NormalizedModuleOutput,
-): Promise<PersistedOutput> {
-  const result = JSON.stringify(output);
-  const [created] = await transaction.insert(projectOutputs).values({
-    projectId: context.projectId,
-    userId: context.userId,
-    module,
-    result,
-    approvedAt: null,
-  }).returning({ id: projectOutputs.id });
-  if (!created) throw new Error("Output persistence failed.");
-  return created;
-}
-
-export async function persistBrandingOutputAndMemory(
-  context: TrustedModuleExecutionContext,
-  value: unknown,
-): Promise<PersistedOutput> {
-  const output = getModuleAdapter("branding")?.validateOutput?.(value);
-  if (!output) throw new Error("Invalid branding output.");
-  return db.transaction(async (transaction) => {
-    const [project] = await transaction.select().from(projects).where(and(
-      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-    )).limit(1).for("update");
-    if (!project) throw new Error("Project not found.");
-    const persisted = await insertProjectOutput(transaction, context, "branding", output);
-    const brandName = String(output.brandName);
-    const tagline = String(output.tagline);
-    const memoryValues = {
-      businessName: brandName,
-      brandStyle: String(output.brandStyleGuide),
-      brandVoice: String(output.brandVoice),
-      brandColors: String(output.colorPalette),
-      typography: String(output.typography),
-      additionalContext: `Brand positioning: ${tagline}`,
-      updatedAt: new Date(),
-    };
-    const [existingMemory] = await transaction.select({ id: projectMemory.id }).from(projectMemory).where(and(
-      eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-    )).limit(1);
-    if (existingMemory) {
-      await transaction.update(projectMemory).set(memoryValues).where(eq(projectMemory.id, existingMemory.id));
-    } else {
-      await transaction.insert(projectMemory).values({
-        projectId: context.projectId,
-        userId: context.userId,
-        industry: project.industry,
-        businessDescription: project.originalBrief || project.brandDescription,
-        targetAudience: project.targetAudience,
-        ...memoryValues,
-      });
-    }
-    return persisted;
-  });
-}
-
-function appendMemorySummary(current: string | null, summary: string) {
-  const prior = current?.trim().slice(-1_000);
-  return [prior, summary.trim().slice(0, 1_000)].filter(Boolean).join("\n");
-}
-
-async function persistAdditionalSpecialistOutput(
-  context: TrustedModuleExecutionContext,
-  module: "logo" | "content",
-  value: unknown,
-): Promise<PersistedOutput> {
-  const output = getModuleAdapter(module)?.validateOutput?.(value);
-  if (!output) throw new Error("Invalid specialist output.");
-  return db.transaction(async (transaction) => {
-    const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
-      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-    )).limit(1).for("update");
-    if (!project) throw new Error("Project not found.");
-    const persisted = await insertProjectOutput(transaction, context, module, output);
-    const [memory] = await transaction.select({
-      id: projectMemory.id,
-      additionalContext: projectMemory.additionalContext,
-    }).from(projectMemory).where(and(
-      eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-    )).limit(1);
-    const summary = module === "logo"
-      ? `Logo concept: ${String(output.concept)}`
-      : `Latest content: ${String(output.content).slice(0, 500)}`;
-    const additionalContext = appendMemorySummary(memory?.additionalContext ?? null, summary);
-    if (memory) {
-      await transaction.update(projectMemory).set({ additionalContext, updatedAt: new Date() })
-        .where(eq(projectMemory.id, memory.id));
-    } else {
-      await transaction.insert(projectMemory).values({
-        projectId: context.projectId,
-        userId: context.userId,
-        additionalContext,
-      });
-    }
-    return persisted;
-  });
-}
-
-export async function persistTextSpecialistOutputAndMemory(
-  context: TrustedModuleExecutionContext,
-  module: TextSpecialistModule,
-  value: unknown,
-): Promise<PersistedOutput> {
-  let output = getModuleAdapter(module)?.validateOutput?.(value);
-  if (!output) throw new Error("Invalid specialist output.");
-  if (module === "uiux") {
-    const uiuxContext = await loadOwnedUiuxContext(context.userId, context.projectId);
-    if (!uiuxContext) throw new Error("UI/UX context not found.");
-    output = sanitizeUiuxOutput(output, uiuxContext);
-    if (!output) throw new Error("Invalid UI/UX output.");
-  }
-  return db.transaction(async (transaction) => {
-    const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
-      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-    )).limit(1).for("update");
-    if (!project) throw new Error("Project not found.");
-    const persisted = await insertProjectOutput(transaction, context, module, output);
-    const summaryField: Readonly<Record<TextSpecialistModule, string>> = {
-      website: "websiteOverview", marketing: "marketingStrategy", seo: "seoAudit",
-      uiux: "uiuxStrategy", sales: "executiveSummary", analytics: "executiveSummary",
-    };
-    const summaryValue = output[summaryField[module]];
-    if (typeof summaryValue !== "string") throw new Error("Invalid specialist summary.");
-    const [memory] = await transaction.select({ id: projectMemory.id, additionalContext: projectMemory.additionalContext })
-      .from(projectMemory).where(and(
-        eq(projectMemory.projectId, context.projectId), eq(projectMemory.userId, context.userId),
-      )).limit(1);
-    const additionalContext = appendMemorySummary(memory?.additionalContext ?? null,
-      `${getTextSpecialistConfig(module).label}: ${summaryValue.slice(0, 750)}`);
-    if (memory) {
-      await transaction.update(projectMemory).set({ additionalContext, updatedAt: new Date() })
-        .where(eq(projectMemory.id, memory.id));
-    } else {
-      await transaction.insert(projectMemory).values({
-        projectId: context.projectId, userId: context.userId, additionalContext,
-      });
-    }
-    return persisted;
-  });
-}
-
-export function persistLogoOutputAndMemory(context: TrustedModuleExecutionContext, value: unknown) {
-  return persistAdditionalSpecialistOutput(context, "logo", value);
-}
-
-export function persistContentOutputAndMemory(context: TrustedModuleExecutionContext, value: unknown) {
-  return persistAdditionalSpecialistOutput(context, "content", value);
-}
-
 export async function loadBrandingContextInput(context: TrustedModuleExecutionContext) {
   const [ownedContext, brandingRows] = await Promise.all([
     loadOwnedProjectContext(context),
@@ -791,21 +749,6 @@ export async function loadBrandingContextInput(context: TrustedModuleExecutionCo
     }
   }
   return { project, memory: memory ?? null, brandingOutput };
-}
-
-export async function persistBrandingContextOutput(
-  context: TrustedModuleExecutionContext,
-  value: unknown,
-): Promise<PersistedOutput> {
-  const output = getModuleAdapter("branding-context")?.validateOutput?.(value);
-  if (!output) throw new Error("Invalid branding context.");
-  return db.transaction(async (transaction) => {
-    const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(
-      eq(projects.id, context.projectId), eq(projects.userId, context.userId),
-    )).limit(1).for("update");
-    if (!project) throw new Error("Project not found.");
-    return insertProjectOutput(transaction, context, "branding-context", output);
-  });
 }
 
 const CUSTOMER_LABELS: Readonly<Record<string, string>> = {

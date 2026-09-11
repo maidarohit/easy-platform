@@ -7,6 +7,7 @@ import {
   POST as handleAiManagerCallback,
   validateAiManagerCallbackBody,
 } from "../../app/api/ai-manager/jobs/[jobId]/route.ts";
+import { validateSpecialistCallbackBody } from "../../app/lib/easy-mode-specialist-callbacks.ts";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -28,6 +29,7 @@ test("Phase 2A routes map their configured body limits to 413", async () => {
     ["app/api/assistant/route.ts", /MAX_REQUEST_BODY_BYTES\s*=\s*32\s*\*\s*1024/],
     ["app/api/ai-manager/route.ts", /MAX_REQUEST_BODY_BYTES\s*=\s*32\s*\*\s*1024/],
     ["app/api/ai-manager/jobs/[jobId]/route.ts", /MAX_CALLBACK_BODY_BYTES\s*=\s*256\s*\*\s*1024/],
+    ["app/api/easy-mode/attempts/[attemptId]/callback/route.ts", /MAX_CALLBACK_BODY_BYTES\s*=\s*256\s*\*\s*1024/],
   ];
 
   for (const [path, limitPattern] of cases) {
@@ -186,4 +188,27 @@ test("AI Manager callback rejects oversized bodies and invalid auth", async () =
     if (previousSecret === undefined) delete process.env.AI_MANAGER_CALLBACK_SECRET;
     else process.env.AI_MANAGER_CALLBACK_SECRET = previousSecret;
   }
+});
+
+test("specialist callback validation stays bounded and rejects oversize-style malformed bodies before execution", () => {
+  assert.ok(validateSpecialistCallbackBody({
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "seo-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "seo",
+    status: "failed",
+    error: "Workflow failed safely.",
+  }, "33333333-3333-4333-8333-333333333333"));
+  assert.equal(validateSpecialistCallbackBody({
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "seo-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "seo",
+    status: "failed",
+    error: "x".repeat(2_001),
+  }, "33333333-3333-4333-8333-333333333333"), null);
 });

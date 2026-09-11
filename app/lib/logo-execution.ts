@@ -9,7 +9,13 @@ import {
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
-import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import {
+  executeValidatedJsonWebhook,
+  SpecialistExecutionError,
+  type SpecialistExecutionResult,
+  type SyncSpecialistExecutionResult,
+  type SpecialistAsyncDispatchContext,
+} from "@/app/lib/specialist-execution";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const LOGO_AI_WORKFLOW = "logo-ai";
@@ -43,26 +49,45 @@ export async function loadCanonicalLogoInput(context: TrustedModuleExecutionCont
   return input;
 }
 
-export async function executeLogoService(options: Readonly<{
+export function validateLogoWebhookOutput(value: unknown) {
+  const validator = getModuleAdapter("logo")?.validateOutput;
+  const item = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  const output = item !== null && typeof item === "object" && !Array.isArray(item) && Object.hasOwn(item, "output")
+    ? (item as Record<string, unknown>).output
+    : item;
+  return validator?.(item) ?? validator?.(output) ?? null;
+}
+
+type LogoExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
   input?: unknown;
+  asyncDispatch?: SpecialistAsyncDispatchContext;
   fetcher?: typeof fetch;
   webhookConfig?: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>;
-}>) {
+}>;
+
+export function executeLogoService(
+  options: LogoExecutionOptions & Readonly<{ asyncDispatch?: undefined }>,
+): Promise<SyncSpecialistExecutionResult>;
+export function executeLogoService(
+  options: LogoExecutionOptions & Readonly<{ asyncDispatch: SpecialistAsyncDispatchContext }>,
+): Promise<SpecialistExecutionResult>;
+export async function executeLogoService(options: LogoExecutionOptions) {
   const input = options.input === undefined ? await loadCanonicalLogoInput(options.context) :
     getModuleAdapter("logo")?.validateInput(options.input);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
-  const validator = getModuleAdapter("logo")?.validateOutput;
-  return executeValidatedJsonWebhook({
+  const baseOptions = {
     input,
     webhook: options.webhookConfig ?? getN8nWebhookConfig("N8N_LOGO_AI_WEBHOOK_URL"),
     timeoutMs: 60_000,
     fetcher: options.fetcher,
-    validateResponse(value) {
-      const item = Array.isArray(value) && value.length === 1 ? value[0] : value;
-      const output = item !== null && typeof item === "object" && !Array.isArray(item) && Object.hasOwn(item, "output")
-        ? (item as Record<string, unknown>).output : item;
-      return validator?.(item) ?? validator?.(output) ?? null;
-    },
-  });
+    validateResponse: validateLogoWebhookOutput,
+  } as const;
+  if (options.asyncDispatch) {
+    return executeValidatedJsonWebhook({
+      ...baseOptions,
+      asyncDispatch: options.asyncDispatch,
+    });
+  }
+  return executeValidatedJsonWebhook(baseOptions);
 }

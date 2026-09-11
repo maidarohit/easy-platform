@@ -143,6 +143,49 @@ test("timeout after Sales dispatch becomes delivery-uncertain and never issues a
   assert.equal(claims, 1);
 });
 
+test("async specialist acknowledgement returns quickly without completing usage or the task", async () => {
+  const runId = "11111111-1111-4111-8111-111111111111";
+  const taskId = "22222222-2222-4222-8222-222222222222";
+  const context = createTrustedModuleExecutionContext({ userId: "user-1", projectId: "project-1", runId, taskId });
+  const claim = {
+    context, runId, taskId, attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptNumber: 1, moduleId: "seo", executionKey: "seo-1",
+    leaseToken: "44444444-4444-4444-8444-444444444444", leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+  const events = [];
+  const result = await executeNextEasyModeTask({ runId, userId: "user-1" }, {
+    enabled: () => true,
+    claim: async () => claim,
+    loadTextInput: async () => ({ companyName: "Example" }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => { events.push("usage-bound"); },
+    markDispatching: async () => { events.push("dispatching"); },
+    executeText: async () => {
+      events.push("provider");
+      return {
+        dispatchMode: "async",
+        module: "seo",
+        attemptId: claim.attemptId,
+        executionKey: "seo-1",
+        callbackStatus: "processing",
+        providerExecutionId: "seo-exec-1",
+      };
+    },
+    markRunning: async (input) => {
+      assert.equal(input.providerExecutionId, "seo-exec-1");
+      events.push("running");
+    },
+    completeUsage: async () => assert.fail("usage must wait for callback"),
+    completeAttempt: async () => assert.fail("task must wait for callback"),
+    failUsage: async () => assert.fail("unexpected failure"),
+    failBeforeDispatch: async () => assert.fail("unexpected failure"),
+    failUncertain: async () => assert.fail("unexpected failure"),
+    progress: async () => ({ runStatus: "In progress", tasks: [] }),
+  });
+  assert.equal(result.state, "in_progress");
+  assert.deepEqual(events, ["usage-bound", "dispatching", "provider", "running"]);
+});
+
 test("one execute-next request runs at most one provider-backed task and the next request advances the run", async () => {
   const runId = "11111111-1111-4111-8111-111111111111";
   const websiteTask = {
@@ -350,6 +393,19 @@ test("marketing webhook failure category is logged safely", async () => {
     elapsedMs: logged[0][1].elapsedMs,
   });
   assert.equal(typeof logged[0][1].elapsedMs, "number");
+});
+
+test("async callback infrastructure keeps one durable specialist callback route and re-entry continuation", async () => {
+  const [executor, route] = await Promise.all([
+    source("app/lib/easy-mode-executor.ts"),
+    source("app/api/easy-mode/attempts/[attemptId]/callback/route.ts"),
+  ]);
+  assert.match(executor, /buildSpecialistCallbackUrl/);
+  assert.match(executor, /dispatchMode === "async"/);
+  assert.match(executor, /provider-backed task dispatched asynchronously/);
+  assert.match(route, /syncEasyModeSpecialistCallback/);
+  assert.match(route, /const continuation = result\.continuation/);
+  assert.match(route, /executeEasyModeRun\(continuation\)/);
 });
 
 test("six completed outputs stay untouched and polling resumes through the guarded runner", async () => {

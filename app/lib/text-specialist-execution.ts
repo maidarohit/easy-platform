@@ -2,7 +2,14 @@ import "server-only";
 
 import { getModuleAdapter, type EasyModeModuleId, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
-import { executeValidatedJsonWebhook, SpecialistExecutionError, validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
+import {
+  executeValidatedJsonWebhook,
+  SpecialistExecutionError,
+  type SpecialistExecutionResult,
+  type SyncSpecialistExecutionResult,
+  type SpecialistAsyncDispatchContext,
+  validateWrappedWebhookOutput,
+} from "@/app/lib/specialist-execution";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
@@ -55,26 +62,44 @@ export async function loadCanonicalTextSpecialistInput(
   return input;
 }
 
-export async function executeTextSpecialistService(options: Readonly<{
+export function validateTextSpecialistWebhookOutput(module: TextSpecialistModule, value: unknown) {
+  const validator = getModuleAdapter(module as EasyModeModuleId)?.validateOutput;
+  return validator ? validateWrappedWebhookOutput(value, validator) : null;
+}
+
+type TextSpecialistExecutionOptions = Readonly<{
   module: TextSpecialistModule;
   context: TrustedModuleExecutionContext;
   input?: unknown;
+  asyncDispatch?: SpecialistAsyncDispatchContext;
   fetcher?: typeof fetch;
   webhookConfig?: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>;
-}>) {
+}>;
+
+export function executeTextSpecialistService(
+  options: TextSpecialistExecutionOptions & Readonly<{ asyncDispatch?: undefined }>,
+): Promise<SyncSpecialistExecutionResult>;
+export function executeTextSpecialistService(
+  options: TextSpecialistExecutionOptions & Readonly<{ asyncDispatch: SpecialistAsyncDispatchContext }>,
+): Promise<SpecialistExecutionResult>;
+export async function executeTextSpecialistService(options: TextSpecialistExecutionOptions) {
   const input = options.input === undefined
     ? await loadCanonicalTextSpecialistInput(options.context, options.module)
     : getModuleAdapter(options.module)?.validateInput(options.input);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
-  const validator = getModuleAdapter(options.module as EasyModeModuleId)?.validateOutput;
   const config = CONFIG[options.module];
-  return executeValidatedJsonWebhook({
+  const baseOptions = {
     input,
     webhook: options.webhookConfig ?? getN8nWebhookConfig(config.env),
     timeoutMs: 120_000,
     fetcher: options.fetcher,
-    validateResponse(value) {
-      return validator ? validateWrappedWebhookOutput(value, validator) : null;
-    },
-  });
+    validateResponse: (value: unknown) => validateTextSpecialistWebhookOutput(options.module, value),
+  } as const;
+  if (options.asyncDispatch) {
+    return executeValidatedJsonWebhook({
+      ...baseOptions,
+      asyncDispatch: options.asyncDispatch,
+    });
+  }
+  return executeValidatedJsonWebhook(baseOptions);
 }

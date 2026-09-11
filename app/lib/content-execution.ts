@@ -6,7 +6,13 @@ import {
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
-import { executeValidatedJsonWebhook, SpecialistExecutionError } from "@/app/lib/specialist-execution";
+import {
+  executeValidatedJsonWebhook,
+  SpecialistExecutionError,
+  type SpecialistExecutionResult,
+  type SyncSpecialistExecutionResult,
+  type SpecialistAsyncDispatchContext,
+} from "@/app/lib/specialist-execution";
 import { loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 
 export const CONTENT_AI_WORKFLOW = "content-ai";
@@ -30,32 +36,51 @@ export async function loadCanonicalContentInput(context: TrustedModuleExecutionC
   return input;
 }
 
-export async function executeContentService(options: Readonly<{
+export function validateContentWebhookOutput(value: unknown) {
+  const validator = getModuleAdapter("content")?.validateOutput;
+  const item = Array.isArray(value) && value.length === 1 ? value[0] : value;
+  if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+    const record = item as Record<string, unknown>;
+    for (const key of ["output", "content", "text", "result"] as const) {
+      if (Object.hasOwn(record, key)) {
+        const validated = validator?.(record[key]);
+        if (validated) return validated;
+      }
+    }
+  }
+  return validator?.(item) ?? null;
+}
+
+type ContentExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
   input?: unknown;
+  asyncDispatch?: SpecialistAsyncDispatchContext;
   fetcher?: typeof fetch;
   webhookConfig?: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>;
-}>) {
+}>;
+
+export function executeContentService(
+  options: ContentExecutionOptions & Readonly<{ asyncDispatch?: undefined }>,
+): Promise<SyncSpecialistExecutionResult>;
+export function executeContentService(
+  options: ContentExecutionOptions & Readonly<{ asyncDispatch: SpecialistAsyncDispatchContext }>,
+): Promise<SpecialistExecutionResult>;
+export async function executeContentService(options: ContentExecutionOptions) {
   const input = options.input === undefined ? await loadCanonicalContentInput(options.context) :
     getModuleAdapter("content")?.validateInput(options.input);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
-  const validator = getModuleAdapter("content")?.validateOutput;
-  return executeValidatedJsonWebhook({
+  const baseOptions = {
     input,
     webhook: options.webhookConfig ?? getN8nWebhookConfig("N8N_CONTENT_AI_WEBHOOK_URL"),
     timeoutMs: 120_000,
     fetcher: options.fetcher,
-    validateResponse(value) {
-      const item = Array.isArray(value) && value.length === 1 ? value[0] : value;
-      if (item === null || typeof item !== "object" || Array.isArray(item)) return validator?.(item) ?? null;
-      const record = item as Record<string, unknown>;
-      for (const key of ["output", "content", "text", "result"] as const) {
-        if (Object.hasOwn(record, key)) {
-          const validated = validator?.(record[key]);
-          if (validated) return validated;
-        }
-      }
-      return validator?.(item) ?? null;
-    },
-  });
+    validateResponse: validateContentWebhookOutput,
+  } as const;
+  if (options.asyncDispatch) {
+    return executeValidatedJsonWebhook({
+      ...baseOptions,
+      asyncDispatch: options.asyncDispatch,
+    });
+  }
+  return executeValidatedJsonWebhook(baseOptions);
 }

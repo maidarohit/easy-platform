@@ -39,7 +39,11 @@ test("all six text specialists normalize a single-item n8n envelope through stri
   const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
   for (const specialistModule of TEXT_SPECIALIST_MODULES) {
     const output = Object.fromEntries(fields[specialistModule].map((field) => [field, `${specialistModule} ${field} result`]));
-    const input = specialistModule === "sales" ? salesInput : specialistModule === "analytics" ? analyticsInput : brandInput;
+    const input = specialistModule === "sales"
+        ? salesInput
+        : specialistModule === "analytics"
+          ? analyticsInput
+          : brandInput;
     const result = await executeTextSpecialistService({
       module: specialistModule, context, input,
       fetcher: async () => new Response(JSON.stringify([{ output }]), { status: 200 }),
@@ -47,6 +51,79 @@ test("all six text specialists normalize a single-item n8n envelope through stri
     });
     assert.deepEqual(result.output, getModuleAdapter(specialistModule).validateOutput(output), specialistModule);
   }
+});
+
+test("text specialists accept only the strict async acknowledgement contract", async () => {
+  const context = createTrustedModuleExecutionContext({
+    userId: "firebase-user",
+    projectId: "project-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+  });
+  const result = await executeTextSpecialistService({
+    module: "marketing",
+    context,
+    input: brandInput,
+    asyncDispatch: {
+      runId: "11111111-1111-4111-8111-111111111111",
+      taskId: "22222222-2222-4222-8222-222222222222",
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      executionKey: "marketing-1",
+      projectId: "project-1",
+      module: "marketing",
+      callbackUrl: "https://example.test/api/easy-mode/attempts/33333333-3333-4333-8333-333333333333/callback",
+      correlationId: "marketing-1",
+    },
+    fetcher: async () => new Response(JSON.stringify({
+      dispatchMode: "async",
+      status: "accepted",
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      executionKey: "marketing-1",
+      module: "marketing",
+      providerExecutionId: "exec-1",
+    }), { status: 202 }),
+    webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+  });
+  assert.deepEqual(result, {
+    dispatchMode: "async",
+    module: "marketing",
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "marketing-1",
+    callbackStatus: "accepted",
+    providerExecutionId: "exec-1",
+  });
+});
+
+test("malformed async acknowledgements fail closed", async () => {
+  const context = createTrustedModuleExecutionContext({
+    userId: "firebase-user",
+    projectId: "project-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+  });
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "seo",
+    context,
+    input: brandInput,
+    asyncDispatch: {
+      runId: "11111111-1111-4111-8111-111111111111",
+      taskId: "22222222-2222-4222-8222-222222222222",
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      executionKey: "seo-1",
+      projectId: "project-1",
+      module: "seo",
+      callbackUrl: "https://example.test/api/easy-mode/attempts/33333333-3333-4333-8333-333333333333/callback",
+      correlationId: "seo-1",
+    },
+    fetcher: async () => new Response(JSON.stringify({
+      dispatchMode: "async",
+      status: "accepted",
+      attemptId: "33333333-3333-4333-8333-333333333333",
+      executionKey: "wrong-execution-key",
+      module: "seo",
+    }), { status: 202 }),
+    webhookConfig: { url: "https://example.invalid/seo", headers: {} },
+  }));
 });
 
 test("normal Sales execution accepts direct and harmless Respond-to-Webhook envelopes", async () => {
@@ -95,16 +172,21 @@ test("legacy Marketing normalization rejects missing real metrics and unknown fi
 });
 
 test("executor enables only approved text specialists and preserves persistence/usage/publication boundaries", async () => {
-  const executor = await source("app/lib/easy-mode-executor.ts");
-  const adapter = await source("app/lib/text-specialist-execution.ts");
+  const [executor, adapter, persistence] = await Promise.all([
+    source("app/lib/easy-mode-executor.ts"),
+    source("app/lib/text-specialist-execution.ts"),
+    source("app/lib/easy-mode-specialist-persistence.ts"),
+  ]);
   for (const specialistModule of TEXT_SPECIALIST_MODULES) {
     assert.match(executor, new RegExp(`\\b${specialistModule}\\b`));
   }
   assert.match(executor, /startUsage/);
-  assert.match(executor, /insertProjectOutput/);
+  assert.match(persistence, /insertProjectOutput/);
   assert.match(executor, /projectOutputId: persisted\.id/);
   assert.match(adapter, /N8N_WEBSITE_AI_WEBHOOK_URL/);
   assert.match(adapter, /N8N_ANALYTICS_AI_WEBHOOK_URL/);
+  assert.match(executor, /buildSpecialistCallbackUrl/);
+  assert.match(adapter, /asyncDispatch/);
   assert.doesNotMatch(executor, /publishWebsite|websitePublications|publishedWebsites/);
   assert.doesNotMatch(adapter, /N8N_IMAGE_AI_WEBHOOK_URL/);
 });

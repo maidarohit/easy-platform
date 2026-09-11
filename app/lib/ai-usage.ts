@@ -58,6 +58,43 @@ function componentUpdates(usageComponents: readonly AiUsageComponent[]) {
   };
 }
 
+export function buildAiUsageCompletionUpdate(input: Readonly<{
+  durationMs: number;
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  usageComponents?: readonly AiUsageComponent[];
+}>) {
+  const updates: {
+    status: "success";
+    durationMs: number;
+    model?: string | null;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    estimatedCostUsd?: string;
+  } = { status: "success", durationMs: input.durationMs };
+
+  if (input.model !== undefined) updates.model = input.model;
+  if (input.inputTokens !== undefined) updates.inputTokens = input.inputTokens;
+  if (input.outputTokens !== undefined) updates.outputTokens = input.outputTokens;
+
+  if (input.usageComponents && input.usageComponents.length > 0) {
+    Object.assign(updates, componentUpdates(input.usageComponents));
+  } else if (
+    typeof input.model === "string" &&
+    typeof input.inputTokens === "number" &&
+    typeof input.outputTokens === "number"
+  ) {
+    updates.estimatedCostUsd = calculateTokenCostUsd({
+      model: input.model,
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+    });
+  }
+
+  return updates;
+}
+
 export async function startAiUsage({
   userId,
   projectId,
@@ -127,36 +164,15 @@ export async function completeAiUsage({
   outputTokens,
   usageComponents,
 }: CompleteAiUsageInput): Promise<void> {
-  const updates: {
-    status: "success";
-    durationMs: number;
-    model?: string | null;
-    inputTokens?: number | null;
-    outputTokens?: number | null;
-    estimatedCostUsd?: string;
-  } = { status: "success", durationMs };
-
-  if (model !== undefined) updates.model = model;
-  if (inputTokens !== undefined) updates.inputTokens = inputTokens;
-  if (outputTokens !== undefined) updates.outputTokens = outputTokens;
-
-  if (usageComponents && usageComponents.length > 0) {
-    Object.assign(updates, componentUpdates(usageComponents));
-  } else if (
-    typeof model === "string" &&
-    typeof inputTokens === "number" &&
-    typeof outputTokens === "number"
-  ) {
-    updates.estimatedCostUsd = calculateTokenCostUsd({
+  await db
+    .update(aiUsage)
+    .set(buildAiUsageCompletionUpdate({
+      durationMs,
       model,
       inputTokens,
       outputTokens,
-    });
-  }
-
-  await db
-    .update(aiUsage)
-    .set(updates)
+      usageComponents,
+    }))
     .where(eq(aiUsage.id, usageId));
 }
 
