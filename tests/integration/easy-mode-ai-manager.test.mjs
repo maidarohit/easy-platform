@@ -52,6 +52,16 @@ test("callback retains secret/idempotency and durably syncs validated Easy Mode 
   assert.doesNotMatch(service, /publishWebsite|websitePublications|publishedWebsites/);
 });
 
+test("late or duplicate AI Manager callbacks cannot reopen or overwrite a newer retry", async () => {
+  const service = await source("app/lib/easy-mode-ai-manager.ts");
+  const terminalGuard = service.slice(service.indexOf('if (["completed", "failed_before_dispatch", "failed_uncertain"].includes(attempt.status))'));
+  assert.match(terminalGuard, /return job\.status === "completed" && attempt\.status === "completed"/);
+  assert.ok(terminalGuard.indexOf('if (["completed", "failed_before_dispatch", "failed_uncertain"].includes(attempt.status))') <
+    terminalGuard.indexOf("insert(projectOutputs)"));
+  assert.ok(terminalGuard.indexOf('if (["completed", "failed_before_dispatch", "failed_uncertain"].includes(attempt.status))') <
+    terminalGuard.indexOf('status: job.status === "completed" ? "completed" : "failed_uncertain"'));
+});
+
 test("first Easy Mode task preserves canonical onboarding goal and description", async () => {
   const calls = [];
   const context = createTrustedModuleExecutionContext({ userId: "fresh-user", projectId: "fresh-project", runId, taskId });

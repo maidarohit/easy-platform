@@ -1,9 +1,9 @@
 import "server-only";
 
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
-import { easyModeTaskAttempts, type easyModeTasks } from "@/app/db/schema";
-import { canExplicitlyRetryAttempt } from "@/app/lib/easy-mode-task-attempts";
+import { easyModeRuns, easyModeTaskAttempts, type easyModeTasks } from "@/app/db/schema";
+import { evaluateFailedTaskRetryEligibility } from "@/app/lib/easy-mode-task-attempts";
 
 export type EasyModeCustomerTaskState = "Waiting" | "In progress" | "Completed" | "Failed" | "Needs attention" | "Not needed";
 
@@ -21,14 +21,26 @@ export type EasyModeCustomerTask = Readonly<{
 export async function customerTaskViews(
   runId: string,
   tasks: readonly (typeof easyModeTasks.$inferSelect)[],
-  options: Readonly<{ allowUncertainRecovery?: boolean }> = {},
+  _options: Readonly<{ allowUncertainRecovery?: boolean }> = {},
 ): Promise<EasyModeCustomerTask[]> {
+  void _options;
+  const [run] = await db.select({
+    status: easyModeRuns.status,
+  }).from(easyModeRuns).where(eq(easyModeRuns.id, runId)).limit(1);
   const attempts = await db.select({
+    id: easyModeTaskAttempts.id,
     taskId: easyModeTaskAttempts.taskId,
     status: easyModeTaskAttempts.status,
     attemptNumber: easyModeTaskAttempts.attemptNumber,
+    safeErrorCode: easyModeTaskAttempts.safeErrorCode,
   }).from(easyModeTaskAttempts).where(eq(easyModeTaskAttempts.runId, runId))
     .orderBy(desc(easyModeTaskAttempts.attemptNumber));
+  const [activeAttempt] = await db.select({
+    id: easyModeTaskAttempts.id,
+  }).from(easyModeTaskAttempts).where(and(
+    eq(easyModeTaskAttempts.runId, runId),
+    inArray(easyModeTaskAttempts.status, ["claimed", "dispatching", "running"]),
+  )).limit(1);
   const latestAttempt = new Map<string, (typeof attempts)[number]>();
   for (const attempt of attempts) {
     if (!latestAttempt.has(attempt.taskId)) latestAttempt.set(attempt.taskId, attempt);
@@ -36,23 +48,36 @@ export async function customerTaskViews(
 
   return tasks.map((task) => {
     const attempt = latestAttempt.get(task.id);
+    const eligibility = evaluateFailedTaskRetryEligibility({
+      runStatus: run?.status ?? null,
+      taskId: task.id,
+      taskStatus: task.status,
+      projectOutputId: task.projectOutputId,
+      attemptId: attempt?.id ?? null,
+      attemptTaskId: attempt?.taskId ?? null,
+      attemptStatus: attempt?.status ?? null,
+      attemptSafeErrorCode: attempt?.safeErrorCode ?? null,
+      latestAttemptId: attempt?.id ?? null,
+      activeAttemptId: activeAttempt?.id ?? null,
+    });
     const uncertain = task.status === "failed" && attempt?.status === "failed_uncertain";
-    const canRetry = task.status === "failed" && Boolean(attempt && (
-      canExplicitlyRetryAttempt(attempt.status) ||
-        (options.allowUncertainRecovery === true && uncertain && task.projectOutputId === null)
-    ));
+    const canRetry = eligibility.allowed;
     const customerState: EasyModeCustomerTaskState = task.status === "completed" ? "Completed" :
       task.status === "running" ? "In progress" :
         task.status === "skipped" ? "Not needed" :
           task.status === "failed" ? canRetry ? "Failed" : "Needs attention" : "Waiting";
     const customerMessage = canRetry
-      ? "This step could not start. You can safely try again."
-      : uncertain
-        ? options.allowUncertainRecovery === true && task.projectOutputId === null
+      ? attempt?.status === "failed_uncertain"
           ? "We could not confirm whether this step finished. You can safely retry this phase."
+          : "This step could not start. You can safely try again."
+      : uncertain
+        ? eligibility.reason === "active_attempt"
+          ? "This step is already being handled."
           : "We could not confirm whether this step finished. Please contact support before trying again."
         : task.status === "failed"
-          ? "This step needs attention before it can continue."
+          ? eligibility.reason === "active_attempt"
+            ? "This step is already being handled."
+            : "This step needs attention before it can continue."
           : null;
     return {
       id: task.id,

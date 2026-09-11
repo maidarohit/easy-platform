@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { canExplicitlyRetryAttempt } from "../../app/lib/easy-mode-task-attempts.ts";
+import {
+  canExplicitlyRetryAttempt,
+  evaluateFailedTaskRetryEligibility,
+} from "../../app/lib/easy-mode-task-attempts.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 
@@ -10,6 +13,18 @@ test("only known pre-dispatch failures are retryable", () => {
   assert.equal(canExplicitlyRetryAttempt("failed_uncertain"), false);
   assert.equal(canExplicitlyRetryAttempt("running"), false);
   assert.equal(canExplicitlyRetryAttempt("completed"), false);
+  assert.equal(evaluateFailedTaskRetryEligibility({
+    runStatus: "failed",
+    taskId: "task-1",
+    taskStatus: "failed",
+    projectOutputId: null,
+    attemptId: "attempt-1",
+    attemptTaskId: "task-1",
+    attemptStatus: "failed_uncertain",
+    attemptSafeErrorCode: "TASK_FAILED",
+    latestAttemptId: "attempt-1",
+    activeAttemptId: null,
+  }).allowed, true);
 });
 
 test("retry API is owner scoped and selects only the latest task attempt", async () => {
@@ -19,8 +34,8 @@ test("retry API is owner scoped and selects only the latest task attempt", async
   assert.match(route, /eq\(projects\.userId, userId\)/);
   assert.match(route, /eq\(easyModeTaskAttempts\.userId, userId\)/);
   assert.match(route, /orderBy\(desc\(easyModeTaskAttempts\.attemptNumber\)\)\.limit\(1\)/);
-  assert.match(route, /canExplicitlyRetryAttempt\(attempt\.status\)/);
   assert.match(route, /prepareEasyModeTaskRetry/);
+  assert.match(route, /prepareUncertainEasyModeTaskRetry/);
 });
 
 test("retry preparation is atomic, duplicate safe, and does not charge or dispatch", async () => {
@@ -40,6 +55,7 @@ test("Easy Mode and Master Workspace hide internal failures and customer retry c
   const workspacePage = await source("app/master-workspace/page.tsx");
   assert.match(customerStatus, /"Failed" \| "Needs attention"/);
   assert.match(customerStatus, /attempt\?\.status === "failed_uncertain"/);
+  assert.match(customerStatus, /const canRetry = eligibility\.allowed/);
   assert.match(customerStatus, /canRetry/);
   assert.doesNotMatch(runsRoute, /safeErrorCode/);
   assert.doesNotMatch(runRoute, /safeErrorCode/);
@@ -50,11 +66,13 @@ test("Easy Mode and Master Workspace hide internal failures and customer retry c
   assert.doesNotMatch(workspacePage, /failed_uncertain|DELIVERY_UNCERTAIN|PROVIDER_/);
 });
 
-test("retry uses durable execute-next and never publishes", async () => {
+test("customer runner pages use durable execute-next and never publish directly", async () => {
   const easyPage = await source("app/easy-mode/page.tsx");
+  const buildPage = await source("app/business-build/page.tsx");
   const workspacePage = await source("app/master-workspace/page.tsx");
   assert.match(easyPage, /\/execute-next/);
-  assert.match(workspacePage, /\/execute-next/);
+  assert.match(buildPage, /\/execute-next/);
   assert.doesNotMatch(easyPage, /N8N_|\/api\/(branding-ai|website-ai)|publish/);
-  assert.doesNotMatch(workspacePage, /N8N_|\/api\/(branding-ai|website-ai)|publish/);
+  assert.doesNotMatch(buildPage, /N8N_|\/api\/(branding-ai|website-ai)|publish/);
+  assert.doesNotMatch(workspacePage, /N8N_|getN8nWebhookConfig|executeValidatedJsonWebhook/);
 });

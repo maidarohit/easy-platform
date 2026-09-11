@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
+import { evaluateFailedTaskRetryEligibility } from "../../app/lib/easy-mode-task-attempts.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const runId = "11111111-1111-4111-8111-111111111111";
@@ -22,6 +23,22 @@ function claimFor(moduleId, taskNumber, attemptNumber = 1) {
     executionKey: `${moduleId}-${attemptNumber}`,
     leaseToken: `${attemptDigit.repeat(8)}-${attemptDigit.repeat(4)}-4${attemptDigit.repeat(3)}-a${attemptDigit.repeat(3)}-${attemptDigit.repeat(12)}`,
     leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+}
+
+function retrySnapshot(overrides = {}) {
+  return {
+    runStatus: "failed",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    taskStatus: "failed",
+    projectOutputId: null,
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptTaskId: "22222222-2222-4222-8222-222222222222",
+    attemptStatus: "failed_uncertain",
+    attemptSafeErrorCode: "TASK_FAILED",
+    latestAttemptId: "33333333-3333-4333-8333-333333333333",
+    activeAttemptId: null,
+    ...overrides,
   };
 }
 
@@ -45,6 +62,31 @@ test("stale Business Build work cannot poll forever without surfacing support st
   assert.match(page, /Your build needs support\./);
 });
 
+test("shared retry eligibility allows safe first-phase and later-phase failed retries and blocks unsafe states", () => {
+  assert.equal(evaluateFailedTaskRetryEligibility(retrySnapshot()).allowed, true);
+  assert.equal(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    attemptSafeErrorCode: "DELIVERY_UNCERTAIN",
+  })).allowed, true);
+  assert.equal(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    runStatus: "partially_completed",
+    attemptStatus: "failed_before_dispatch",
+    attemptSafeErrorCode: "TASK_FAILED",
+  })).allowed, true);
+
+  assert.deepEqual(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    activeAttemptId: "44444444-4444-4444-8444-444444444444",
+  })), { allowed: false, reason: "active_attempt" });
+  assert.deepEqual(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    taskStatus: "completed",
+  })), { allowed: false, reason: "task_not_failed" });
+  assert.deepEqual(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    projectOutputId: "55555555-5555-4555-8555-555555555555",
+  })), { allowed: false, reason: "task_has_output" });
+  assert.deepEqual(evaluateFailedTaskRetryEligibility(retrySnapshot({
+    latestAttemptId: "66666666-6666-4666-8666-666666666666",
+  })), { allowed: false, reason: "attempt_not_latest" });
+});
+
 test("uncertain recovery route reconciles first and only then prepares the named failed task", async () => {
   const route = await source("app/api/easy-mode/runs/[runId]/tasks/[taskId]/retry/route.ts");
   assert.match(route, /verifyFirebaseIdToken\(request\)/);
@@ -57,15 +99,27 @@ test("uncertain recovery route reconciles first and only then prepares the named
 
 test("uncertain retry preparation fails closed and preserves completed tasks", async () => {
   const attempts = await source("app/lib/easy-mode-task-attempts.ts");
-  const fn = attempts.slice(attempts.indexOf("export async function prepareUncertainEasyModeTaskRetry"));
-  assert.match(fn, /run\.status !== "partially_completed"/);
-  assert.match(fn, /failedTasks\.length !== 1/);
-  assert.match(fn, /failedTasks\[0\]\.projectOutputId !== null/);
-  assert.match(fn, /safeErrorCode, "DELIVERY_UNCERTAIN"/);
-  assert.match(fn, /latestAttempt\?\.id !== attempt\.id/);
-  assert.match(fn, /ACTIVE_ATTEMPT_STATUSES/);
-  assert.match(fn, /eq\(easyModeTasks\.status, "failed"\)/);
-  assert.doesNotMatch(fn, /status: "completed"|delete\(/);
+  const retryPreparation = attempts.slice(attempts.indexOf("async function prepareFailedTaskRetry"));
+  assert.match(attempts, /evaluateFailedTaskRetryEligibility/);
+  assert.match(attempts, /RETRYABLE_UNCERTAIN_SAFE_ERROR_CODES = new Set\(\["DELIVERY_UNCERTAIN", "TASK_FAILED"\]\)/);
+  assert.match(attempts, /inArray\(easyModeRuns\.status, \["failed", "partially_completed"\]\)/);
+  assert.match(attempts, /eq\(easyModeTasks\.status, "failed"\)/);
+  assert.match(attempts, /ACTIVE_ATTEMPT/);
+  assert.match(retryPreparation, /status: "queued"/);
+  assert.doesNotMatch(retryPreparation, /status: "completed"|delete\(/);
+});
+
+test("customer view and retry backend use the same shared failed-task retry policy", async () => {
+  const [customerStatus, route] = await Promise.all([
+    source("app/lib/easy-mode-customer-status.ts"),
+    source("app/api/easy-mode/runs/[runId]/tasks/[taskId]/retry/route.ts"),
+  ]);
+  assert.match(customerStatus, /evaluateFailedTaskRetryEligibility/);
+  assert.match(customerStatus, /const canRetry = eligibility\.allowed/);
+  assert.doesNotMatch(customerStatus, /allowUncertainRecovery === false/);
+  assert.match(route, /ACTIVE_ATTEMPT/);
+  assert.match(route, /This failed step cannot be retried yet\./);
+  assert.match(route, /This step is already being handled\./);
 });
 
 test("duplicate execution claims do not produce two provider calls", async () => {

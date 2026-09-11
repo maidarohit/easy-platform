@@ -3,7 +3,6 @@ import { db } from "@/app/db";
 import { easyModeRuns, easyModeTaskAttempts, easyModeTasks, projects } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import {
-  canExplicitlyRetryAttempt,
   EasyModeAttemptError,
   prepareEasyModeTaskRetry,
   prepareUncertainEasyModeTaskRetry,
@@ -79,14 +78,15 @@ export async function POST(request: Request, { params }: RouteContext) {
         }
         await prepareUncertainEasyModeTaskRetry({ attemptId: attempt.id, userId });
       }
-    } else if (canExplicitlyRetryAttempt(attempt.status)) {
-      await prepareEasyModeTaskRetry({ attemptId: attempt.id, userId });
     } else {
-      return Response.json({ error: "This step cannot be retried safely." }, { status: 409 });
+      await prepareEasyModeTaskRetry({ attemptId: attempt.id, userId });
     }
   } catch (error) {
-    if (error instanceof EasyModeAttemptError && error.code === "RETRY_NOT_ALLOWED") {
+    if (error instanceof EasyModeAttemptError && error.code === "ACTIVE_ATTEMPT") {
       return Response.json({ error: "This step is already being handled." }, { status: 409 });
+    }
+    if (error instanceof EasyModeAttemptError && error.code === "RETRY_NOT_ALLOWED") {
+      return Response.json({ error: "This failed step cannot be retried yet." }, { status: 409 });
     }
     throw error;
   }
