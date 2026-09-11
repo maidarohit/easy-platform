@@ -17,7 +17,8 @@ test("customer-first project actions open intake only when context is absent and
 test("primary sidebar is customer-first while specialists remain intentionally available under Advanced Tools", async () => {
   const sidebar = await source("app/dashboard/components/Sidebar.tsx");
   const primary = sidebar.slice(sidebar.indexOf("const PRIMARY_ITEMS"), sidebar.indexOf("const ADVANCED_ITEMS"));
-  for (const label of ["Dashboard", "My Business", "Preview", "Automation", "Settings"]) assert.match(primary, new RegExp(`label: "${label}"`));
+  for (const label of ["Dashboard", "My Business", "Preview", "Automation", "Usage & Billing", "Settings"]) assert.match(primary, new RegExp(`label: "${label}"`));
+  assert.match(primary, /href: "\/billing"/);
   assert.doesNotMatch(primary, /AI Manager|Branding|Website|Marketing|SEO|UI\/UX|Sales|Analytics/);
   for (const route of ["/ai-manager", "/branding-ai", "/dashboard/website-ai", "/marketing-ai", "/seo-ai", "/uiux-ai", "/sales-ai", "/analytics-ai", "/dashboard/creative-ai"]) assert.match(sidebar, new RegExp(route.replaceAll("/", "\\/")));
   assert.match(sidebar, /<details open=\{advancedActive\}/);
@@ -37,6 +38,11 @@ test("project context and published-business navigation are preserved across the
 test("Dashboard navigation cannot restart Build My Business and keeps advanced tools secondary", async () => {
   const dashboard = await source("app/dashboard/page.tsx");
   assert.match(dashboard, /customerProjectAction\(project\)/);
+  assert.match(dashboard, /function customerBusinessTitle\(project: Project\)/);
+  assert.match(dashboard, /project\.companyName, project\.name/);
+  assert.match(dashboard, /Business Vision\\b/);
+  assert.match(dashboard, /\[0-9a-f\]\{8,\}/);
+  assert.doesNotMatch(dashboard, /project\.id\.slice|Business Vision \$\{id\.slice/);
   for (const label of ["Tell us about your business", "Build My Business", "Review My Business", "Publish My Business", "View Live Business"]) assert.match(`${dashboard}\n${await source("app/lib/customer-navigation.ts")}`, new RegExp(label));
   assert.match(dashboard, /authenticatedFetch\(`\/api\/business-preview\?projectId=/);
   assert.match(dashboard, /authenticatedFetch\(`\/api\/business-publications\?projectId=/);
@@ -50,7 +56,7 @@ test("My Business exposes preview, publishing, live-business and automation acti
   assert.match(workspace, /Preview & Edit My Business/);
   assert.match(workspace, /Preview, Edit & Publish/);
   assert.match(workspace, /Manage Automation/);
-  assert.match(workspace, /View Live Business/);
+  assert.match(workspace, /View Live (Business|Website)/);
   assert.match(workspace, /id="advanced-tools"/);
   assert.doesNotMatch(workspace, /\/api\/business-build|\/api\/easy-mode|OpenAI|N8N_/);
 });

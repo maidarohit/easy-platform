@@ -20,6 +20,7 @@ const PRIMARY_ITEMS: readonly MenuItem[] = [
   { label: "Automation", href: "/dashboard/automation", icon: "↻", businessPlan: true },
   { label: "Social & Content", href: "/social", icon: "◉" },
   { label: "Settings", href: "/settings", icon: "⚙" },
+  { label: "Usage & Billing", href: "/billing", icon: "$" },
 ];
 
 const ADVANCED_ITEMS: readonly MenuItem[] = [

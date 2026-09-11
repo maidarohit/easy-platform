@@ -34,6 +34,21 @@ type DashboardSummary = {
 
 type BillingAccess = { entitlements?: { paidAccess?: boolean } };
 
+function customerBusinessTitle(project: Project) {
+  const candidates = [project.companyName, project.name];
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) continue;
+    const cleaned = value
+      .replace(/^Business Vision\b[:\s-]*/i, "")
+      .replace(/\b[0-9a-f]{8,}\b/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (cleaned) return cleaned;
+  }
+  return "Untitled business";
+}
+
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -378,22 +393,8 @@ function DashboardPageContent() {
       </div>
 
       <div>
-        <div className="mb-2 flex items-center gap-2">
-          <span
-            className="
-              h-1.5 w-1.5 rounded-full
-              bg-cyan-400
-              shadow-[0_0_8px_rgba(34,211,238,0.8)]
-            "
-          />
-
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-400">
-            My Business
-          </p>
-        </div>
-
         <h3 className="text-xl font-semibold tracking-tight text-white">
-          {project.name}
+          {customerBusinessTitle(project)}
         </h3>
       </div>
     </div>
@@ -414,22 +415,6 @@ function DashboardPageContent() {
 
   {/* PROJECT INFORMATION */}
   <div className="relative grid gap-3">
-    <div
-      className="
-        flex items-center justify-between gap-4
-        rounded-xl border border-slate-800/80
-        bg-slate-950/40 px-4 py-3
-      "
-    >
-      <span className="text-xs uppercase tracking-[0.14em] text-slate-500">
-        Company
-      </span>
-
-      <span className="text-right text-sm font-medium text-slate-200">
-        {project.companyName || "Not provided"}
-      </span>
-    </div>
-
     <div
       className="
         flex items-center justify-between gap-4
