@@ -11,6 +11,7 @@ import {
 import { isSubscriptionPlan, type SubscriptionPlan } from "@/app/lib/subscription-policy";
 import { billingMarketFromHeaders } from "@/app/lib/billing-market";
 import {
+  billingCurrencyForMarket,
   createRazorpaySubscription,
   getRazorpayPlanId,
   getRazorpaySubscription,
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
 
   const market = billingMarketFromHeaders(request.headers);
   const providerPlanId = getRazorpayPlanId(market);
+  const billingCurrency = billingCurrencyForMarket(market);
   if (!providerPlanId) {
     return Response.json(
       { error: "International payments are opening shortly. Please check back soon." },
@@ -80,7 +82,15 @@ export async function POST(request: Request) {
       if (recentPending || unresolvedReservation) return { error: current.plan === plan
         ? "Payment setup is already in progress. Return to billing or contact support."
         : "Another payment setup is already in progress." } as const;
-      await transaction.insert(subscriptions).values({ userId: token.uid, plan, providerSubscriptionId: reservationId, status: "pending" });
+      await transaction.insert(subscriptions).values({
+        userId: token.uid,
+        plan,
+        providerPlanId,
+        providerSubscriptionId: reservationId,
+        billingMarket: market,
+        billingCurrency,
+        status: "pending",
+      });
       return { reserved: true } as const;
     });
 

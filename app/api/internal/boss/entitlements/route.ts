@@ -87,7 +87,15 @@ export async function GET(request: Request) {
     getCurrentUsageCounters(userId),
   ]);
   return Response.json({
-    subscription: subscription ? { plan: subscription.plan, status: subscription.status, currentPeriodStart: subscription.currentPeriodStart, currentPeriodEnd: subscription.currentPeriodEnd } : null,
+    subscription: subscription ? {
+      plan: subscription.plan,
+      status: subscription.status,
+      billingMarket: subscription.billingMarket,
+      billingCurrency: subscription.billingCurrency,
+      providerPlanId: subscription.providerPlanId,
+      currentPeriodStart: subscription.currentPeriodStart,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+    } : null,
     entitlements,
     usage,
     overrides: overrides.map(({ category, limit, paidAccessDisabled }) => ({ category, limit, paidAccessDisabled })),

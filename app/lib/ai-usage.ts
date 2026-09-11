@@ -7,6 +7,7 @@ import {
   calculateTokenCostUsd,
 } from "@/app/lib/ai-cost";
 import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import { requireBusinessPlanGenerationHeadroom } from "@/app/lib/business-plan-usage";
 import { requirePaidModule } from "@/app/lib/paid-entitlements";
 import { categoryForModule } from "@/app/lib/plan-config";
 import { and, eq, sql } from "drizzle-orm";
@@ -72,6 +73,8 @@ export async function startAiUsage({
 
     const access = await requirePaidModule(userId, module);
     if (!access.ok) throw access.response;
+    const headroom = await requireBusinessPlanGenerationHeadroom(userId, module);
+    if (!headroom.ok) throw headroom.response;
 
     const [usage] = await transaction
       .insert(aiUsage)
@@ -104,6 +107,8 @@ export async function claimIdempotentAiUsage(input: StartAiUsageInput): Promise<
     if (existing) return { usageId: existing.id, created: false, status: existing.status };
     const access = await requirePaidModule(input.userId, input.module);
     if (!access.ok) throw access.response;
+    const headroom = await requireBusinessPlanGenerationHeadroom(input.userId, input.module);
+    if (!headroom.ok) throw headroom.response;
     const [usage] = await transaction.insert(aiUsage).values({
       userId: input.userId, projectId: input.projectId, module: input.module, workflow: input.workflow,
       model: input.model ?? null, requestCount: 1, inputTokens: null, outputTokens: null,

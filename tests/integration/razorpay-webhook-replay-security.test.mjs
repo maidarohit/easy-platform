@@ -19,7 +19,7 @@ function supportedEvent(overrides = {}) {
   return {
     event: "subscription.activated",
     created_at: 1_800_000_000,
-    payload: { subscription: { entity: { id: "sub_test_bounded" } } },
+    payload: { subscription: { entity: { id: "sub_test_bounded", plan_id: "plan_test_inr" } } },
     ...overrides,
   };
 }
@@ -167,6 +167,7 @@ test("supported events require bounded provider event ID and signed root timesta
   const validated = validateSupportedSubscriptionEvent(event, "evt_test_1");
   assert.equal(validated?.providerEventId, "evt_test_1");
   assert.equal(validated?.providerSubscriptionId, "sub_test_bounded");
+  assert.equal(validated?.providerPlanId, "plan_test_inr");
   assert.equal(validated?.providerCreatedAt.getTime(), event.created_at * 1000);
   assert.throws(() => validateSupportedSubscriptionEvent(event, null), TypeError);
   assert.throws(() => validateSupportedSubscriptionEvent(event, "x".repeat(201)), TypeError);
@@ -224,16 +225,33 @@ test("same-timestamp terminal events do not flip terminal state", () => {
 });
 
 test("first delivery mutates once and exact duplicate performs no mutation", async () => {
-  const database = new FakeWebhookDatabase();
-  const event = validatedEvent("evt_exact_duplicate", "subscription.activated", 1_800_000_010);
-  assert.equal(await processValidatedSubscriptionEvent(event, database), "processed");
-  assert.equal(database.events.size, 1);
-  assert.equal(database.subscription.status, "active");
-  assert.equal(database.subscriptionMutations, 1);
+  const original = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      BILLING_MODE: "test",
+      RAZORPAY_KEY_ID: "rzp_test_redacted",
+      RAZORPAY_KEY_SECRET: "redacted",
+      RAZORPAY_BUSINESS_INR_PLAN_ID: "plan_test_inr",
+      RAZORPAY_BUSINESS_USD_PLAN_ID: "plan_test_usd",
+    });
 
-  assert.equal(await processValidatedSubscriptionEvent(event, database), "duplicate");
-  assert.equal(database.events.size, 1);
-  assert.equal(database.subscriptionMutations, 1);
+    const database = new FakeWebhookDatabase();
+    const event = validatedEvent("evt_exact_duplicate", "subscription.activated", 1_800_000_010);
+    assert.equal(await processValidatedSubscriptionEvent(event, database), "processed");
+    assert.equal(database.events.size, 1);
+    assert.equal(database.subscription.status, "active");
+    assert.equal(database.subscription.providerPlanId, "plan_test_inr");
+    assert.equal(database.subscription.billingMarket, "india");
+    assert.equal(database.subscription.billingCurrency, "INR");
+    assert.equal(database.subscriptionMutations, 1);
+
+    assert.equal(await processValidatedSubscriptionEvent(event, database), "duplicate");
+    assert.equal(database.events.size, 1);
+    assert.equal(database.subscriptionMutations, 1);
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key];
+    Object.assign(process.env, original);
+  }
 });
 
 test("concurrent duplicate deliveries reserve and mutate exactly once", async () => {
@@ -321,7 +339,8 @@ test("pre-database security rejections preserve status codes", async () => {
 test("event ledger is bounded, append-only in purpose, and contains no payload data", async () => {
   const schema = await source("app/db/schema.ts");
   const migration = await source("drizzle/0011_add-razorpay-webhook-events.sql");
-  for (const contents of [schema, migration]) {
+  const schemaLedger = schema.match(/export const razorpayWebhookEvents = pgTable\([\s\S]*?\n\);/)?.[0] ?? "";
+  for (const contents of [schemaLedger, migration]) {
     assert.match(contents, /razorpay_webhook_events/);
     assert.match(contents, /provider_event_id/);
     assert.match(contents, /provider_created_at/);

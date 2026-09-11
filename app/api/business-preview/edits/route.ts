@@ -3,11 +3,10 @@ import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projectPreviewCustomizations, projects } from "@/app/db/schema";
 import { selectLatestWorkspaceOutputs, workspaceProjectPresentation } from "@/app/api/master-workspace/route";
 import { buildBusinessPreview } from "@/app/lib/business-preview";
-import { applyPreviewOverrides, validatePreviewOverrides } from "@/app/lib/business-preview-edits";
+import { applyPreviewOverrides, mergePreservedOwnerImages, validatePreviewOverrides } from "@/app/lib/business-preview-edits";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
-import { completeAiUsage, startAiUsage } from "@/app/lib/ai-usage";
 
 const MAX_BODY_BYTES = 16_384;
 
@@ -33,13 +32,6 @@ export async function PUT(request: Request) {
 
   const [ownedProject] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.userId, userId))).limit(1);
   if (!ownedProject) return Response.json({ error: "Project not found." }, { status: 404 });
-  let usageId: string;
-  try {
-    usageId = await startAiUsage({ userId, projectId, module: "website-edit", workflow: "business-preview-edit" });
-  } catch (error) {
-    if (error instanceof Response) return error;
-    throw error;
-  }
 
   const result = await db.transaction(async (transaction) => {
     const [project] = await transaction.select().from(projects).where(and(
@@ -61,24 +53,28 @@ export async function PUT(request: Request) {
     });
     const checked = validatePreviewOverrides((body as { overrides: unknown }).overrides, originalPreview);
     if (!checked.valid) return { error: checked.error, status: 400 as const };
+    const [existingCustomization] = await transaction.select().from(projectPreviewCustomizations).where(and(
+      eq(projectPreviewCustomizations.projectId, projectId),
+      eq(projectPreviewCustomizations.userId, userId),
+    )).limit(1);
+    const overrides = mergePreservedOwnerImages(checked.overrides, existingCustomization?.overrides);
     const now = new Date();
     await transaction.insert(projectPreviewCustomizations).values({
-      projectId, userId, overrides: checked.overrides, approvedAt: null,
+      projectId, userId, overrides, approvedAt: null,
       revisionCount: 1, createdAt: now, updatedAt: now,
     }).onConflictDoUpdate({
       target: projectPreviewCustomizations.projectId,
       set: {
-        overrides: checked.overrides,
+        overrides,
         approvedAt: null,
         revisionCount: sql`${projectPreviewCustomizations.revisionCount} + 1`,
         updatedAt: now,
       },
     });
-    const preview = applyPreviewOverrides(originalPreview, checked.overrides);
+    const preview = applyPreviewOverrides(originalPreview, overrides);
     preview.approval.approved = false;
-    return { preview, overrides: checked.overrides };
+    return { preview, overrides };
   });
   if ("error" in result) return Response.json({ error: result.error }, { status: result.status });
-  await completeAiUsage({ usageId, durationMs: 0 });
   return Response.json(result, { headers: { "Cache-Control": "no-store" } });
 }

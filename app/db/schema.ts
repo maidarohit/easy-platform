@@ -680,6 +680,8 @@ export type SubscriptionStatus =
   | "past_due"
   | "cancelled"
   | "expired";
+export type SubscriptionBillingMarket = "india" | "international";
+export type SubscriptionBillingCurrency = "INR" | "USD";
 
 export const subscriptions = pgTable(
   "subscriptions",
@@ -691,7 +693,10 @@ export const subscriptions = pgTable(
     plan: text("plan").$type<SubscriptionPlan>().notNull(),
     provider: text("provider").notNull().default("razorpay"),
     providerCustomerId: text("provider_customer_id"),
+    providerPlanId: text("provider_plan_id"),
     providerSubscriptionId: text("provider_subscription_id").notNull(),
+    billingMarket: varchar("billing_market", { length: 16 }).$type<SubscriptionBillingMarket>(),
+    billingCurrency: varchar("billing_currency", { length: 3 }).$type<SubscriptionBillingCurrency>(),
     status: text("status").$type<SubscriptionStatus>().notNull().default("pending"),
     currentPeriodStart: timestamp("current_period_start"),
     currentPeriodEnd: timestamp("current_period_end"),
@@ -704,6 +709,8 @@ export const subscriptions = pgTable(
       table.providerSubscriptionId
     ),
     index("subscriptions_user_id_idx").on(table.userId),
+    check("subscriptions_billing_market_check", sql`${table.billingMarket} in ('india','international') or ${table.billingMarket} is null`),
+    check("subscriptions_billing_currency_check", sql`${table.billingCurrency} in ('INR','USD') or ${table.billingCurrency} is null`),
   ]
 );
 
@@ -751,6 +758,38 @@ export const entitlementOverrides = pgTable(
       table.category
     ),
   ]
+);
+
+export const usageNotifications = pgTable(
+  "usage_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    thresholdPercent: integer("threshold_percent").notNull(),
+    billingPeriodStart: timestamp("billing_period_start", { withTimezone: true })
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("usage_notifications_user_category_threshold_period_unique").on(
+      table.userId,
+      table.category,
+      table.thresholdPercent,
+      table.billingPeriodStart,
+    ),
+    index("usage_notifications_owner_period_idx").on(
+      table.userId,
+      table.billingPeriodStart,
+      table.createdAt,
+    ),
+    check(
+      "usage_notifications_threshold_check",
+      sql`${table.thresholdPercent} in (50, 80, 100)`,
+    ),
+  ],
 );
 
 export type AiUsageReconciliationStatus =

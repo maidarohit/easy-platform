@@ -11,6 +11,57 @@ import { BILLING_PLAN, type BillingMarket } from "@/app/lib/billing-plans";
 import { getBillingConfiguration } from "@/app/lib/billing-configuration";
 
 export const PLAN_PRICES_PAISE = { business: BILLING_PLAN.prices.india.amountMinor } as const;
+export const BILLING_MARKET_SAFE_FALLBACK = "india" as const;
+export type BillingCurrency = (typeof BILLING_PLAN.prices)[BillingMarket]["currency"];
+
+export function billingCurrencyForMarket(market: BillingMarket): BillingCurrency {
+  return BILLING_PLAN.prices[market].currency;
+}
+
+export function billingMarketForProviderPlanId(
+  providerPlanId: string | null | undefined,
+): BillingMarket | null {
+  if (!providerPlanId) return null;
+  let planIds: ReturnType<typeof getBillingConfiguration>["planIds"];
+  try {
+    planIds = getBillingConfiguration().planIds;
+  } catch {
+    return null;
+  }
+  return (Object.entries(planIds).find(([, planId]) => planId === providerPlanId)?.[0] ?? null) as BillingMarket | null;
+}
+
+export function resolveSubscriptionBillingDetails(
+  subscription: typeof subscriptions.$inferSelect | null,
+) {
+  if (!subscription) return null;
+  const storedMarket = subscription.billingMarket;
+  if (storedMarket === "india" || storedMarket === "international") {
+    return {
+      market: storedMarket,
+      currency: billingCurrencyForMarket(storedMarket),
+      source: "stored_market" as const,
+      usedLegacyFallback: false,
+    };
+  }
+
+  const derivedMarket = billingMarketForProviderPlanId(subscription.providerPlanId);
+  if (derivedMarket) {
+    return {
+      market: derivedMarket,
+      currency: billingCurrencyForMarket(derivedMarket),
+      source: "provider_plan_id" as const,
+      usedLegacyFallback: false,
+    };
+  }
+
+  return {
+    market: BILLING_MARKET_SAFE_FALLBACK,
+    currency: billingCurrencyForMarket(BILLING_MARKET_SAFE_FALLBACK),
+    source: "legacy_india_fallback" as const,
+    usedLegacyFallback: true,
+  };
+}
 
 export function getRazorpayPlanId(market: BillingMarket): string | null {
   return getBillingConfiguration().planIds[market] || null;
@@ -68,10 +119,14 @@ export async function getUserSubscription(userId: string) {
 
 export async function getUserEntitlements(userId: string) {
   const subscription = await getUserSubscription(userId);
+  const billing = resolveSubscriptionBillingDetails(subscription);
   return {
     plan: subscription?.plan ?? null,
     status: subscription?.status ?? null,
     paidAccess: statusGrantsPaidAccess(subscription?.status ?? null),
+    billingMarket: billing?.market ?? null,
+    billingCurrency: billing?.currency ?? null,
+    billingFallback: billing?.usedLegacyFallback ?? false,
   };
 }
 

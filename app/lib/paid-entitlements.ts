@@ -3,9 +3,10 @@ import "server-only";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { aiUsage, entitlementOverrides, projects } from "@/app/db/schema";
+import { businessPlanMarket, businessPlanUsageLimit } from "@/app/lib/business-plan-usage";
 import {
   categoryForModule,
-  PLAN_LIMITS,
+  MODULE_CATEGORY,
   USAGE_CATEGORIES,
   type PaidPlan,
   type UsageCategory,
@@ -86,7 +87,12 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
   }
 
   const plan = subscription?.status === "active" ? subscription.plan : "business";
-  const configuredLimit = PLAN_LIMITS[plan][category];
+  const billing = businessPlanMarket(subscription);
+  const configuredLimit = businessPlanUsageLimit({
+    plan,
+    billingMarket: billing?.market,
+    category,
+  });
   const categoryOverride = overrides.find((item) => item.category === category);
   const limit = categoryOverride?.limit ?? configuredLimit;
   const periodStart = subscription?.status === "active"
@@ -98,15 +104,9 @@ export async function checkUsageAllowance(userId: string, category: UsageCategor
     return projectCountAllowance({ userId, plan, used, limit });
   }
 
-  const modules = Object.entries({
-    "ai-manager": "aiManagerRuns", image: "imageGenerations", video: "videoGenerations", branding: "brandingGenerations",
-    website: "websiteGenerations", "website-edit": "websiteEdits", seo: "seoGenerations", logo: "logoGenerations",
-    presentation: "presentationGenerations", uiux: "uiuxGenerations", sales: "salesGenerations", analytics: "analyticsGenerations", assistant: "assistantMessages",
-    "automation-social": "socialPosts",
-    "automation-content": "automationRuns", "automation-email": "automationRuns",
-    "automation-workflow": "automationRuns",
-    "automation-pipeline": "automationRuns",
-  }).filter(([, mapped]) => mapped === category).map(([module]) => module);
+  const modules = Object.entries(MODULE_CATEGORY)
+    .filter(([, mapped]) => mapped === category)
+    .map(([module]) => module);
 
   // Started rows reserve capacity against concurrent requests; failed rows do
   // not permanently consume customer allowance.

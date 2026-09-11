@@ -4,10 +4,19 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import auth from "../../lib/auth";
+import { authenticatedFetch } from "../../lib/authenticated-fetch";
 
 type NavbarProps = {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
+};
+
+type UsageNotification = {
+  id: string;
+  featureLabel: string;
+  threshold: 50 | 80 | 100;
+  message: string;
+  resetAt: string | null;
 };
 
 export default function Navbar({
@@ -17,6 +26,7 @@ export default function Navbar({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [avatarInitial, setAvatarInitial] = useState("");
+  const [notifications, setNotifications] = useState<UsageNotification[]>([]);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -24,6 +34,28 @@ export default function Navbar({
     return onAuthStateChanged(auth, (user) => {
       const customerIdentifier = user?.displayName?.trim() || user?.email?.trim();
       setAvatarInitial(customerIdentifier?.charAt(0).toUpperCase() || "");
+    });
+  }, []);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, async (user) => {
+      if (!user?.emailVerified) {
+        setNotifications([]);
+        return;
+      }
+
+      try {
+        const response = await authenticatedFetch("/api/billing/status", {
+          cache: "no-store",
+        });
+        const data = (await response.json()) as {
+          usage?: { notifications?: UsageNotification[] | null } | null;
+        };
+        if (!response.ok) throw new Error("Unable to load notifications.");
+        setNotifications(data.usage?.notifications ?? []);
+      } catch {
+        setNotifications([]);
+      }
     });
   }, []);
 
@@ -177,7 +209,7 @@ const pageOptions = [
   },
 ];
 
-const currentPage =
+  const currentPage =
   pageOptions.find(
     (page) =>
       pathname === page.path ||
@@ -290,12 +322,7 @@ const currentPage =
   </svg>
 
   <span
-    className="
-      absolute right-2 top-2
-      h-1.5 w-1.5 rounded-full
-      bg-red-500
-      shadow-[0_0_8px_rgba(239,68,68,0.95)]
-    "
+    className={`absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.95)] ${notifications.length > 0 ? "opacity-100" : "opacity-0"}`}
   />
 </button>
 
@@ -304,10 +331,24 @@ const currentPage =
       <h3 className="font-semibold text-[#0E2C24]">
         Notifications
       </h3>
-
-      <p className="mt-3 text-sm text-[#46534D]">
-        No new notifications.
-      </p>
+      {notifications.length === 0 ? (
+        <p className="mt-3 text-sm text-[#46534D]">
+          No new notifications.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {notifications.slice(0, 5).map((notification) => (
+            <article key={notification.id} className="rounded-lg border border-[#A8B8A7]/30 bg-white p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#173D32]">
+                {notification.featureLabel} · {notification.threshold}%
+              </p>
+              <p className="mt-1 text-sm leading-6 text-[#46534D]">
+                {notification.message}
+              </p>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   )}
 </div>

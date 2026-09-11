@@ -7,6 +7,10 @@ import {
   type SubscriptionStatus,
 } from "@/app/db/schema";
 import { readLimitedRawBody, RequestBodyTooLargeError } from "@/app/lib/request-body";
+import {
+  billingCurrencyForMarket,
+  billingMarketForProviderPlanId,
+} from "@/app/lib/subscriptions";
 import { statusForRazorpayEvent } from "@/app/lib/subscription-policy";
 import { verifyRazorpayWebhook } from "@/app/lib/razorpay-webhook";
 
@@ -23,6 +27,7 @@ type ValidatedSubscriptionEvent = {
   providerCreatedAt: Date;
   providerEventId: string;
   providerSubscriptionId: string;
+  providerPlanId: string | null;
   status: SubscriptionStatus;
   entity: Record<string, unknown>;
 };
@@ -77,6 +82,7 @@ export function validateSupportedSubscriptionEvent(
     providerCreatedAt: new Date(createdAt * 1000),
     providerEventId,
     providerSubscriptionId,
+    providerPlanId: typeof entity.plan_id === "string" ? entity.plan_id : null,
     status,
     entity,
   };
@@ -164,6 +170,7 @@ export async function processValidatedSubscriptionEvent(
     );
 
     if (outcome === "processed") {
+      const billingMarket = billingMarketForProviderPlanId(validated.providerPlanId);
       await tx
         .update(subscriptions)
         .set({
@@ -171,6 +178,11 @@ export async function processValidatedSubscriptionEvent(
           providerCustomerId: typeof validated.entity.customer_id === "string"
             ? validated.entity.customer_id
             : null,
+          providerPlanId: validated.providerPlanId,
+          ...(billingMarket ? {
+            billingMarket,
+            billingCurrency: billingCurrencyForMarket(billingMarket),
+          } : {}),
           currentPeriodStart: unixDate(validated.entity.current_start),
           currentPeriodEnd: unixDate(validated.entity.current_end),
           cancelAtPeriodEnd:

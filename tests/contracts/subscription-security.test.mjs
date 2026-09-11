@@ -25,6 +25,8 @@ test("plan IDs, prices, and credentials remain server-side", async () => {
   assert.match(configuration, /RAZORPAY_BUSINESS_USD_PLAN_ID/);
   assert.match(configuration, /RAZORPAY_KEY_SECRET/);
   assert.match(configuration, /^import "server-only";/);
+  assert.match(subscriptions, /billingMarketForProviderPlanId/);
+  assert.match(subscriptions, /legacy_india_fallback/);
   assert.doesNotMatch(subscriptions + configuration, /NEXT_PUBLIC_RAZORPAY/);
 });
 
@@ -34,6 +36,9 @@ test("webhook verifies raw body and transactionally updates only the provider su
   assert.match(contents, /MAX_WEBHOOK_BODY_BYTES\s*=\s*256\s*\*\s*1024/);
   assert.match(contents, /verifyRazorpayWebhook/);
   assert.match(contents, /subscriptions\.providerSubscriptionId/);
+  assert.match(contents, /providerPlanId/);
+  assert.match(contents, /billingMarket/);
+  assert.match(contents, /billingCurrency/);
   assert.match(contents, /x-razorpay-event-id/);
   assert.match(contents, /database\.transaction/);
   assert.match(contents, /onConflictDoNothing/);
@@ -52,4 +57,15 @@ test("billing status is scoped solely to verified token UID", async () => {
   assert.match(contents, /verifyFirebaseIdToken/);
   assert.match(contents, /token\.uid/);
   assert.doesNotMatch(contents, /searchParams|request\.json/);
+});
+
+test("checkout persists the authoritative server-selected market and currency, not client input", async () => {
+  const contents = await source("app/api/billing/checkout/route.ts");
+  assert.match(contents, /const market = billingMarketFromHeaders\(request\.headers\)/);
+  assert.match(contents, /const providerPlanId = getRazorpayPlanId\(market\)/);
+  assert.match(contents, /const billingCurrency = billingCurrencyForMarket\(market\)/);
+  assert.match(contents, /providerPlanId,/);
+  assert.match(contents, /billingMarket: market/);
+  assert.match(contents, /billingCurrency,/);
+  assert.doesNotMatch(contents, /body\.(?:market|currency)/);
 });
