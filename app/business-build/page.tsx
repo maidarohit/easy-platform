@@ -80,7 +80,7 @@ function BusinessBuildContent() {
   }, [fetchBuild, view?.run.id, view?.run.status]);
 
   const retryTask = view?.tasks.find((task) => task.canRetry);
-  const retryFinalPhase = async () => {
+  const retryFailedPhase = async () => {
     if (!view || !retryTask || retrying) return;
     setRetrying(true);
     setError("");
@@ -89,10 +89,10 @@ function BusinessBuildContent() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.message || "Unable to retry the final phase.");
+      if (!response.ok) throw new Error(data.error || data.message || "Unable to retry the failed phase.");
       setView(await fetchBuild());
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "Unable to retry the final phase.");
+      setError(retryError instanceof Error ? retryError.message : "Unable to retry the failed phase.");
       try { setView(await fetchBuild()); } catch {}
     } finally { setRetrying(false); }
   };
@@ -109,7 +109,7 @@ function BusinessBuildContent() {
         {error && <p role="alert" className="mt-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
         {view && <div className="mt-9 space-y-3">{view.tasks.map((task) => <div key={task.id} className="flex items-center justify-between gap-4 rounded-2xl border border-[#D8DCCF] bg-[#FCFBF7] p-5"><span className="font-semibold text-[#173D32]">{FRIENDLY_PHASES[task.moduleId] ?? "Preparing your business"}</span><span className="text-sm text-[#606A64]">{task.customerState}</span></div>)}</div>}
         {view && !completed && !needsAttention && <p className="mt-6 text-sm font-medium text-[#606A64]">{view.progress.completed} of {view.progress.total} phases complete.</p>}
-        {needsAttention && <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-5"><p className="font-semibold text-[#173D32]">Your build needs support.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">Completed work is saved. Nothing uncertain will be replayed automatically.</p>{retryTask && <button type="button" disabled={retrying} onClick={() => void retryFinalPhase()} className="mt-4 inline-flex min-h-12 items-center rounded-[14px] bg-[#173D32] px-6 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{retrying ? "Retrying final phase…" : "Retry final phase"}</button>}</div>}
+        {needsAttention && <div className="mt-7 rounded-2xl border border-amber-200 bg-amber-50 p-5"><p className="font-semibold text-[#173D32]">Your build needs support.</p><p className="mt-2 text-sm leading-6 text-[#606A64]">Completed work is saved. Nothing uncertain will be replayed automatically.</p>{retryTask && <button type="button" disabled={retrying} onClick={() => void retryFailedPhase()} className="mt-4 inline-flex min-h-12 items-center rounded-[14px] bg-[#173D32] px-6 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{retrying ? "Retrying failed phase…" : "Retry failed phase"}</button>}</div>}
         {completed && <Link href={`/master-workspace?projectId=${encodeURIComponent(projectId)}`} className="mt-8 inline-flex min-h-13 items-center rounded-[14px] bg-[#173D32] px-7 font-semibold text-white">Open Business Workspace</Link>}
       </div>
     </main>

@@ -123,14 +123,15 @@ test("7 UI exposes one build action, friendly phases, and the real workspace", a
   const [onboarding, progress] = await Promise.all([
     readFile("app/onboarding/page.tsx", "utf8"), readFile("app/business-build/page.tsx", "utf8"),
   ]);
-  assert.match(onboarding, /"Build My Business"/);
+  assert.match(onboarding, /Build My Business/);
   assert.match(onboarding, /buildStartInFlight\.current/);
   assert.match(onboarding, /disabled=\{isStartingBuild\}/);
   assert.match(onboarding, /Starting your build/);
   assert.doesNotMatch(onboarding, /coming in Task 5/);
   for (const label of ["Understanding your direction", "Creating your brand", "Building your online presence", "Preparing your marketing", "Setting up growth foundations", "Finalizing your business workspace"]) assert.match(progress, new RegExp(label));
   assert.match(progress, /\/master-workspace\?projectId=/);
-  assert.match(progress, /Retry final phase/);
+  assert.match(progress, /Retry failed phase/);
+  assert.doesNotMatch(progress, /Retry final phase/);
   assert.doesNotMatch(progress, /Start (?:Branding|Website|Marketing|SEO|Sales)/);
 });
 

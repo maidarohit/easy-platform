@@ -1,10 +1,29 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const runId = "11111111-1111-4111-8111-111111111111";
+const baseDigit = (taskNumber) => String(taskNumber + 2);
+
+function claimFor(moduleId, taskNumber, attemptNumber = 1) {
+  const digit = baseDigit(taskNumber);
+  const attemptDigit = String(attemptNumber + 5);
+  const taskId = `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
+  return {
+    context: createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1", runId, taskId }),
+    runId,
+    taskId,
+    attemptId: `${attemptDigit.repeat(8)}-${attemptDigit.repeat(4)}-4${attemptDigit.repeat(3)}-9${attemptDigit.repeat(3)}-${attemptDigit.repeat(12)}`,
+    attemptNumber,
+    moduleId,
+    executionKey: `${moduleId}-${attemptNumber}`,
+    leaseToken: `${attemptDigit.repeat(8)}-${attemptDigit.repeat(4)}-4${attemptDigit.repeat(3)}-a${attemptDigit.repeat(3)}-${attemptDigit.repeat(12)}`,
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+}
 
 test("Business Build page keeps re-entering the guarded runner until persisted state changes", async () => {
   const page = await source("app/business-build/page.tsx");
@@ -14,7 +33,8 @@ test("Business Build page keeps re-entering the guarded runner until persisted s
   assert.match(page, /\/api\/easy-mode\/runs\/\$\{encodeURIComponent\(runId\)\}\/execute-next/);
   assert.doesNotMatch(page, /executionStarted/);
   assert.doesNotMatch(page, /\["queued", "running", "partially_completed"\]/);
-  assert.match(page, /"Retry final phase"/);
+  assert.match(page, /"Retry failed phase"/);
+  assert.doesNotMatch(page, /"Retry final phase"/);
   assert.match(page, /disabled=\{retrying\}/);
 });
 
@@ -74,6 +94,132 @@ test("duplicate execution claims do not produce two provider calls", async () =>
     executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies),
   ]);
   assert.equal(providers, 1);
+});
+
+test("first-phase failure retry reclaims only phase 1 and does not advance before async completion", async () => {
+  const aiManagerTask = claimFor("ai-manager", 0, 1);
+  const retriedAiManagerTask = claimFor("ai-manager", 0, 2);
+  const untouchedBrandingTask = claimFor("branding", 1, 1);
+  const claims = [aiManagerTask, retriedAiManagerTask, untouchedBrandingTask];
+  const retriedAttempts = [];
+  let aiManagerLoads = 0;
+  let jobsStarted = 0;
+
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadAiManagerInput: async () => {
+      aiManagerLoads += 1;
+      if (aiManagerLoads === 1) throw new Error("temporary phase-1 failure");
+      return {
+        companyName: "Example",
+        businessDescription: "Helpful services.",
+        industry: "Services",
+        businessGoal: "Grow",
+      };
+    },
+    prepareRetry: async (input) => {
+      retriedAttempts.push(input.attemptId);
+      return { taskId: aiManagerTask.taskId, retryReady: true };
+    },
+    startUsage: async () => "55555555-5555-4555-8555-555555555555",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    startAiManagerJob: async () => {
+      jobsStarted += 1;
+      return { jobId: "66666666-6666-4666-8666-666666666666" };
+    },
+    markRunning: async () => {},
+    failBeforeDispatch: async () => {},
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("usage should not start before the retry-safe failure"),
+    progress: async () => ({ runStatus: "In progress", tasks: [] }),
+  });
+
+  assert.equal(result.state, "in_progress");
+  assert.equal(aiManagerLoads, 2);
+  assert.equal(jobsStarted, 1);
+  assert.deepEqual(retriedAttempts, [aiManagerTask.attemptId]);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].moduleId, "branding");
+});
+
+test("middle-phase retry reruns only the failed phase, preserves completed phases, and continues the run", async () => {
+  const brandingTask = claimFor("branding", 1, 1);
+  const retriedBrandingTask = claimFor("branding", 1, 2);
+  const websiteTask = claimFor("website", 2, 1);
+  const claims = [brandingTask, retriedBrandingTask, websiteTask];
+  const events = [];
+  const retriedAttempts = [];
+  let brandingLoads = 0;
+  let websiteCompleted = false;
+
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadBrandingInput: async () => {
+      brandingLoads += 1;
+      if (brandingLoads === 1) throw new Error("temporary branding failure");
+      events.push("branding-load");
+      return {
+        companyName: "Example",
+        industry: "Services",
+        targetAudience: "Owners",
+        brandStyle: "Professional",
+        brandDescription: "Helpful services.",
+      };
+    },
+    prepareRetry: async (input) => {
+      retriedAttempts.push(input.attemptId);
+      return { taskId: brandingTask.taskId, retryReady: true };
+    },
+    startUsage: async ({ module }) => `${module === "branding" ? "55555555" : "66666666"}-5555-4555-8555-555555555555`,
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeBranding: async () => {
+      events.push("branding-execute");
+      return { output: { brandName: "Example" } };
+    },
+    persistBranding: async () => {
+      events.push("branding-persist");
+      return { id: "77777777-7777-4777-8777-777777777777" };
+    },
+    loadTextInput: async (_context, module) => {
+      assert.equal(module, "website");
+      events.push("website-load");
+      return { companyName: "Example" };
+    },
+    executeText: async ({ module }) => {
+      assert.equal(module, "website");
+      events.push("website-execute");
+      return { output: { websiteOverview: "Ready" } };
+    },
+    persistText: async (_context, module) => {
+      assert.equal(module, "website");
+      websiteCompleted = true;
+      events.push("website-persist");
+      return { id: "88888888-8888-4888-8888-888888888888" };
+    },
+    markRunning: async () => {},
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failBeforeDispatch: async () => {},
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("unexpected usage finalization failure"),
+    progress: async () => ({ runStatus: websiteCompleted ? "Completed" : "In progress", tasks: [] }),
+  });
+
+  assert.equal(result.state, "completed");
+  assert.deepEqual(retriedAttempts, [brandingTask.attemptId]);
+  assert.equal(brandingLoads, 2);
+  assert.deepEqual(events, [
+    "branding-load",
+    "branding-execute",
+    "branding-persist",
+    "website-load",
+    "website-execute",
+    "website-persist",
+  ]);
 });
 
 test("normal queued execution and completed runs remain unchanged", async () => {

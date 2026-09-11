@@ -49,7 +49,7 @@ export async function customerTaskViews(
       ? "This step could not start. You can safely try again."
       : uncertain
         ? options.allowUncertainRecovery === true && task.projectOutputId === null
-          ? "We could not confirm whether this step finished. You can safely retry this final phase."
+          ? "We could not confirm whether this step finished. You can safely retry this phase."
           : "We could not confirm whether this step finished. Please contact support before trying again."
         : task.status === "failed"
           ? "This step needs attention before it can continue."
