@@ -44,6 +44,7 @@ import {
 } from "@/app/lib/logo-execution";
 import {
   SpecialistExecutionError,
+  type ProviderFailureCategory,
   type SpecialistExecutionResult,
 } from "@/app/lib/specialist-execution";
 import {
@@ -72,6 +73,7 @@ import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
 import { sanitizeUiuxOutput } from "@/app/lib/uiux-insight-safety";
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
+type LoggedProviderFailureCategory = ProviderFailureCategory | "persistence_failure" | "unknown";
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
 export type EasyModeCustomerProgress = Readonly<{
@@ -93,7 +95,6 @@ type InternalExecuteResult = ExecuteNextResult & Readonly<{
 
 type PersistedOutput = Readonly<{ id: string }>;
 type ExecuteInput = Readonly<{ runId: string; userId: string }>;
-const MAX_AUTOMATIC_STEPS = 16;
 
 type ExecutorDependencies = Readonly<{
   enabled: () => boolean;
@@ -177,6 +178,35 @@ async function safeProgress(dependencies: ExecutorDependencies, runId: string, u
   } catch {
     return undefined;
   }
+}
+
+function logProviderBackedTaskFailure(input: Readonly<{
+  claim: ClaimedEasyModeTask;
+  module: string;
+  error: unknown;
+  elapsedMs: number;
+  providerCompleted: boolean;
+}>) {
+  let failureCategory: LoggedProviderFailureCategory = input.providerCompleted ? "persistence_failure" : "unknown";
+  let upstreamStatus: number | null = null;
+
+  if (input.error instanceof SpecialistExecutionError) {
+    failureCategory = input.error.failureCategory ?? failureCategory;
+    upstreamStatus = input.error.upstreamStatus;
+  } else if (input.error instanceof BrandingExecutionError) {
+    failureCategory = input.error.failureCategory ?? failureCategory;
+    upstreamStatus = input.error.upstreamStatus;
+  }
+
+  console.error("Easy Mode provider-backed task failed.", {
+    runId: input.claim.runId,
+    taskId: input.claim.taskId,
+    module: input.module,
+    attemptId: input.claim.attemptId,
+    failureCategory,
+    upstreamStatus,
+    elapsedMs: Math.max(0, input.elapsedMs),
+  });
 }
 
 export async function executeNextEasyModeTask(
@@ -264,38 +294,41 @@ export async function executeEasyModeRun(
   input: ExecuteInput,
   overrides: Partial<ExecutorDependencies> = {},
 ): Promise<ExecuteNextResult> {
-  const internallyRetriedTasks = new Set<string>();
-  for (let step = 0; step < MAX_AUTOMATIC_STEPS; step += 1) {
-    const result = await executeNextEasyModeTask(input, overrides);
-    const dependencies = { ...defaultDependencies, ...overrides };
-    if (result.state === "needs_attention" && result.retryableAttemptId && result.retryableTaskId &&
-        !internallyRetriedTasks.has(result.retryableTaskId)) {
-      try {
-        await dependencies.prepareRetry({ attemptId: result.retryableAttemptId, userId: input.userId });
-        internallyRetriedTasks.add(result.retryableTaskId);
-        continue;
-      } catch {
-        return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
-      }
-    }
-    if (result.state === "needs_attention" && result.uncertainAttemptId) {
-      try {
-        const reconciliation = await dependencies.reconcileUncertain({
-          attemptId: result.uncertainAttemptId,
-          userId: input.userId,
-        });
-        if (reconciliation.state === "completed") continue;
-      } catch {}
+  const dependencies = { ...defaultDependencies, ...overrides };
+  const result = await executeNextEasyModeTask(input, dependencies);
+  if (result.state === "needs_attention" && result.retryableAttemptId) {
+    try {
+      await dependencies.prepareRetry({ attemptId: result.retryableAttemptId, userId: input.userId });
+      const progress = await safeProgress(dependencies, input.runId, input.userId);
+      return progress?.runStatus === "Completed"
+        ? { state: "completed", message: "This business build is complete.", progress }
+        : { state: "in_progress", message: "This business build is ready to continue.", progress };
+    } catch {
       return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
     }
-    if (result.state !== "completed" || result.progress?.runStatus === "Completed") {
-      return { state: result.state, message: result.message, progress: result.progress };
-    }
   }
-  return {
-    state: "needs_attention",
-    message: "This business build needs attention before it can continue.",
-  };
+  if (result.state === "needs_attention" && result.uncertainAttemptId) {
+    try {
+      const reconciliation = await dependencies.reconcileUncertain({
+        attemptId: result.uncertainAttemptId,
+        userId: input.userId,
+      });
+      if (reconciliation.state === "completed") {
+        const progress = await safeProgress(dependencies, input.runId, input.userId);
+        return progress?.runStatus === "Completed"
+          ? { state: "completed", message: "This business build is complete.", progress }
+          : { state: "in_progress", message: "This business build is ready to continue.", progress };
+      }
+    } catch {}
+    return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+  }
+  if (result.state === "in_progress" && result.progress?.runStatus === "Completed") {
+    return { state: "completed", message: "This business build is complete.", progress: result.progress };
+  }
+  if (result.state === "completed" && result.progress?.runStatus !== "Completed") {
+    return { state: "in_progress", message: result.message, progress: result.progress };
+  }
+  return { state: result.state, message: result.message, progress: result.progress };
 }
 
 async function executeAiManagerTask(
@@ -396,6 +429,7 @@ async function executeBrandingTask(
   let usageId: string | null = null;
   let usageFinalized = false;
   let providerStarted = false;
+  let providerCompleted = false;
   let persistedOutputId: string | null = null;
 
   const finalizeFailedUsageOnce = async () => {
@@ -417,6 +451,7 @@ async function executeBrandingTask(
     await dependencies.markDispatching(lease);
     providerStarted = true;
     const result = await dependencies.executeBranding({ context: claim.context, input: brandingInput });
+    providerCompleted = true;
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
@@ -440,6 +475,15 @@ async function executeBrandingTask(
       await finalizeFailedUsageOnce();
     } catch {
       // Usage finalization is attempted once; do not overwrite or retry it here.
+    }
+    if (providerStarted) {
+      logProviderBackedTaskFailure({
+        claim,
+        module: "branding",
+        error,
+        elapsedMs: Date.now() - startedAt,
+        providerCompleted,
+      });
     }
     const uncertain = providerStarted && !(error instanceof BrandingExecutionError && error.failurePoint === "before_dispatch");
     try {
@@ -487,6 +531,7 @@ async function executeAdditionalSpecialistTask(
   let usageId: string | null = null;
   let usageFinalized = false;
   let providerStarted = false;
+  let providerCompleted = false;
   let persistedOutputId: string | null = null;
   const failUsageOnce = async () => {
     if (!usageId || usageFinalized) return;
@@ -506,6 +551,7 @@ async function executeAdditionalSpecialistTask(
     await dependencies.markDispatching(lease);
     providerStarted = true;
     const result = await config.execute({ context: claim.context, input: moduleInput });
+    providerCompleted = true;
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
@@ -537,6 +583,15 @@ async function executeAdditionalSpecialistTask(
       await failUsageOnce();
     } catch {
       // Usage failure finalization is attempted once.
+    }
+    if (providerStarted) {
+      logProviderBackedTaskFailure({
+        claim,
+        module: config.module,
+        error,
+        elapsedMs: Date.now() - startedAt,
+        providerCompleted,
+      });
     }
     const uncertain = providerStarted &&
       !(error instanceof SpecialistExecutionError && error.failurePoint === "before_dispatch");

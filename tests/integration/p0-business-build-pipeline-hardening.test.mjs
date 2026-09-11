@@ -143,6 +143,215 @@ test("timeout after Sales dispatch becomes delivery-uncertain and never issues a
   assert.equal(claims, 1);
 });
 
+test("one execute-next request runs at most one provider-backed task and the next request advances the run", async () => {
+  const runId = "11111111-1111-4111-8111-111111111111";
+  const websiteTask = {
+    context: createTrustedModuleExecutionContext({ userId: "user-1", projectId: "project-1", runId, taskId: "22222222-2222-4222-8222-222222222222" }),
+    runId,
+    taskId: "22222222-2222-4222-8222-222222222222",
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptNumber: 1,
+    moduleId: "website",
+    executionKey: "website-1",
+    leaseToken: "44444444-4444-4444-8444-444444444444",
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+  const marketingTask = {
+    ...websiteTask,
+    taskId: "55555555-5555-4555-8555-555555555555",
+    attemptId: "66666666-6666-4666-8666-666666666666",
+    executionKey: "marketing-1",
+    leaseToken: "77777777-7777-4777-8777-777777777777",
+    moduleId: "marketing",
+  };
+  const claims = [websiteTask, marketingTask];
+  const executions = [];
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadTextInput: async (_context, module) => ({ companyName: module }),
+    startUsage: async ({ module }) => `${module}-usage`,
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async ({ module }) => {
+      executions.push(module);
+      return module === "website"
+        ? { output: { websiteOverview: "Ready" } }
+        : { output: { marketingStrategy: "Ready" } };
+    },
+    markRunning: async () => {},
+    persistText: async (_context, module) => ({ id: `${module}-output` }),
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failUsage: async () => assert.fail("unexpected failure"),
+    failBeforeDispatch: async () => assert.fail("unexpected failure"),
+    failUncertain: async () => assert.fail("unexpected uncertainty"),
+    progress: async () => ({ runStatus: claims.length === 0 ? "Completed" : "In progress", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "user-1" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.deepEqual(executions, ["website"]);
+  assert.equal(claims.length, 1);
+
+  const second = await executeEasyModeRun({ runId, userId: "user-1" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.deepEqual(executions, ["website", "marketing"]);
+  assert.equal(claims.length, 0);
+});
+
+test("AI Manager async dispatch returns without chaining later tasks", async () => {
+  const runId = "11111111-1111-4111-8111-111111111111";
+  const aiManagerTask = {
+    context: createTrustedModuleExecutionContext({ userId: "user-1", projectId: "project-1", runId, taskId: "22222222-2222-4222-8222-222222222222" }),
+    runId,
+    taskId: "22222222-2222-4222-8222-222222222222",
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptNumber: 1,
+    moduleId: "ai-manager",
+    executionKey: "ai-manager-1",
+    leaseToken: "44444444-4444-4444-8444-444444444444",
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+  const brandingTask = {
+    ...aiManagerTask,
+    taskId: "55555555-5555-4555-8555-555555555555",
+    attemptId: "66666666-6666-4666-8666-666666666666",
+    executionKey: "branding-1",
+    leaseToken: "77777777-7777-4777-8777-777777777777",
+    moduleId: "branding",
+  };
+  const claims = [aiManagerTask, brandingTask];
+  let jobsStarted = 0;
+
+  const result = await executeEasyModeRun({ runId, userId: "user-1" }, {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadAiManagerInput: async () => ({
+      companyName: "Example",
+      businessDescription: "Helpful services.",
+      industry: "Services",
+      businessGoal: "Grow",
+    }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    startAiManagerJob: async () => {
+      jobsStarted += 1;
+      return { jobId: "job-1" };
+    },
+    markRunning: async () => {},
+    failUsage: async () => assert.fail("unexpected failure"),
+    failBeforeDispatch: async () => assert.fail("unexpected failure"),
+    failUncertain: async () => assert.fail("unexpected uncertainty"),
+    progress: async () => ({ runStatus: "In progress", tasks: [] }),
+  });
+
+  assert.equal(result.state, "in_progress");
+  assert.equal(jobsStarted, 1);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].moduleId, "branding");
+});
+
+test("failed task stops the request without executing following tasks", async () => {
+  const runId = "11111111-1111-4111-8111-111111111111";
+  const marketingTask = {
+    context: createTrustedModuleExecutionContext({ userId: "user-1", projectId: "project-1", runId, taskId: "22222222-2222-4222-8222-222222222222" }),
+    runId,
+    taskId: "22222222-2222-4222-8222-222222222222",
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptNumber: 1,
+    moduleId: "marketing",
+    executionKey: "marketing-1",
+    leaseToken: "44444444-4444-4444-8444-444444444444",
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+  const seoTask = {
+    ...marketingTask,
+    taskId: "55555555-5555-4555-8555-555555555555",
+    attemptId: "66666666-6666-4666-8666-666666666666",
+    executionKey: "seo-1",
+    leaseToken: "77777777-7777-4777-8777-777777777777",
+    moduleId: "seo",
+  };
+  const claims = [marketingTask, seoTask];
+  let providerCalls = 0;
+
+  const result = await executeEasyModeRun({ runId, userId: "user-1" }, {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadTextInput: async () => ({ companyName: "Example" }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async () => {
+      providerCalls += 1;
+      throw new SpecialistExecutionError("uncertain", 504, { failureCategory: "timeout" });
+    },
+    failUsage: async () => {},
+    failUncertain: async () => {},
+    failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+    reconcileUncertain: async () => ({ state: "unresolved" }),
+    progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+  });
+
+  assert.equal(result.state, "needs_attention");
+  assert.equal(providerCalls, 1);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].moduleId, "seo");
+});
+
+test("marketing webhook failure category is logged safely", async () => {
+  const runId = "11111111-1111-4111-8111-111111111111";
+  const claim = {
+    context: createTrustedModuleExecutionContext({ userId: "user-1", projectId: "project-1", runId, taskId: "22222222-2222-4222-8222-222222222222" }),
+    runId,
+    taskId: "22222222-2222-4222-8222-222222222222",
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    attemptNumber: 1,
+    moduleId: "marketing",
+    executionKey: "marketing-1",
+    leaseToken: "44444444-4444-4444-8444-444444444444",
+    leaseExpiresAt: new Date(Date.now() + 60_000),
+  };
+  const logged = [];
+  const originalError = console.error;
+  console.error = (...args) => { logged.push(args); };
+  try {
+    const result = await executeNextEasyModeTask({ runId, userId: "user-1" }, {
+      enabled: () => true,
+      claim: async () => claim,
+      loadTextInput: async () => ({ companyName: "Example" }),
+      startUsage: async () => "usage-1",
+      bindUsage: async () => {},
+      markDispatching: async () => {},
+      executeText: async () => {
+        throw new SpecialistExecutionError("uncertain", 504, { failureCategory: "timeout" });
+      },
+      failUsage: async () => {},
+      failUncertain: async () => {},
+      failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+      progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+    });
+    assert.equal(result.state, "needs_attention");
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0][0], "Easy Mode provider-backed task failed.");
+  assert.deepEqual(logged[0][1], {
+    runId,
+    taskId: claim.taskId,
+    module: "marketing",
+    attemptId: claim.attemptId,
+    failureCategory: "timeout",
+    upstreamStatus: null,
+    elapsedMs: logged[0][1].elapsedMs,
+  });
+  assert.equal(typeof logged[0][1].elapsedMs, "number");
+});
+
 test("six completed outputs stay untouched and polling resumes through the guarded runner", async () => {
   const [attempts, easyPage, buildPage, runs] = await Promise.all([
     source("app/lib/easy-mode-task-attempts.ts"),

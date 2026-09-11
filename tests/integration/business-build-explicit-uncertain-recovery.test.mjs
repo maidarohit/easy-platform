@@ -150,7 +150,7 @@ test("duplicate execution claims do not produce two provider calls", async () =>
   assert.equal(providers, 1);
 });
 
-test("first-phase failure retry reclaims only phase 1 and does not advance before async completion", async () => {
+test("first-phase retryable failure re-queues phase 1 and leaves later phases untouched until the next request", async () => {
   const aiManagerTask = claimFor("ai-manager", 0, 1);
   const retriedAiManagerTask = claimFor("ai-manager", 0, 2);
   const untouchedBrandingTask = claimFor("branding", 1, 1);
@@ -158,8 +158,7 @@ test("first-phase failure retry reclaims only phase 1 and does not advance befor
   const retriedAttempts = [];
   let aiManagerLoads = 0;
   let jobsStarted = 0;
-
-  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+  const dependencies = {
     enabled: () => true,
     claim: async () => claims.shift() ?? null,
     loadAiManagerInput: async () => {
@@ -188,17 +187,25 @@ test("first-phase failure retry reclaims only phase 1 and does not advance befor
     failUncertain: async () => assert.fail("unexpected uncertain failure"),
     failUsage: async () => assert.fail("usage should not start before the retry-safe failure"),
     progress: async () => ({ runStatus: "In progress", tasks: [] }),
-  });
+  };
 
-  assert.equal(result.state, "in_progress");
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.equal(aiManagerLoads, 1);
+  assert.equal(jobsStarted, 0);
+  assert.deepEqual(retriedAttempts, [aiManagerTask.attemptId]);
+  assert.equal(claims.length, 2);
+  assert.equal(claims[0].moduleId, "ai-manager");
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "in_progress");
   assert.equal(aiManagerLoads, 2);
   assert.equal(jobsStarted, 1);
-  assert.deepEqual(retriedAttempts, [aiManagerTask.attemptId]);
   assert.equal(claims.length, 1);
   assert.equal(claims[0].moduleId, "branding");
 });
 
-test("middle-phase retry reruns only the failed phase, preserves completed phases, and continues the run", async () => {
+test("middle-phase retry reruns only the failed phase and later work advances on the following request", async () => {
   const brandingTask = claimFor("branding", 1, 1);
   const retriedBrandingTask = claimFor("branding", 1, 2);
   const websiteTask = claimFor("website", 2, 1);
@@ -207,8 +214,7 @@ test("middle-phase retry reruns only the failed phase, preserves completed phase
   const retriedAttempts = [];
   let brandingLoads = 0;
   let websiteCompleted = false;
-
-  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+  const dependencies = {
     enabled: () => true,
     claim: async () => claims.shift() ?? null,
     loadBrandingInput: async () => {
@@ -261,11 +267,21 @@ test("middle-phase retry reruns only the failed phase, preserves completed phase
     failUncertain: async () => assert.fail("unexpected uncertain failure"),
     failUsage: async () => assert.fail("unexpected usage finalization failure"),
     progress: async () => ({ runStatus: websiteCompleted ? "Completed" : "In progress", tasks: [] }),
-  });
+  };
 
-  assert.equal(result.state, "completed");
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
   assert.deepEqual(retriedAttempts, [brandingTask.attemptId]);
+  assert.equal(brandingLoads, 1);
+  assert.equal(claims.length, 2);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "in_progress");
   assert.equal(brandingLoads, 2);
+  assert.equal(claims.length, 1);
+
+  const third = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(third.state, "completed");
   assert.deepEqual(events, [
     "branding-load",
     "branding-execute",
@@ -274,6 +290,7 @@ test("middle-phase retry reruns only the failed phase, preserves completed phase
     "website-execute",
     "website-persist",
   ]);
+  assert.equal(claims.length, 0);
 });
 
 test("normal queued execution and completed runs remain unchanged", async () => {
@@ -282,6 +299,6 @@ test("normal queued execution and completed runs remain unchanged", async () => 
     enabled: () => true, claim: async () => { claims += 1; return null; },
     progress: async () => ({ runStatus: "Completed", tasks: [] }),
   });
-  assert.equal(result.state, "in_progress");
+  assert.equal(result.state, "completed");
   assert.equal(claims, 1);
 });

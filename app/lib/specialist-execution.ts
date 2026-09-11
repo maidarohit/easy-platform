@@ -6,16 +6,35 @@ import type { NormalizedModuleOutput } from "@/app/lib/easy-mode-execution-contr
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 
 const MAX_RESPONSE_BYTES = 256 * 1024;
+export type ProviderFailureCategory =
+  | "timeout"
+  | "fetch_network_error"
+  | "upstream_non_2xx"
+  | "empty_response"
+  | "oversized_response"
+  | "invalid_json"
+  | "schema_validation_failure";
 
 export class SpecialistExecutionError extends Error {
   readonly failurePoint: "before_dispatch" | "uncertain";
   readonly httpStatus: number;
+  readonly failureCategory: ProviderFailureCategory | null;
+  readonly upstreamStatus: number | null;
 
-  constructor(failurePoint: "before_dispatch" | "uncertain", httpStatus = 502) {
+  constructor(
+    failurePoint: "before_dispatch" | "uncertain",
+    httpStatus = 502,
+    details: Readonly<{
+      failureCategory?: ProviderFailureCategory | null;
+      upstreamStatus?: number | null;
+    }> = {},
+  ) {
     super(failurePoint === "before_dispatch" ? "PROVIDER_UNAVAILABLE" : "DELIVERY_UNCERTAIN");
     this.name = "SpecialistExecutionError";
     this.failurePoint = failurePoint;
     this.httpStatus = httpStatus;
+    this.failureCategory = details.failureCategory ?? null;
+    this.upstreamStatus = details.upstreamStatus ?? null;
   }
 }
 
@@ -66,31 +85,44 @@ export async function executeValidatedJsonWebhook(options: Readonly<{
       cache: "no-store",
       signal: AbortSignal.timeout(options.timeoutMs),
     });
-  } catch {
-    throw new SpecialistExecutionError("uncertain");
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new SpecialistExecutionError("uncertain", 504, { failureCategory: "timeout" });
+    }
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "fetch_network_error" });
   }
-  if (!response.ok) throw new SpecialistExecutionError("uncertain", response.status);
+  if (!response.ok) {
+    throw new SpecialistExecutionError("uncertain", response.status, {
+      failureCategory: "upstream_non_2xx",
+      upstreamStatus: response.status,
+    });
+  }
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSE_BYTES) {
-    throw new SpecialistExecutionError("uncertain");
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "oversized_response" });
   }
   let raw: string;
   try {
     raw = await response.text();
   } catch {
-    throw new SpecialistExecutionError("uncertain");
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "fetch_network_error" });
   }
-  if (!raw.trim() || Buffer.byteLength(raw, "utf8") > MAX_RESPONSE_BYTES) {
-    throw new SpecialistExecutionError("uncertain");
+  if (!raw.trim()) {
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "empty_response" });
+  }
+  if (Buffer.byteLength(raw, "utf8") > MAX_RESPONSE_BYTES) {
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "oversized_response" });
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new SpecialistExecutionError("uncertain");
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "invalid_json" });
   }
   const output = options.validateResponse(parsed);
-  if (!output) throw new SpecialistExecutionError("uncertain");
+  if (!output) {
+    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "schema_validation_failure" });
+  }
   const usage = parseAiUsageMetadata(response.headers);
   const executionId = parseN8nExecutionId(response.headers);
   return Object.freeze({

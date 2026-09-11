@@ -26,7 +26,7 @@ function brandingClaim() {
   return { ...localClaim(0), moduleId: "branding" };
 }
 
-test("one start advances sequentially through every successful eligible task", async () => {
+test("one execute-next request advances only one successful eligible task", async () => {
   const claims = [localClaim(0), localClaim(1), localClaim(2)];
   let completed = 0;
   const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
@@ -39,17 +39,18 @@ test("one start advances sequentially through every successful eligible task", a
     failBeforeDispatch: async () => assert.fail("unexpected failure"),
     progress: async () => ({ runStatus: completed === 3 ? "Completed" : "In progress", tasks: [] }),
   });
-  assert.equal(result.state, "completed");
-  assert.equal(completed, 3);
-  assert.equal(claims.length, 0);
+  assert.equal(result.state, "in_progress");
+  assert.equal(completed, 1);
+  assert.equal(claims.length, 2);
 });
 
-test("known-safe pre-dispatch failure is retried internally once without customer action", async () => {
-  const claims = [localClaim(0), { ...localClaim(0), attemptId: localClaim(1).attemptId }, localClaim(2)];
+test("known-safe pre-dispatch failure is re-queued for the next request without chaining another task", async () => {
+  const retryClaim = { ...localClaim(0), attemptId: localClaim(1).attemptId };
+  const claims = [localClaim(0), retryClaim, localClaim(2)];
   let loads = 0;
   let retries = 0;
   let completed = 0;
-  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+  const dependencies = {
     enabled: () => true,
     claim: async () => claims.shift() ?? null,
     loadBrandingContext: async () => {
@@ -63,13 +64,22 @@ test("known-safe pre-dispatch failure is retried internally once without custome
     completeAttempt: async () => { completed += 1; },
     failBeforeDispatch: async () => {},
     progress: async () => ({ runStatus: completed === 2 ? "Completed" : "In progress", tasks: [] }),
-  });
-  assert.equal(result.state, "completed");
+  };
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
   assert.equal(retries, 1);
-  assert.equal(loads, 3);
+  assert.equal(loads, 1);
+  assert.equal(completed, 0);
+  assert.equal(claims.length, 2);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "in_progress");
+  assert.equal(loads, 2);
+  assert.equal(completed, 1);
+  assert.equal(claims.length, 1);
 });
 
-test("uncertain execution reconciles existing output before continuation and is never replayed", async () => {
+test("uncertain execution reconciles existing output and returns without starting another task", async () => {
   const claims = [brandingClaim(), localClaim(1)];
   const events = [];
   let usageStarts = 0;
@@ -89,13 +99,15 @@ test("uncertain execution reconciles existing output before continuation and is 
     failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
     progress: async () => ({ runStatus: claims.length === 0 ? "Completed" : "In progress", tasks: [] }),
   });
-  assert.equal(result.state, "completed");
+  assert.equal(result.state, "in_progress");
   assert.equal(usageStarts, 1);
   assert.equal(events.filter((event) => event === "provider").length, 1);
-  assert.ok(events.indexOf("reconcile") < events.lastIndexOf("claim"));
+  assert.equal(events.filter((event) => event === "claim").length, 1);
+  assert.ok(events.includes("reconcile"));
+  assert.equal(claims.length, 1);
 });
 
-test("completed Business plan can hand off to Branding and continue automatically", async () => {
+test("completed Business plan can hand off to Branding without chaining later tasks in the same request", async () => {
   const claims = [brandingClaim(), localClaim(1)];
   const events = [];
   const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
@@ -120,11 +132,11 @@ test("completed Business plan can hand off to Branding and continue automaticall
     failUsage: async () => assert.fail("unexpected usage failure"),
     progress: async () => ({ runStatus: claims.length === 0 ? "Completed" : "In progress", tasks: [] }),
   });
-  assert.equal(result.state, "completed");
+  assert.equal(result.state, "in_progress");
   assert.deepEqual(events.slice(0, 7), [
     "usage", "bound", "dispatching", "branding", "running", "usage-complete", "task-complete",
   ]);
-  assert.equal(claims.length, 0);
+  assert.equal(claims.length, 1);
 });
 
 test("server-built Branding and downstream specialist context is bounded to strict short-field contracts", async () => {

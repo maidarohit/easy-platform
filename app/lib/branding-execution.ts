@@ -12,6 +12,7 @@ import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 import { sanitizeBrandingOutput } from "@/app/lib/branding-insight-safety";
+import type { ProviderFailureCategory } from "@/app/lib/specialist-execution";
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
 const PROVIDER_TIMEOUT_MS = 120_000;
@@ -24,13 +25,25 @@ export class BrandingExecutionError extends Error {
   readonly code: BrandingSafeErrorCode;
   readonly failurePoint: BrandingFailurePoint;
   readonly httpStatus: number;
+  readonly failureCategory: ProviderFailureCategory | null;
+  readonly upstreamStatus: number | null;
 
-  constructor(code: BrandingSafeErrorCode, failurePoint: BrandingFailurePoint, httpStatus = 502) {
+  constructor(
+    code: BrandingSafeErrorCode,
+    failurePoint: BrandingFailurePoint,
+    httpStatus = 502,
+    details: Readonly<{
+      failureCategory?: ProviderFailureCategory | null;
+      upstreamStatus?: number | null;
+    }> = {},
+  ) {
     super(code);
     this.name = "BrandingExecutionError";
     this.code = code;
     this.failurePoint = failurePoint;
     this.httpStatus = httpStatus;
+    this.failureCategory = details.failureCategory ?? null;
+    this.upstreamStatus = details.upstreamStatus ?? null;
   }
 }
 
@@ -93,31 +106,42 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
       cache: "no-store",
       signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
     });
-  } catch {
-    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 504, { failureCategory: "timeout" });
+    }
+    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502, { failureCategory: "fetch_network_error" });
   }
 
-  if (!response.ok) throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", response.status);
+  if (!response.ok) {
+    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", response.status, {
+      failureCategory: "upstream_non_2xx",
+      upstreamStatus: response.status,
+    });
+  }
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_PROVIDER_RESPONSE_BYTES) {
-    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "oversized_response" });
   }
 
   let raw: string;
   try {
     raw = await response.text();
   } catch {
-    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502);
+    throw new BrandingExecutionError("DELIVERY_UNCERTAIN", "uncertain", 502, { failureCategory: "fetch_network_error" });
   }
-  if (!raw.trim() || Buffer.byteLength(raw, "utf8") > MAX_PROVIDER_RESPONSE_BYTES) {
-    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+  if (!raw.trim()) {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "empty_response" });
+  }
+  if (Buffer.byteLength(raw, "utf8") > MAX_PROVIDER_RESPONSE_BYTES) {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "oversized_response" });
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "invalid_json" });
   }
   const validator = getModuleAdapter("branding")?.validateOutput;
   const responseItem = Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed;
@@ -141,7 +165,9 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
     : responseOutput;
   const validatedOutput = validator?.(responseItem) ?? validator?.(normalizedCandidate);
   const output = validatedOutput ? sanitizeBrandingOutput(validatedOutput, input) : null;
-  if (!output) throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502);
+  if (!output) {
+    throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "schema_validation_failure" });
+  }
 
   const usageMetadata = parseAiUsageMetadata(response.headers);
   const providerExecutionId = parseN8nExecutionId(response.headers);
