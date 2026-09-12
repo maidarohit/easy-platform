@@ -15,7 +15,7 @@ import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context"
 import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
 import { validateMarketingWebhookOutput } from "@/app/lib/marketing-insight-safety";
 import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
-import { validateSeoWebhookOutput } from "@/app/lib/seo-opportunity-safety";
+import { validateSeoWebhookOutput } from "@/app/lib/seo-webhook-validation";
 import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
 import { validateUiuxWebhookOutput } from "@/app/lib/uiux-insight-safety";
 import { validateAnalyticsWebhookOutput } from "@/app/lib/analytics-insight-safety";

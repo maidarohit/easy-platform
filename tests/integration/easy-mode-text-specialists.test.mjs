@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext, getModuleAdapter } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { validateMarketingWebhookOutput } from "../../app/lib/marketing-insight-safety.ts";
-import { validateSeoWebhookOutput } from "../../app/lib/seo-opportunity-safety.ts";
+import { validateSeoWebhookOutput } from "../../app/lib/seo-webhook-validation.ts";
 import { validateUiuxWebhookOutput } from "../../app/lib/uiux-insight-safety.ts";
 import { validateAnalyticsWebhookOutput } from "../../app/lib/analytics-insight-safety.ts";
 import { executeTextSpecialistService, TEXT_SPECIALIST_MODULES } from "../../app/lib/text-specialist-execution.ts";

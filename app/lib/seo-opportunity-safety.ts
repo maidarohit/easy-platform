@@ -1,33 +1,6 @@
-import { validateSeoOutput } from "@/app/lib/easy-mode-execution-contracts";
-import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
-
 const UNSUPPORTED_CLAIM = /\b(?:affordable|cheapest|free consultations?|free estimates?|guaranteed|award[- ]winning|transparent pricing|on[- ]time delivery|years? of experience|certifications?|reviews?|case stud(?:y|ies))\b/i;
 const UNSUPPORTED_TECH = /\b(?:wordpress|switch (?:your )?hosting|hosting-provider switch|cloudflare|bunnycdn|\bFID\b|meta keywords?|keyword density)\b/i;
 const FABRICATED_METRIC = /\b(?:search volume|keyword difficulty|domain authority|rank(?:ing)? (?:prediction|forecast)|traffic (?:growth|forecast)|(?:traffic|ranking|growth|increase)[^.!?\n]{0,40}\d+(?:\.\d+)?%|\d+(?:\.\d+)?%[^.!?\n]{0,40}(?:traffic|ranking|growth|increase))/i;
-const SEO_REQUIRED_FIELDS = [
-  "seoAudit",
-  "keywords",
-  "metaTitles",
-  "metaDescriptions",
-  "internalLinking",
-  "blogTopics",
-  "technicalSEO",
-  "kpis",
-  "growthRecommendations",
-] as const;
-const SEO_ALLOWED_FIELDS = new Set([
-  ...SEO_REQUIRED_FIELDS,
-  "colourScheme",
-  "designRecommendations",
-  "keywordResearch",
-  "recommendedPages",
-  "seoContentPlan",
-  "seoScore",
-  "seoStrategy",
-  "siteStructure",
-  "typography",
-  "websiteFeatures",
-]);
 
 function approvedPlaceholderValues(approvedFacts: unknown) {
   const facts = approvedFacts && typeof approvedFacts === "object" && !Array.isArray(approvedFacts)
@@ -69,58 +42,6 @@ function safeText(value: string, approvedText: string, approvedFacts: unknown) {
       return part && (!claim || approvedText.includes(claim)) && !UNSUPPORTED_TECH.test(part) && !FABRICATED_METRIC.test(part);
     })
     .join("\n");
-}
-
-function safeSeoField(value: unknown, approvedFacts: unknown, fallback: string) {
-  const text = typeof value === "string" ? safeText(value, JSON.stringify(approvedFacts).toLowerCase(), approvedFacts).trim() : "";
-  return text || fallback;
-}
-
-function recognizedSeoRecord(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  return Object.keys(record).every((key) => SEO_ALLOWED_FIELDS.has(key)) ? record : null;
-}
-
-function nonEmptySeoSignalCount(value: Record<string, unknown>) {
-  return [
-    "seoAudit",
-    "keywords",
-    "metaTitles",
-    "metaDescriptions",
-    "internalLinking",
-    "blogTopics",
-    "technicalSEO",
-    "growthRecommendations",
-    "keywordResearch",
-    "seoStrategy",
-    "seoContentPlan",
-  ].reduce((count, key) => count + (typeof value[key] === "string" && value[key].trim() ? 1 : 0), 0);
-}
-
-function buildCanonicalSeoOutput(value: Record<string, unknown>, approvedFacts: unknown) {
-  const normalized = normalizeSeoOpportunities(value, approvedFacts);
-  const candidate = {
-    seoAudit: safeSeoField(value.seoAudit ?? value.seoStrategy ?? normalized.technicalSEO ?? normalized.growthRecommendations, approvedFacts,
-      "Use verified business details and published-page facts to guide SEO recommendations."),
-    keywords: safeSeoField(value.keywords ?? value.keywordResearch ?? normalized.keywordResearch, approvedFacts,
-      "Focus keyword themes on verified services, locations, and customer questions."),
-    metaTitles: safeSeoField(value.metaTitles ?? normalized.metaTitles, approvedFacts,
-      "Draft factual page titles using verified business, service, and location language."),
-    metaDescriptions: safeSeoField(value.metaDescriptions ?? normalized.metaDescriptions, approvedFacts,
-      "Write concise meta descriptions based on verified customer needs and services."),
-    internalLinking: safeSeoField(value.internalLinking ?? normalized.internalLinking, approvedFacts,
-      "Link key service and contact pages with clear, verified customer-language anchors."),
-    blogTopics: safeSeoField(value.blogTopics ?? value.seoContentPlan ?? normalized.blogTopics, approvedFacts,
-      "Plan educational topics that answer verified customer questions about the business offer."),
-    technicalSEO: safeSeoField(value.technicalSEO ?? normalized.technicalSEO, approvedFacts,
-      "Prioritize crawlable page structure, descriptive metadata, and implementation checks on the published website."),
-    kpis: safeSeoField(value.kpis, approvedFacts,
-      "Track only verified search performance data after approved analytics or search tools are connected."),
-    growthRecommendations: safeSeoField(value.growthRecommendations ?? normalized.growthRecommendations ?? value.recommendedPages, approvedFacts,
-      "Improve search visibility with verified service language, page coverage, and owner-approved content updates."),
-  };
-  return validateSeoOutput(candidate);
 }
 
 export function normalizeSeoOpportunities(value: unknown, approvedFacts: unknown = null): Record<string, unknown> {
@@ -174,19 +95,6 @@ export function readStoredSeoOpportunities(value: unknown): Record<string, unkno
   return Object.values(normalized).some((item) => typeof item === "string" ? item.trim() : Array.isArray(item) && item.length > 0)
     ? normalized
     : null;
-}
-
-export function validateSeoWebhookOutput(value: unknown, approvedFacts: unknown = null) {
-  return validateWrappedWebhookOutput(value, (candidate) => {
-    const validated = validateSeoOutput(candidate);
-    if (validated) {
-      const canonical = buildCanonicalSeoOutput(validated, approvedFacts);
-      return canonical ? validateSeoOutput(canonical) : null;
-    }
-    const record = recognizedSeoRecord(candidate);
-    if (!record || nonEmptySeoSignalCount(record) < 3) return null;
-    return buildCanonicalSeoOutput(record, approvedFacts);
-  });
 }
 
 export function findLatestValidSeoOutput<T extends Readonly<{ result: unknown }>>(orderedCandidates: readonly T[]): T | undefined {

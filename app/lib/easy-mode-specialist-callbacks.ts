@@ -26,7 +26,7 @@ import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context"
 import { validateMarketingWebhookOutput } from "@/app/lib/marketing-insight-safety";
 import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
 import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
-import { validateSeoWebhookOutput } from "@/app/lib/seo-opportunity-safety";
+import { validateSeoWebhookOutput } from "@/app/lib/seo-webhook-validation";
 import { validateTextSpecialistWebhookOutput, type TextSpecialistModule } from "@/app/lib/text-specialist-execution";
 import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
 import { validateUiuxWebhookOutput } from "@/app/lib/uiux-insight-safety";
