@@ -1,18 +1,22 @@
+import { validateMarketingOutput } from "@/app/lib/easy-mode-execution-contracts";
 import type { MarketingBusinessContext } from "@/app/lib/marketing-business-context";
+import { unwrapMarketingProviderResponse } from "@/app/lib/marketing-provider-response";
 
 const URL = /https?:\/\/[^\s)\]}]+/gi;
 const PLACEHOLDER = /\[[a-z][a-z0-9 _-]{0,30}\]/gi;
-const UNSUPPORTED_OUTPUT_KEY = /^(marketingDashboard|marketingScore)$/i;
+const UNSUPPORTED_OUTPUT_KEY = /^marketingDashboard$/i;
 const UNSUPPORTED_PERFORMANCE = /\b(highest roi|high[- ]conversion|cpl reduction|traffic growth|conversion improvement|campaign roi|marketing roi|customer acquisition cost|cac)\b/i;
 const NUMERIC_TARGET = /(?:\b(?:increase|grow|boost|improve|target|reach|conversion|leads?)\b[^.!?\n]{0,70}(?:\d+(?:\.\d+)?\s*%|\d+\s*(?:leads?|sales?|customers?)\s*\/\s*(?:month|week|day)))/i;
 const FINANCIAL_ASSUMPTION = /(?:[$₹]\s*[\d,]+|\b(?:usd|inr|rs\.?)\s*[\d,]+|\b\d+(?:\.\d+)?\s*%\s*(?:to|for|on|toward|towards|allocation)|\b(?:cpl|cost per lead)\b[^.!?\n]*[$₹\d])/i;
 const DEMOGRAPHIC_ASSUMPTION = /\b(?:ages?\s*\d+\s*(?:-|–|to)\s*\d+|\d+\s*(?:-|–|to)\s*\d+\s*years? old|high[- ]net[- ]worth|income (?:band|segment)|project[- ]value band)\b/i;
+const DASHBOARD_PROJECTION = /^(?:projected leads|conversion rate|monthly traffic|channel mix)\b/i;
 const OFFER_TERMS = ["within 48 hours", "discount", "guarantee", "years of experience", "pricing", "price"] as const;
 const ASSERTED_ASSET = /\b(crm|renovation budget planner|newsletter|google analytics|gtm|testimonials?|case studies|notion|airtable|client portal)\b/i;
 const COMPLETED_WORK = /\b(?:we|our team)\s+(?:transformed|completed|delivered|created|built|renovated|designed)\b/i;
 const CLIENT_RESULT = /\bour clients?\s+(?:achieved|increased|improved|saved|grew|generated)\b/i;
 const PAST_CHANNEL_ACTIVITY = /\b(?:was|were|is|are|has been|have been)\s+(?:posted|published|scheduled|launched|running)\b/i;
 const CHANNEL_EXECUTION = /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|carousel|reel|story|post|publish|schedule|launch|run|campaign)\b/i;
+const SAFE_MARKETING_SCORE = "Treat any marketing score as a planning note, not a verified customer metric.";
 
 function verifiedCorpus(context: MarketingBusinessContext) {
   return [context.business.name, context.business.industry, context.business.location, context.business.description, context.business.targetAudience, ...context.business.services]
@@ -51,6 +55,7 @@ function recommendedChannelContent(sentence: string, channel: "Meta" | "LinkedIn
 function cleanSentence(sentence: string, context: MarketingBusinessContext, corpus: string) {
   const text = sentence.trim();
   if (!text) return "";
+  if (DASHBOARD_PROJECTION.test(text)) return "";
   if (/\b(wordpress|webflow)\b/i.test(text)) return "Continue using the Buzypeezy website; an external CMS replacement is not required.";
   if (context.channels.meta !== "connected" && /\b(meta|facebook|instagram)\b/i.test(text) && (CHANNEL_EXECUTION.test(text) || /\bconnected\b/i.test(text))) return recommendedChannelContent(text, "Meta");
   if (context.channels.linkedin !== "connected" && /\blinkedin\b/i.test(text) && (CHANNEL_EXECUTION.test(text) || /\bconnected\b/i.test(text))) return recommendedChannelContent(text, "LinkedIn");
@@ -88,10 +93,33 @@ function labelAudienceHypotheses(value: string) {
 
 export function sanitizeMarketingInsights(value: unknown, context: MarketingBusinessContext): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const clean = (item: unknown, key = ""): unknown => typeof item === "string" ? (key === "targetAudienceAnalysis" ? labelAudienceHypotheses(cleanText(item, context)) : cleanText(item, context))
+  const clean = (item: unknown, key = ""): unknown => typeof item === "string"
+    ? (key === "marketingScore"
+      ? SAFE_MARKETING_SCORE
+      : key === "targetAudienceAnalysis"
+        ? labelAudienceHypotheses(cleanText(item, context))
+        : cleanText(item, context))
     : Array.isArray(item) ? item.map((nested) => clean(nested, key))
       : item && typeof item === "object" ? Object.fromEntries(Object.entries(item).filter(([nestedKey]) => !UNSUPPORTED_OUTPUT_KEY.test(nestedKey)).map(([nestedKey, nested]) => [nestedKey, clean(nested, nestedKey)])) : item;
   return clean(value) as Record<string, unknown>;
+}
+
+function normalizeMarketingProviderCandidate(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (!Object.hasOwn(record, "marketingDashboard")) return record;
+  const withoutDashboard = Object.fromEntries(Object.entries(record).filter(([key]) => key !== "marketingDashboard"));
+  return validateMarketingOutput(withoutDashboard) ? withoutDashboard : record;
+}
+
+export function validateMarketingWebhookOutput(value: unknown, context: MarketingBusinessContext) {
+  const raw = unwrapMarketingProviderResponse(value);
+  const normalized = normalizeMarketingProviderCandidate(raw);
+  const validated = validateMarketingOutput(normalized);
+  if (!validated) return null;
+  const sanitized = sanitizeMarketingInsights(validated, context);
+  if (!sanitized) return null;
+  return validateMarketingOutput(sanitized);
 }
 
 export function readStoredMarketingInsights(value: unknown, context: MarketingBusinessContext) {

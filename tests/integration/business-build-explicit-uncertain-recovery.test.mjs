@@ -23,6 +23,27 @@ const completedBrandingOutput = {
 const completedWebsiteOutput = {
   websiteOverview: "A customer-ready website overview.",
 };
+const completedMarketingOutput = {
+  marketingStrategy: "Use verified business context and customer-safe positioning.",
+  contentIdeas: "Share useful guidance tied to verified services.",
+  socialMediaStrategy: "Recommend approved channel content without claiming publication.",
+  adCopy: "Invite customers to learn more about the verified offer.",
+  contentCalendar: "Use an owner-approved content rhythm.",
+  targetAudienceAnalysis: "Potential audience segments and suggested motivations (recommendations, not measured facts):\nBusiness owners may respond to practical guidance.",
+  emailMarketing: "Use email only when the business owner approves the list and message.",
+  paidAdsStrategy: "Treat paid channels as optional until the business owner approves spend.",
+  typography: "Use clear, readable typography in customer-facing assets.",
+  recommendedTechStack: "Use only approved tools that the business owner chooses to connect.",
+  seoRecommendations: "Support search visibility with verified service language.",
+  funnelSuggestions: "Use a simple next-step funnel based on verified customer actions.",
+  kpis: "Use only the verified business context and connected channels shown above.",
+  growthRecommendations: "Keep recommendations tied to verified services and approved channels.",
+  marketingScore: "Treat any marketing score as a planning note, not a verified customer metric.",
+  bestChannels: "Start with approved channels and expand only after verification.",
+  campaignTimeline: "Plan timing only after the business owner approves campaign details.",
+  customerJourney: "Guide customers from discovery to an owner-approved next step.",
+  contentMix: "Balance educational, proof, and service-focused content using verified inputs.",
+};
 const completedSalesOutput = {
   executiveSummary: "A grounded sales summary.",
   targetCustomerProfile: "Business owners evaluating practical solutions.",
@@ -405,6 +426,79 @@ test("Sales persists successfully in Easy Mode and already completed Sales is no
   assert.equal(salesExecutions, 1);
   assert.equal(salesPersists, 1);
   assert.deepEqual(events, ["sales-load", "sales-execute", "sales-persist"]);
+  assert.equal(claims.length, 0);
+});
+
+test("Marketing persists successfully in Easy Mode and completed Marketing is not regenerated", async () => {
+  const marketingTask = claimFor("marketing", 3, 1);
+  const retriedMarketingTask = claimFor("marketing", 3, 2);
+  const claims = [marketingTask, retriedMarketingTask];
+  const claimedModules = [];
+  const retriedAttempts = [];
+  const events = [];
+  let marketingLoads = 0;
+  let marketingExecutions = 0;
+  let marketingPersists = 0;
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => {
+      const claim = claims.shift() ?? null;
+      if (claim) claimedModules.push(claim.moduleId);
+      return claim;
+    },
+    loadTextInput: async (_context, module) => {
+      assert.equal(module, "marketing");
+      marketingLoads += 1;
+      if (marketingLoads === 1) throw new Error("temporary marketing failure");
+      events.push("marketing-load");
+      return { companyName: "Example" };
+    },
+    prepareRetry: async (input) => {
+      retriedAttempts.push(input.attemptId);
+      return { taskId: marketingTask.taskId, retryReady: true };
+    },
+    startUsage: async () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async ({ module }) => {
+      assert.equal(module, "marketing");
+      marketingExecutions += 1;
+      events.push("marketing-execute");
+      return { output: completedMarketingOutput };
+    },
+    persistText: async (_context, module, value) => {
+      assert.equal(module, "marketing");
+      assert.deepEqual(value, completedMarketingOutput);
+      marketingPersists += 1;
+      events.push("marketing-persist");
+      return { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" };
+    },
+    markRunning: async () => {},
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failBeforeDispatch: async () => {},
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("unexpected usage finalization failure"),
+    progress: async () => ({ runStatus: marketingPersists > 0 ? "Completed" : "In progress", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.deepEqual(retriedAttempts, [marketingTask.attemptId]);
+  assert.equal(marketingExecutions, 0);
+  assert.equal(marketingPersists, 0);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.equal(marketingExecutions, 1);
+  assert.equal(marketingPersists, 1);
+
+  const third = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(third.state, "completed");
+  assert.deepEqual(claimedModules, ["marketing", "marketing"]);
+  assert.equal(marketingExecutions, 1);
+  assert.equal(marketingPersists, 1);
+  assert.deepEqual(events, ["marketing-load", "marketing-execute", "marketing-persist"]);
   assert.equal(claims.length, 0);
 });
 

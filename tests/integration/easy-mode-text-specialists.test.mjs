@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext, getModuleAdapter } from "../../app/lib/easy-mode-execution-contracts.ts";
+import { validateMarketingWebhookOutput } from "../../app/lib/marketing-insight-safety.ts";
 import { executeTextSpecialistService, TEXT_SPECIALIST_MODULES } from "../../app/lib/text-specialist-execution.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -18,6 +19,21 @@ const websiteInput = { ...brandInput, primaryLanguage: "English" };
 const salesInput = { companyName: "Example", industry: "Services", salesGoal: "Grow sales", targetAudience: "Owners", businessDescription: "Helpful services." };
 const analyticsInput = { companyName: "Example", industry: "Services", monthlyVisitors: "Unknown", monthlyLeads: "Unknown", monthlySales: "Unknown", monthlyRevenue: "Unknown", marketingBudget: "Unknown", businessGoal: "Grow", businessDescription: "Helpful services." };
 const canonicalSales = Object.fromEntries(fields.sales.map((field) => [field, `sales ${field} result`]));
+const marketingValidationContext = {
+  website: { published: true, url: "https://example.test" },
+  business: {
+    name: "Example",
+    industry: "Services",
+    location: "Bengaluru",
+    services: ["Helpful services"],
+    description: "Helpful services.",
+    targetAudience: "Owners",
+    brandStyle: "Clear",
+  },
+  channels: { meta: "not_connected", linkedin: "connected", whatsapp: "not_connected" },
+  savedEnquiries: 2,
+  unavailableMetrics: ["website visitors", "CTR", "campaign ROI", "CAC"],
+};
 const salesValidationContext = {
   project: { id: "project-1", goal: "Grow sales" },
   website: { published: true, publishedUrl: "https://example.test" },
@@ -75,11 +91,15 @@ test("all six text specialists normalize a single-item n8n envelope through stri
           : brandInput;
     const result = await executeTextSpecialistService({
       module: specialistModule, context, input,
+      ...(specialistModule === "marketing" ? { marketingValidationContext } : {}),
       ...(specialistModule === "sales" ? { salesValidationContext } : {}),
       fetcher: async () => new Response(JSON.stringify([{ output }]), { status: 200 }),
       webhookConfig: { url: `https://example.invalid/${specialistModule}`, headers: {} },
     });
-    assert.deepEqual(result.output, getModuleAdapter(specialistModule).validateOutput(output), specialistModule);
+    const expected = specialistModule === "marketing"
+      ? validateMarketingWebhookOutput({ output }, marketingValidationContext)
+      : getModuleAdapter(specialistModule).validateOutput(output);
+    assert.deepEqual(result.output, expected, specialistModule);
   }
 });
 
@@ -94,6 +114,7 @@ test("text specialists accept only the strict async acknowledgement contract", a
     module: "marketing",
     context,
     input: brandInput,
+    marketingValidationContext,
     asyncDispatch: {
       runId: "11111111-1111-4111-8111-111111111111",
       taskId: "22222222-2222-4222-8222-222222222222",
@@ -206,6 +227,64 @@ test("normal Sales execution rejects an invalid production contract", async () =
   }));
 });
 
+test("normal Marketing execution accepts canonical-only, legacy-only dashboard, and hybrid dashboard payloads", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const safeCanonicalMarketing = {
+    ...canonicalMarketing,
+    targetAudienceAnalysis: "Business owners may respond to practical positioning.",
+    kpis: "Use approved channels and customer-safe messaging.",
+    marketingScore: "80",
+  };
+  const hybridMarketing = {
+    ...safeCanonicalMarketing,
+    marketingDashboard: structuredClone(legacyMarketing320.marketingDashboard),
+  };
+  const responses = [
+    ["canonical-only", safeCanonicalMarketing],
+    ["legacy-only", legacyMarketing320],
+    ["hybrid", hybridMarketing],
+  ];
+  for (const [label, response] of responses) {
+    const result = await executeTextSpecialistService({
+      module: "marketing",
+      context,
+      input: brandInput,
+      marketingValidationContext,
+      fetcher: async () => new Response(JSON.stringify({ output: response }), { status: 200 }),
+      webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+    });
+    assert.equal(typeof result.output.marketingStrategy, "string", label);
+    assert.equal(Object.hasOwn(result.output, "marketingDashboard"), false, label);
+    assert.equal(result.output.marketingScore, "Treat any marketing score as a planning note, not a verified customer metric.", label);
+  }
+});
+
+test("hybrid and legacy Marketing payloads do not persist projected dashboard metrics as customer facts", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const result = await executeTextSpecialistService({
+    module: "marketing",
+    context,
+    input: brandInput,
+    marketingValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ output: legacyMarketing320 }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+  });
+  assert.equal(result.output.kpis, "Use only the verified business context and connected channels shown above.");
+  assert.doesNotMatch(JSON.stringify(result.output), /Projected leads|Conversion rate|Monthly traffic|Channel mix|3\.5%|9000|82/);
+});
+
+test("malformed Marketing payload still fails safely", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "marketing",
+    context,
+    input: brandInput,
+    marketingValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ result: "{\"marketingStrategy\":" }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+  }));
+});
+
 test("canonical Marketing output remains valid and legacy n8n #320 output normalizes to canonical fields", () => {
   const validator = getModuleAdapter("marketing").validateOutput;
   assert.deepEqual(validator(canonicalMarketing), canonicalMarketing);
@@ -225,12 +304,13 @@ test("legacy Marketing normalization rejects missing real metrics and unknown fi
 });
 
 test("executor enables only approved text specialists and preserves persistence/usage/publication boundaries", async () => {
-  const [executor, adapter, persistence, callbacks, salesSafety] = await Promise.all([
+  const [executor, adapter, persistence, callbacks, salesSafety, marketingSafety] = await Promise.all([
     source("app/lib/easy-mode-executor.ts"),
     source("app/lib/text-specialist-execution.ts"),
     source("app/lib/easy-mode-specialist-persistence.ts"),
     source("app/lib/easy-mode-specialist-callbacks.ts"),
     source("app/lib/sales-insight-safety.ts"),
+    source("app/lib/marketing-insight-safety.ts"),
   ]);
   for (const specialistModule of TEXT_SPECIALIST_MODULES) {
     assert.match(executor, new RegExp(`\\b${specialistModule}\\b`));
@@ -240,10 +320,13 @@ test("executor enables only approved text specialists and preserves persistence/
   assert.match(executor, /projectOutputId: persisted\.id/);
   assert.match(adapter, /N8N_WEBSITE_AI_WEBHOOK_URL/);
   assert.match(adapter, /N8N_ANALYTICS_AI_WEBHOOK_URL/);
+  assert.match(adapter, /validateMarketingWebhookOutput/);
   assert.match(adapter, /validateSalesWebhookOutput/);
   assert.match(executor, /buildSpecialistCallbackUrl/);
   assert.match(adapter, /asyncDispatch/);
+  assert.match(callbacks, /validateMarketingWebhookOutput/);
   assert.match(callbacks, /validateSalesWebhookOutput/);
+  assert.match(marketingSafety, /validateMarketingWebhookOutput/);
   assert.match(salesSafety, /validateSalesWebhookOutput/);
   assert.doesNotMatch(executor, /publishWebsite|websitePublications|publishedWebsites/);
   assert.doesNotMatch(adapter, /N8N_IMAGE_AI_WEBHOOK_URL/);

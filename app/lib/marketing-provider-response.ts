@@ -6,6 +6,8 @@ function parseJsonString(value: unknown) {
   return current;
 }
 
+const WRAPPER_KEYS = ["response", "body", "data", "json", "result", "output", "text"] as const;
+
 export function unwrapMarketingProviderResponse(value: unknown): Record<string, unknown> | null {
   let current = parseJsonString(value);
   for (let depth = 0; depth < 6; depth += 1) {
@@ -16,8 +18,11 @@ export function unwrapMarketingProviderResponse(value: unknown): Record<string, 
     }
     if (!current || typeof current !== "object") return null;
     const record = current as Record<string, unknown>;
-    if (Object.hasOwn(record, "output")) { current = parseJsonString(record.output); continue; }
-    if (Object.hasOwn(record, "text")) { current = parseJsonString(record.text); continue; }
+    const wrapperKey = WRAPPER_KEYS.find((key) => Object.hasOwn(record, key));
+    if (wrapperKey) {
+      current = parseJsonString(record[wrapperKey]);
+      continue;
+    }
     return record;
   }
   return null;

@@ -22,6 +22,8 @@ import {
 import { validateBrandingWebhookOutput, loadCanonicalBrandingInput } from "@/app/lib/branding-execution";
 import { validateContentWebhookOutput } from "@/app/lib/content-execution";
 import { validateLogoWebhookOutput } from "@/app/lib/logo-execution";
+import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context";
+import { validateMarketingWebhookOutput } from "@/app/lib/marketing-insight-safety";
 import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
 import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
 import { validateTextSpecialistWebhookOutput, type TextSpecialistModule } from "@/app/lib/text-specialist-execution";
@@ -237,6 +239,10 @@ async function validateCallbackOutput(
   }
   if (module === "content") return validateContentWebhookOutput(outputPayload);
   if (module === "logo") return validateLogoWebhookOutput(outputPayload);
+  if (module === "marketing") {
+    const marketingContext = await loadOwnedMarketingContext(context.userId, context.projectId);
+    return marketingContext ? validateMarketingWebhookOutput(outputPayload, marketingContext) : null;
+  }
   if (module === "sales") {
     const salesContext = await loadOwnedSalesContext(context.userId, context.projectId);
     return salesContext ? validateSalesWebhookOutput(outputPayload, salesContext) : null;

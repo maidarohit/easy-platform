@@ -11,7 +11,9 @@ import {
   validateWrappedWebhookOutput,
 } from "@/app/lib/specialist-execution";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context";
 import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
+import { validateMarketingWebhookOutput } from "@/app/lib/marketing-insight-safety";
 import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
@@ -74,6 +76,7 @@ type TextSpecialistExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
   input?: unknown;
   asyncDispatch?: SpecialistAsyncDispatchContext;
+  marketingValidationContext?: Awaited<ReturnType<typeof loadOwnedMarketingContext>> | null;
   salesValidationContext?: Awaited<ReturnType<typeof loadOwnedSalesContext>> | null;
   fetcher?: typeof fetch;
   webhookConfig?: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>;
@@ -90,13 +93,19 @@ export async function executeTextSpecialistService(options: TextSpecialistExecut
     ? await loadCanonicalTextSpecialistInput(options.context, options.module)
     : getModuleAdapter(options.module)?.validateInput(options.input);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
+  const marketingContext = options.module === "marketing"
+    ? (options.marketingValidationContext ?? await loadOwnedMarketingContext(options.context.userId, options.context.projectId))
+    : null;
   const salesContext = options.module === "sales"
     ? (options.salesValidationContext ?? await loadOwnedSalesContext(options.context.userId, options.context.projectId))
     : null;
+  if (options.module === "marketing" && !marketingContext) throw new SpecialistExecutionError("before_dispatch", 404);
   if (options.module === "sales" && !salesContext) throw new SpecialistExecutionError("before_dispatch", 404);
-  const validateResponse = options.module === "sales"
-    ? (value: unknown) => validateSalesWebhookOutput(value, salesContext!)
-    : (value: unknown) => validateTextSpecialistWebhookOutput(options.module, value);
+  const validateResponse = options.module === "marketing"
+    ? (value: unknown) => validateMarketingWebhookOutput(value, marketingContext!)
+    : options.module === "sales"
+      ? (value: unknown) => validateSalesWebhookOutput(value, salesContext!)
+      : (value: unknown) => validateTextSpecialistWebhookOutput(options.module, value);
   const config = CONFIG[options.module];
   const baseOptions = {
     input,
