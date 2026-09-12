@@ -1,4 +1,5 @@
 import type { BusinessAnalyticsMetrics } from "@/app/lib/analytics-metrics-calculation";
+import { validateSalesOutput } from "@/app/lib/easy-mode-execution-contracts";
 import { unwrapSalesProviderResponse } from "@/app/lib/sales-provider-response";
 
 const GUARANTEE = /\b(?:guarantee|guaranteed|risk[- ]free|will definitely|assured)\b/i;
@@ -117,6 +118,18 @@ export function sanitizeSalesInsights(value: unknown, source: BusinessAnalyticsM
     return item && typeof item === "object" ? Object.fromEntries(Object.entries(item).map(([nestedKey, nested]) => [nestedKey, clean(nested, nestedKey)])) : item;
   };
   return clean(value) as Record<string, unknown>;
+}
+
+export function validateSalesWebhookOutput(
+  value: unknown,
+  source: BusinessAnalyticsMetrics | SalesSafetyContext,
+) {
+  const raw = unwrapSalesProviderResponse(value);
+  const validated = validateSalesOutput(raw);
+  if (!validated) return null;
+  const sanitized = sanitizeSalesInsights(validated, source);
+  if (!sanitized) return null;
+  return validateSalesOutput(sanitized);
 }
 
 export function readStoredSalesInsights(value: unknown, source: BusinessAnalyticsMetrics | SalesSafetyContext) {

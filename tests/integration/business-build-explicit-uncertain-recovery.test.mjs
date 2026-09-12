@@ -23,6 +23,20 @@ const completedBrandingOutput = {
 const completedWebsiteOutput = {
   websiteOverview: "A customer-ready website overview.",
 };
+const completedSalesOutput = {
+  executiveSummary: "A grounded sales summary.",
+  targetCustomerProfile: "Business owners evaluating practical solutions.",
+  salesFunnel: "Discovery to proposal to confirmed next step.",
+  leadGenerationStrategy: "Use approved channels and verified business context.",
+  salesChannels: "Start with owner-approved channels.",
+  outreachStrategy: "Use clear follow-up language tied to verified services.",
+  pricingRecommendations: "Confirm exact pricing and commercial terms with the business owner.",
+  salesKPIs: "Track only verified enquiries, orders, and paid revenue from the connected business context.",
+  actionPlan: "Review outcomes weekly and keep recommendations tied to verified business inputs.",
+  salesScript: "Open with the customer problem, verified offer, and next step.",
+  proposal: "Summarize verified scope, deliverables, and the next decision step.",
+  closingStrategy: "Confirm objections, recap verified value, and ask for the next action.",
+};
 const baseDigit = (taskNumber) => String(taskNumber + 2);
 
 function claimFor(moduleId, taskNumber, attemptNumber = 1) {
@@ -318,6 +332,79 @@ test("the same failed 7/7 run retries Branding once, does not regenerate complet
     "website-execute",
     "website-persist",
   ]);
+  assert.equal(claims.length, 0);
+});
+
+test("Sales persists successfully in Easy Mode and already completed Sales is not regenerated", async () => {
+  const salesTask = claimFor("sales", 6, 1);
+  const retriedSalesTask = claimFor("sales", 6, 2);
+  const claims = [salesTask, retriedSalesTask];
+  const claimedModules = [];
+  const retriedAttempts = [];
+  const events = [];
+  let salesLoads = 0;
+  let salesExecutions = 0;
+  let salesPersists = 0;
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => {
+      const claim = claims.shift() ?? null;
+      if (claim) claimedModules.push(claim.moduleId);
+      return claim;
+    },
+    loadTextInput: async (_context, module) => {
+      assert.equal(module, "sales");
+      salesLoads += 1;
+      if (salesLoads === 1) throw new Error("temporary sales failure");
+      events.push("sales-load");
+      return { companyName: "Example" };
+    },
+    prepareRetry: async (input) => {
+      retriedAttempts.push(input.attemptId);
+      return { taskId: salesTask.taskId, retryReady: true };
+    },
+    startUsage: async () => "99999999-9999-4999-8999-999999999999",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async ({ module }) => {
+      assert.equal(module, "sales");
+      salesExecutions += 1;
+      events.push("sales-execute");
+      return { output: completedSalesOutput };
+    },
+    persistText: async (_context, module, value) => {
+      assert.equal(module, "sales");
+      assert.deepEqual(value, completedSalesOutput);
+      salesPersists += 1;
+      events.push("sales-persist");
+      return { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" };
+    },
+    markRunning: async () => {},
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failBeforeDispatch: async () => {},
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("unexpected usage finalization failure"),
+    progress: async () => ({ runStatus: salesPersists > 0 ? "Completed" : "In progress", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.deepEqual(retriedAttempts, [salesTask.attemptId]);
+  assert.equal(salesExecutions, 0);
+  assert.equal(salesPersists, 0);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.equal(salesExecutions, 1);
+  assert.equal(salesPersists, 1);
+
+  const third = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(third.state, "completed");
+  assert.deepEqual(claimedModules, ["sales", "sales"]);
+  assert.equal(salesExecutions, 1);
+  assert.equal(salesPersists, 1);
+  assert.deepEqual(events, ["sales-load", "sales-execute", "sales-persist"]);
   assert.equal(claims.length, 0);
 });
 

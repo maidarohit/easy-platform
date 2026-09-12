@@ -14,9 +14,36 @@ const fields = {
   analytics: ["executiveSummary", "businessHealthScore", "trafficAnalysis", "leadAnalysis", "salesPerformance", "revenueAnalysis", "marketingPerformance", "conversionAnalysis", "customerInsights", "growthOpportunities", "keyProblems", "aiRecommendations", "actionPlan90Days"],
 };
 const brandInput = { companyName: "Example", industry: "Services", targetAudience: "Owners", brandStyle: "Clear", brandDescription: "Helpful services." };
+const websiteInput = { ...brandInput, primaryLanguage: "English" };
 const salesInput = { companyName: "Example", industry: "Services", salesGoal: "Grow sales", targetAudience: "Owners", businessDescription: "Helpful services." };
 const analyticsInput = { companyName: "Example", industry: "Services", monthlyVisitors: "Unknown", monthlyLeads: "Unknown", monthlySales: "Unknown", monthlyRevenue: "Unknown", marketingBudget: "Unknown", businessGoal: "Grow", businessDescription: "Helpful services." };
 const canonicalSales = Object.fromEntries(fields.sales.map((field) => [field, `sales ${field} result`]));
+const salesValidationContext = {
+  project: { id: "project-1", goal: "Grow sales" },
+  website: { published: true, publishedUrl: "https://example.test" },
+  business: {
+    name: "Example",
+    industry: "Services",
+    description: "Helpful services.",
+    location: "Bengaluru",
+    targetAudience: "Owners",
+    services: ["Helpful services"],
+  },
+  channels: { meta: "not_connected", linkedin: "not_connected", whatsapp: "approved_contact" },
+  metrics: {
+    published: true,
+    publishedUrl: "https://example.test",
+    visitors: null,
+    visitorsStatus: "not_measured",
+    enquiries: 2,
+    orders: 3,
+    paidOrders: 1,
+    fulfilledOrders: 1,
+    paidRevenuePaise: 199900,
+    currency: "INR",
+    enquiryToPaidOrderRate: 50,
+  },
+};
 
 const canonicalMarketing = Object.fromEntries(fields.marketing.map((field) => [field, `marketing ${field} result`]));
 const legacyMarketing320 = {
@@ -41,11 +68,14 @@ test("all six text specialists normalize a single-item n8n envelope through stri
     const output = Object.fromEntries(fields[specialistModule].map((field) => [field, `${specialistModule} ${field} result`]));
     const input = specialistModule === "sales"
         ? salesInput
+        : specialistModule === "website"
+          ? websiteInput
         : specialistModule === "analytics"
           ? analyticsInput
           : brandInput;
     const result = await executeTextSpecialistService({
       module: specialistModule, context, input,
+      ...(specialistModule === "sales" ? { salesValidationContext } : {}),
       fetcher: async () => new Response(JSON.stringify([{ output }]), { status: 200 }),
       webhookConfig: { url: `https://example.invalid/${specialistModule}`, headers: {} },
     });
@@ -126,28 +156,51 @@ test("malformed async acknowledgements fail closed", async () => {
   }));
 });
 
-test("normal Sales execution accepts direct and harmless Respond-to-Webhook envelopes", async () => {
+test("normal Sales execution accepts direct, output-wrapped, result-string, and text-string payloads", async () => {
   const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
   const responses = [
-    canonicalSales,
-    { output: canonicalSales },
-    [{ output: canonicalSales }],
-    { response: { body: [{ json: { output: canonicalSales } }] } },
+    ["direct", canonicalSales],
+    ["output", { output: canonicalSales }],
+    ["result-string", { result: JSON.stringify(canonicalSales) }],
+    ["text-string", { text: JSON.stringify(canonicalSales) }],
   ];
-  for (const response of responses) {
+  for (const [label, response] of responses) {
     const result = await executeTextSpecialistService({
       module: "sales", context, input: salesInput,
+      salesValidationContext,
       fetcher: async () => new Response(JSON.stringify(response), { status: 200 }),
       webhookConfig: { url: "https://example.invalid/sales", headers: {} },
     });
-    assert.deepEqual(result.output, canonicalSales);
+    assert.deepEqual(result.output, canonicalSales, label);
   }
+});
+
+test("normal Sales execution still accepts harmless nested webhook wrappers", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const result = await executeTextSpecialistService({
+    module: "sales", context, input: salesInput,
+    salesValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ response: { body: [{ json: { output: canonicalSales } }] } }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/sales", headers: {} },
+  });
+  assert.deepEqual(result.output, canonicalSales);
+});
+
+test("malformed Sales JSON still fails safely", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "sales", context, input: salesInput,
+    salesValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ result: "{\"executiveSummary\":" }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/sales", headers: {} },
+  }));
 });
 
 test("normal Sales execution rejects an invalid production contract", async () => {
   const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
   await assert.rejects(() => executeTextSpecialistService({
     module: "sales", context, input: salesInput,
+    salesValidationContext,
     fetcher: async () => new Response(JSON.stringify({ output: { executiveSummary: "incomplete" } }), { status: 200 }),
     webhookConfig: { url: "https://example.invalid/sales", headers: {} },
   }));
@@ -172,10 +225,12 @@ test("legacy Marketing normalization rejects missing real metrics and unknown fi
 });
 
 test("executor enables only approved text specialists and preserves persistence/usage/publication boundaries", async () => {
-  const [executor, adapter, persistence] = await Promise.all([
+  const [executor, adapter, persistence, callbacks, salesSafety] = await Promise.all([
     source("app/lib/easy-mode-executor.ts"),
     source("app/lib/text-specialist-execution.ts"),
     source("app/lib/easy-mode-specialist-persistence.ts"),
+    source("app/lib/easy-mode-specialist-callbacks.ts"),
+    source("app/lib/sales-insight-safety.ts"),
   ]);
   for (const specialistModule of TEXT_SPECIALIST_MODULES) {
     assert.match(executor, new RegExp(`\\b${specialistModule}\\b`));
@@ -185,8 +240,11 @@ test("executor enables only approved text specialists and preserves persistence/
   assert.match(executor, /projectOutputId: persisted\.id/);
   assert.match(adapter, /N8N_WEBSITE_AI_WEBHOOK_URL/);
   assert.match(adapter, /N8N_ANALYTICS_AI_WEBHOOK_URL/);
+  assert.match(adapter, /validateSalesWebhookOutput/);
   assert.match(executor, /buildSpecialistCallbackUrl/);
   assert.match(adapter, /asyncDispatch/);
+  assert.match(callbacks, /validateSalesWebhookOutput/);
+  assert.match(salesSafety, /validateSalesWebhookOutput/);
   assert.doesNotMatch(executor, /publishWebsite|websitePublications|publishedWebsites/);
   assert.doesNotMatch(adapter, /N8N_IMAGE_AI_WEBHOOK_URL/);
 });

@@ -11,6 +11,8 @@ import {
   validateWrappedWebhookOutput,
 } from "@/app/lib/specialist-execution";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
+import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
+import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
 
 export const TEXT_SPECIALIST_MODULES = ["website", "marketing", "seo", "uiux", "sales", "analytics"] as const;
 export type TextSpecialistModule = (typeof TEXT_SPECIALIST_MODULES)[number];
@@ -72,6 +74,7 @@ type TextSpecialistExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
   input?: unknown;
   asyncDispatch?: SpecialistAsyncDispatchContext;
+  salesValidationContext?: Awaited<ReturnType<typeof loadOwnedSalesContext>> | null;
   fetcher?: typeof fetch;
   webhookConfig?: Readonly<{ url: string; headers: Readonly<Record<string, string>> }>;
 }>;
@@ -87,13 +90,20 @@ export async function executeTextSpecialistService(options: TextSpecialistExecut
     ? await loadCanonicalTextSpecialistInput(options.context, options.module)
     : getModuleAdapter(options.module)?.validateInput(options.input);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
+  const salesContext = options.module === "sales"
+    ? (options.salesValidationContext ?? await loadOwnedSalesContext(options.context.userId, options.context.projectId))
+    : null;
+  if (options.module === "sales" && !salesContext) throw new SpecialistExecutionError("before_dispatch", 404);
+  const validateResponse = options.module === "sales"
+    ? (value: unknown) => validateSalesWebhookOutput(value, salesContext!)
+    : (value: unknown) => validateTextSpecialistWebhookOutput(options.module, value);
   const config = CONFIG[options.module];
   const baseOptions = {
     input,
     webhook: options.webhookConfig ?? getN8nWebhookConfig(config.env),
     timeoutMs: 120_000,
     fetcher: options.fetcher,
-    validateResponse: (value: unknown) => validateTextSpecialistWebhookOutput(options.module, value),
+    validateResponse,
   } as const;
   if (options.asyncDispatch) {
     return executeValidatedJsonWebhook({
