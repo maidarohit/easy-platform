@@ -82,6 +82,11 @@ import { isSubscriptionRequiredResponse } from "@/app/lib/subscription-required"
 
 const ENABLED_MODULES = ["ai-manager", "branding-context", "branding", "logo", "content", ...TEXT_SPECIALIST_MODULES] as const;
 type LoggedProviderFailureCategory = ProviderFailureCategory | "persistence_failure" | "unknown";
+const AUTO_RETRY_NO_OUTPUT_MODULES = new Set(["branding", "website", "marketing", "seo", "uiux", "sales"]);
+const CONFIRMED_NO_OUTPUT_FAILURE_CATEGORIES = new Set<ProviderFailureCategory>([
+  "empty_response",
+  "invalid_json",
+]);
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
 export type EasyModeCustomerProgress = Readonly<{
@@ -213,15 +218,9 @@ function logProviderBackedTaskFailure(input: Readonly<{
   providerCompleted: boolean;
 }>) {
   let failureCategory: LoggedProviderFailureCategory = input.providerCompleted ? "persistence_failure" : "unknown";
-  let upstreamStatus: number | null = null;
-
-  if (input.error instanceof SpecialistExecutionError) {
-    failureCategory = input.error.failureCategory ?? failureCategory;
-    upstreamStatus = input.error.upstreamStatus;
-  } else if (input.error instanceof BrandingExecutionError) {
-    failureCategory = input.error.failureCategory ?? failureCategory;
-    upstreamStatus = input.error.upstreamStatus;
-  }
+  const details = providerFailureDetails(input.error);
+  const upstreamStatus = details.upstreamStatus;
+  failureCategory = details.failureCategory ?? failureCategory;
 
   console.error("Easy Mode provider-backed task failed.", {
     runId: input.claim.runId,
@@ -254,6 +253,54 @@ function logAsyncDispatchAcknowledged(input: Readonly<{
     elapsedMs: Math.max(0, input.elapsedMs),
     failureCategory: null,
   });
+}
+
+function providerFailureDetails(error: unknown): Readonly<{
+  failureCategory: ProviderFailureCategory | null;
+  failurePoint: "before_dispatch" | "uncertain" | null;
+  upstreamStatus: number | null;
+}> {
+  if (error instanceof SpecialistExecutionError || error instanceof BrandingExecutionError) {
+    return {
+      failureCategory: error.failureCategory ?? null,
+      failurePoint: error.failurePoint ?? null,
+      upstreamStatus: error.upstreamStatus ?? null,
+    };
+  }
+  if (error && typeof error === "object" && !Array.isArray(error)) {
+    const failureCategory = typeof (error as { failureCategory?: unknown }).failureCategory === "string"
+      ? (error as { failureCategory: ProviderFailureCategory }).failureCategory
+      : null;
+    const rawFailurePoint = (error as { failurePoint?: unknown }).failurePoint;
+    const failurePoint = rawFailurePoint === "before_dispatch" || rawFailurePoint === "uncertain"
+      ? rawFailurePoint
+      : null;
+    const upstreamStatus = typeof (error as { upstreamStatus?: unknown }).upstreamStatus === "number"
+      ? (error as { upstreamStatus: number }).upstreamStatus
+      : null;
+    return { failureCategory, failurePoint, upstreamStatus };
+  }
+  return { failureCategory: null, failurePoint: null, upstreamStatus: null };
+}
+
+function isConfirmedNoOutputProviderFailure(input: Readonly<{
+  claim: ClaimedEasyModeTask;
+  error: unknown;
+  persistedOutputId: string | null;
+}>): boolean {
+  const { failureCategory } = providerFailureDetails(input.error);
+  return input.persistedOutputId === null &&
+    AUTO_RETRY_NO_OUTPUT_MODULES.has(String(input.claim.moduleId)) &&
+    failureCategory !== null &&
+    CONFIRMED_NO_OUTPUT_FAILURE_CATEGORIES.has(failureCategory);
+}
+
+function canAutoRetryConfirmedNoOutputFailure(input: Readonly<{
+  claim: ClaimedEasyModeTask;
+  error: unknown;
+  persistedOutputId: string | null;
+}>): boolean {
+  return input.claim.attemptNumber < 2 && isConfirmedNoOutputProviderFailure(input);
 }
 
 export async function executeNextEasyModeTask(
@@ -431,7 +478,7 @@ async function executeAiManagerTask(
       };
     }
     const uncertain = dispatched ||
-      (error instanceof SpecialistExecutionError && error.failurePoint === "uncertain");
+      providerFailureDetails(error).failurePoint === "uncertain";
     if (usageId) {
       try { await dependencies.failUsage({ usageId, durationMs: Math.max(0, Date.now() - startedAt) }); } catch {}
     }
@@ -571,9 +618,18 @@ async function executeBrandingTask(
         providerCompleted,
       });
     }
-    const uncertain = providerStarted && !(error instanceof BrandingExecutionError && error.failurePoint === "before_dispatch");
+    const confirmedNoOutputFailure = isConfirmedNoOutputProviderFailure({
+      claim,
+      error,
+      persistedOutputId,
+    });
+    const uncertain = providerStarted &&
+      providerFailureDetails(error).failurePoint !== "before_dispatch" &&
+      !confirmedNoOutputFailure;
     try {
-      if (uncertain) {
+      if (confirmedNoOutputFailure) {
+        await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+      } else if (uncertain) {
         await dependencies.failUncertain({
           ...lease,
           safeErrorCode: "DELIVERY_UNCERTAIN",
@@ -589,7 +645,9 @@ async function executeBrandingTask(
       state: "needs_attention",
       message: "Brand identity needs attention.",
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
-      ...(!usageId && !uncertain ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId } : {}),
+      ...(canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
+        ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId }
+        : {}),
       ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
     };
   }
@@ -704,10 +762,18 @@ async function executeAdditionalSpecialistTask(
         providerCompleted,
       });
     }
+    const confirmedNoOutputFailure = isConfirmedNoOutputProviderFailure({
+      claim,
+      error,
+      persistedOutputId,
+    });
     const uncertain = providerStarted &&
-      !(error instanceof SpecialistExecutionError && error.failurePoint === "before_dispatch");
+      providerFailureDetails(error).failurePoint !== "before_dispatch" &&
+      !confirmedNoOutputFailure;
     try {
-      if (uncertain) {
+      if (confirmedNoOutputFailure) {
+        await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+      } else if (uncertain) {
         await dependencies.failUncertain({
           ...lease,
           safeErrorCode: "DELIVERY_UNCERTAIN",
@@ -723,7 +789,9 @@ async function executeAdditionalSpecialistTask(
       state: "needs_attention",
       message: `${config.label} needs attention.`,
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
-      ...(!usageId && !uncertain ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId } : {}),
+      ...(canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
+        ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId }
+        : {}),
       ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
     };
   }

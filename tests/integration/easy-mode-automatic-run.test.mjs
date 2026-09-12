@@ -4,6 +4,7 @@ import test from "node:test";
 import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
 import { BrandingExecutionError } from "../../app/lib/branding-execution.ts";
+import { executeTextSpecialistService } from "../../app/lib/text-specialist-execution.ts";
 import { MalformedJsonBodyError, readOptionalLimitedJson } from "../../app/lib/request-body.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -25,6 +26,20 @@ function localClaim(index) {
 function brandingClaim() {
   return { ...localClaim(0), moduleId: "branding" };
 }
+
+const marketingValidationContext = {
+  website: { published: true, url: "https://example.test" },
+  business: {
+    name: "Example",
+    industry: "Services",
+    location: "Bengaluru",
+    services: ["Helpful services"],
+    description: "Helpful services.",
+    targetAudience: "Owners",
+  },
+  savedEnquiries: 2,
+  unavailableMetrics: ["website visitors", "CTR", "campaign ROI", "CAC"],
+};
 
 test("one execute-next request advances only one successful eligible task", async () => {
   const claims = [localClaim(0), localClaim(1), localClaim(2)];
@@ -105,6 +120,186 @@ test("uncertain execution reconciles existing output and returns without startin
   assert.equal(events.filter((event) => event === "claim").length, 1);
   assert.ok(events.includes("reconcile"));
   assert.equal(claims.length, 1);
+});
+
+test("confirmed empty-response Branding failure is retried automatically once without replaying in the same request", async () => {
+  const firstAttempt = brandingClaim();
+  const retryAttempt = { ...brandingClaim(), attemptId: localClaim(1).attemptId, attemptNumber: 2, executionKey: "branding-2" };
+  const claims = [firstAttempt, retryAttempt];
+  let providerCalls = 0;
+  let retries = 0;
+  let failBeforeDispatch = 0;
+  let failUncertain = 0;
+  let failUsage = 0;
+  let completeUsage = 0;
+  let completeAttempt = 0;
+
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadBrandingInput: async () => ({
+      companyName: "Example",
+      industry: "Services",
+      targetAudience: "Owners",
+      brandStyle: "Professional",
+      brandDescription: "Helpful services.",
+    }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeBranding: async () => {
+      providerCalls += 1;
+      if (providerCalls === 1) {
+        throw new BrandingExecutionError("OUTPUT_INVALID", "uncertain", 502, { failureCategory: "empty_response" });
+      }
+      return { output: { brandName: "Example" } };
+    },
+    markRunning: async () => {},
+    persistBranding: async () => ({ id: "branding-output" }),
+    completeUsage: async () => { completeUsage += 1; },
+    completeAttempt: async () => { completeAttempt += 1; },
+    failUsage: async () => { failUsage += 1; },
+    failBeforeDispatch: async () => { failBeforeDispatch += 1; },
+    failUncertain: async () => { failUncertain += 1; },
+    prepareRetry: async () => { retries += 1; return { taskId: firstAttempt.taskId, retryReady: true }; },
+    progress: async () => ({ runStatus: completeAttempt > 0 ? "Completed" : "In progress", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.equal(providerCalls, 1);
+  assert.equal(retries, 1);
+  assert.equal(failBeforeDispatch, 1);
+  assert.equal(failUncertain, 0);
+  assert.equal(failUsage, 1);
+  assert.equal(completeUsage, 0);
+  assert.equal(completeAttempt, 0);
+  assert.equal(claims.length, 1);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.equal(providerCalls, 2);
+  assert.equal(retries, 1);
+  assert.equal(failBeforeDispatch, 1);
+  assert.equal(failUncertain, 0);
+  assert.equal(failUsage, 1);
+  assert.equal(completeUsage, 1);
+  assert.equal(completeAttempt, 1);
+  assert.equal(claims.length, 0);
+});
+
+test("confirmed empty-response shared specialist failure retries once and then surfaces the failed phase normally", async () => {
+  const firstAttempt = {
+    ...localClaim(0),
+    moduleId: "marketing",
+    executionKey: "marketing-1",
+  };
+  const retryAttempt = {
+    ...firstAttempt,
+    attemptId: localClaim(1).attemptId,
+    attemptNumber: 2,
+    executionKey: "marketing-2",
+  };
+  const claims = [firstAttempt, retryAttempt];
+  let providerCalls = 0;
+  let retries = 0;
+  let failBeforeDispatch = 0;
+  let failUncertain = 0;
+  let failUsage = 0;
+
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadTextInput: async () => ({
+      companyName: "Example",
+      industry: "Services",
+      targetAudience: "Owners",
+      brandStyle: "Professional",
+      brandDescription: "Helpful services.",
+    }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async (options) => {
+      providerCalls += 1;
+      return executeTextSpecialistService({
+        ...options,
+        module: "marketing",
+        marketingValidationContext,
+        fetcher: async () => new Response("", { status: 200 }),
+        webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+      });
+    },
+    failUsage: async () => { failUsage += 1; },
+    failBeforeDispatch: async () => { failBeforeDispatch += 1; },
+    failUncertain: async () => { failUncertain += 1; },
+    prepareRetry: async () => { retries += 1; return { taskId: firstAttempt.taskId, retryReady: true }; },
+    progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.equal(providerCalls, 1);
+  assert.equal(retries, 1);
+  assert.equal(failBeforeDispatch, 1);
+  assert.equal(failUncertain, 0);
+  assert.equal(failUsage, 1);
+  assert.equal(claims.length, 1);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "needs_attention");
+  assert.equal(providerCalls, 2);
+  assert.equal(retries, 1);
+  assert.equal(failBeforeDispatch, 2);
+  assert.equal(failUncertain, 0);
+  assert.equal(failUsage, 2);
+  assert.equal(claims.length, 0);
+});
+
+test("schema-validation failures after receiving an actual payload are not auto-retried as empty responses", async () => {
+  const claim = {
+    ...localClaim(0),
+    moduleId: "marketing",
+    executionKey: "marketing-1",
+  };
+  let retries = 0;
+  let failBeforeDispatch = 0;
+  let failUncertain = 0;
+  let failUsage = 0;
+
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claim,
+    loadTextInput: async () => ({
+      companyName: "Example",
+      industry: "Services",
+      targetAudience: "Owners",
+      brandStyle: "Professional",
+      brandDescription: "Helpful services.",
+    }),
+    startUsage: async () => "usage-1",
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async (options) => executeTextSpecialistService({
+      ...options,
+      module: "marketing",
+      marketingValidationContext,
+      fetcher: async () => new Response(JSON.stringify({ output: { marketingStrategy: "Only one field" } }), { status: 200 }),
+      webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+    }),
+    failUsage: async () => { failUsage += 1; },
+    failBeforeDispatch: async () => { failBeforeDispatch += 1; },
+    failUncertain: async () => { failUncertain += 1; },
+    prepareRetry: async () => { retries += 1; return { taskId: claim.taskId, retryReady: true }; },
+    reconcileUncertain: async () => ({ state: "unresolved" }),
+    progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+  });
+
+  assert.equal(result.state, "needs_attention");
+  assert.equal(retries, 0);
+  assert.equal(failBeforeDispatch, 0);
+  assert.equal(failUncertain, 1);
+  assert.equal(failUsage, 1);
 });
 
 test("completed Business plan can hand off to Branding without chaining later tasks in the same request", async () => {
