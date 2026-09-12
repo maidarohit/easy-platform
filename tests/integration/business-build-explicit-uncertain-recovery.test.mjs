@@ -45,15 +45,15 @@ const completedMarketingOutput = {
   contentMix: "Balance educational, proof, and service-focused content using verified inputs.",
 };
 const completedUiuxOutput = {
-  accessibility: "Use accessible labels and readable contrast throughout the primary journey.",
-  designSystem: "Use a consistent component system grounded in the verified brand direction.",
-  desktopExperience: "Keep the primary contact action visible in desktop layouts.",
-  microInteractions: "Use subtle feedback for taps, hovers, and form confirmation states.",
-  mobileExperience: "Prioritize fast mobile navigation and short forms.",
-  uiuxStrategy: "Guide customers from discovery to a clear next step using verified business context.",
-  userFlow: "Homepage to services to contact enquiry.",
-  userPersonas: "Hypothetical / Proposed personas:\nBusiness owners evaluating practical solutions.",
-  wireframes: "Home, Services, About, Contact.",
+  accessibility: "Use accessibility standards as implementation guidance and verify compliance through a formal audit.",
+  designSystem: "Verified Branding system — palette: Ivory and charcoal; typography: Elegant serif with clean sans; brand voice: Calm and trustworthy; visual direction: Premium and minimal.",
+  desktopExperience: "Use comparison-friendly layouts and visible enquiry actions on larger screens.",
+  microInteractions: "Treat conversion and usability improvements as testable objectives, not measured results.",
+  mobileExperience: "Prioritize thumb-friendly filters, quick calls, and short enquiry forms.",
+  uiuxStrategy: "Guide home buyers and property investors from discovery to a clear next step using verified business context for residential property guidance.",
+  userFlow: "Landing page to property categories to listing detail to enquiry form.",
+  userPersonas: "Hypothetical / Proposed personas:\nBusy home buyers comparing verified listings and investors evaluating fit.",
+  wireframes: "Homepage, listings page, property detail page, enquiry page.",
 };
 const completedSalesOutput = {
   executiveSummary: "A grounded sales summary.",

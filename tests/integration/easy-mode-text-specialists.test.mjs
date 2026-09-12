@@ -72,6 +72,36 @@ const uiuxValidationContext = {
     direction: "Modern and clear",
   },
 };
+const nestoraUiuxValidationContext = {
+  website: { published: true, url: "https://nestora.example/properties" },
+  business: {
+    name: "Nestora Realty",
+    industry: "Real Estate",
+    location: "Bengaluru",
+    services: ["residential property guidance"],
+    description: "Nestora Realty helps buyers and sellers navigate residential property decisions in Bengaluru.",
+    targetAudience: "home buyers and property investors",
+    brandStyle: "Premium",
+  },
+  branding: {
+    palette: "Ivory and charcoal",
+    typography: "Elegant serif with clean sans",
+    voice: "Calm and trustworthy",
+    direction: "Premium and minimal",
+  },
+};
+const nestoraUiuxPayload = {
+  accessibility: "Make the website WCAG compliant with readable contrast and descriptive labels.",
+  designSystem: "Use a premium ivory and charcoal palette with elegant serif typography and a calm brand voice.",
+  desktopExperience: "Use comparison-friendly layouts and visible enquiry actions on larger screens.",
+  microInteractions: "Increase conversions by 25% with hover cues and instant response feedback.",
+  mobileExperience: "Prioritize thumb-friendly filters, quick calls, and short enquiry forms.",
+  uiuxStrategy: "Use a premium ivory and charcoal palette with elegant serif typography and a calm brand voice across the experience.",
+  userFlow: "Landing page to property categories to listing detail to enquiry form.",
+  userPersonas: "Busy home buyers comparing verified listings and investors evaluating fit.",
+  wireframes: "Homepage, listings page, property detail page, enquiry page.",
+  designRecommendations: "Use warm photography and premium spacing.",
+};
 const salesValidationContext = {
   project: { id: "project-1", goal: "Grow sales" },
   website: { published: true, publishedUrl: "https://example.test" },
@@ -168,6 +198,32 @@ test("normal UI/UX execution accepts direct, output-wrapped, result-string, and 
     });
     assert.deepEqual(result.output, validateUiuxWebhookOutput(response, uiuxValidationContext), label);
   }
+});
+
+test("Nestora-shaped canonical UI/UX execution survives sanitize plus post-sanitize repair", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const result = await executeTextSpecialistService({
+    module: "uiux",
+    context,
+    input: brandInput,
+    uiuxValidationContext: nestoraUiuxValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ output: nestoraUiuxPayload }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/uiux", headers: {} },
+  });
+  assert.equal(
+    result.output.uiuxStrategy,
+    "Guide home buyers and property investors from discovery to a clear next step using verified business context for residential property guidance.",
+  );
+  assert.equal(
+    result.output.microInteractions,
+    "Treat conversion and usability improvements as testable objectives, not measured results.",
+  );
+  assert.equal(
+    result.output.accessibility,
+    "Use accessibility standards as implementation guidance and verify compliance through a formal audit.",
+  );
+  assert.match(result.output.designSystem, /^Verified Branding system \u2014 palette: Ivory and charcoal;/);
+  assert.doesNotMatch(JSON.stringify(result.output), /25%|WCAG compliant/i);
 });
 
 test("Branding shared validation accepts stringified result and text payloads", () => {

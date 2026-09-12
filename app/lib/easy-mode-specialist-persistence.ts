@@ -8,7 +8,7 @@ import {
   type NormalizedModuleOutput,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
-import { sanitizeUiuxOutput } from "@/app/lib/uiux-insight-safety";
+import { validateUiuxWebhookOutput } from "@/app/lib/uiux-insight-safety";
 import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
 import { getTextSpecialistConfig, type TextSpecialistModule } from "@/app/lib/text-specialist-execution";
 
@@ -142,7 +142,7 @@ export async function persistTextSpecialistOutputAndMemoryInTransaction(
   if (module === "uiux") {
     const uiuxContext = await loadOwnedUiuxContext(context.userId, context.projectId);
     if (!uiuxContext) throw new Error("UI/UX context not found.");
-    output = getModuleAdapter("uiux")?.validateOutput?.(sanitizeUiuxOutput(output, uiuxContext));
+    output = validateUiuxWebhookOutput(output, uiuxContext);
     if (!output) throw new Error("Invalid UI/UX output.");
   }
   const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(

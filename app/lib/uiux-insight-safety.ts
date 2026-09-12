@@ -3,7 +3,7 @@ import { validateUiuxOutput, type NormalizedModuleOutput } from "@/app/lib/easy-
 import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 
 const RESEARCH = /\b(?:research (?:shows?|found)|users? (?:said|reported|preferred)|we (?:interviewed|surveyed|tested)|usability (?:tests?|testing) (?:showed|found|proved)|heatmaps?|session recordings?)\b/i;
-const METRIC = /\b(?:conversion|engagement|bounce rate|task completion|time on task|success rate|click[- ]through|retention)\b[^.!?\n]{0,80}(?:\d|%|increase|improve|lift|reduce)/i;
+const METRIC = /\b(?:conversions?|engagement|bounce rate|task completion|time on task|success rate|click[- ]through|retention)\b[^.!?\n]{0,80}(?:\d|%|increase|improve|lift|reduce)/i;
 const COMPLIANCE = /\b(?:wcag|ada|accessibility)[^.!?\n]{0,80}\b(?:compliant|certified|passes?|meets?|conforms?)\b/i;
 const LIVE_CLAIM = /\b(?:the (?:current|live|published) (?:site|website)|website (?:currently|already))\b/i;
 const UNVERIFIED_CAPABILITY = /\b(?:dashboard|configurator|e-?sign(?:ature)?|scheduling|calendar|automated? emails?|automation|milestone payments?|3d viewers?|awards?|testimonials?|case stud(?:y|ies)|office locations?|financing|referrals?|client portals?|integrations?)\b/gi;
@@ -13,6 +13,56 @@ const BRANDING_CONTENT = /^\s*(?:branding|brand(?:ing)? system)\b/i;
 const UI_COLOUR_PROPOSAL = /\b(?:ui|interface|interaction|state|surface|background|accent|semantic|feedback|success|warning|error|info|neutral|border|hover|focus|disabled)\b[^.!?\n]{0,100}\b(?:colou?r|palette|#[\da-f]{3,8}\b)/i;
 const DASH_CLASS = "[\\u2014\\u2013-]";
 const UI_COLOUR_LABEL = new RegExp(`^Proposed UI extension colors\\s*${DASH_CLASS}\\s*`, "i");
+const REQUIRED_UIUX_FIELDS = [
+  "accessibility",
+  "designSystem",
+  "desktopExperience",
+  "microInteractions",
+  "mobileExperience",
+  "uiuxStrategy",
+  "userFlow",
+  "userPersonas",
+  "wireframes",
+] as const;
+
+function verifiedBrandingGrounding(context: UiuxBusinessContext) {
+  return context.branding
+    ? `Verified Branding system \u2014 palette: ${context.branding.palette}; typography: ${context.branding.typography}; brand voice: ${context.branding.voice}; visual direction: ${context.branding.direction}.`
+    : "Use a consistent component system with clear hierarchy and owner-approved branding choices.";
+}
+
+function primaryAudience(context: UiuxBusinessContext) {
+  return context.business.targetAudience?.trim() || "potential customers";
+}
+
+function primaryOffer(context: UiuxBusinessContext) {
+  return context.business.services[0]?.trim() || "the verified offer";
+}
+
+function repairRequiredUiuxFields(
+  value: NormalizedModuleOutput,
+  context: UiuxBusinessContext,
+): NormalizedModuleOutput {
+  const audience = primaryAudience(context);
+  const offer = primaryOffer(context);
+  const repaired = { ...(value as Record<string, unknown>) };
+  const fallbacks: Record<(typeof REQUIRED_UIUX_FIELDS)[number], string> = {
+    accessibility: `Use accessible labels, readable contrast, and clear focus states across the ${offer} journey.`,
+    designSystem: verifiedBrandingGrounding(context),
+    desktopExperience: `Keep core information and the primary enquiry action visible in desktop layouts for ${audience}.`,
+    microInteractions: "Use subtle feedback for selections, form progress, and confirmation states without implying measured performance gains.",
+    mobileExperience: `Prioritize short forms, clear navigation, and quick contact actions for ${audience} on mobile devices.`,
+    uiuxStrategy: `Guide ${audience} from discovery to a clear next step using verified business context for ${offer}.`,
+    userFlow: `Homepage to ${offer} details to contact enquiry.`,
+    userPersonas: `Hypothetical / Proposed personas:\n${audience} exploring ${offer} and deciding on the next step.`,
+    wireframes: "Homepage, key offer page, about page, contact page.",
+  };
+  for (const key of REQUIRED_UIUX_FIELDS) {
+    const text = typeof repaired[key] === "string" ? repaired[key].trim() : "";
+    if (!text) repaired[key] = fallbacks[key];
+  }
+  return repaired as NormalizedModuleOutput;
+}
 
 function cleanFormatting(text: string) {
   return text
@@ -58,7 +108,7 @@ export function sanitizeUiuxOutput(value: unknown, context: UiuxBusinessContext)
     if (key === "colourScheme" && context.branding) text = context.branding.palette;
     if (key === "userPersonas" && !/^Hypothetical \/ Proposed personas:/i.test(text)) text = `Hypothetical / Proposed personas:\n${text}`;
     if (key === "designSystem" && context.branding) {
-      const grounding = `Verified Branding system \u2014 palette: ${context.branding.palette}; typography: ${context.branding.typography}; brand voice: ${context.branding.voice}; visual direction: ${context.branding.direction}.`;
+      const grounding = verifiedBrandingGrounding(context);
       const extension = [...new Set(proposedUiColours.map((sentence) => sentence.replace(UI_COLOUR_LABEL, "")))]
         .map((sentence) => `Proposed UI extension colors \u2014 ${sentence}`);
       text = [grounding, ...extension, text].filter(Boolean).join("\n");
@@ -74,7 +124,7 @@ export function validateUiuxWebhookOutput(value: unknown, context: UiuxBusinessC
     if (!validated) return null;
     const sanitized = sanitizeUiuxOutput(validated, context);
     if (!sanitized) return null;
-    return validateUiuxOutput(sanitized);
+    return validateUiuxOutput(repairRequiredUiuxFields(sanitized, context));
   });
 }
 

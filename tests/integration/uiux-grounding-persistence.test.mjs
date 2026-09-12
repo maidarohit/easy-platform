@@ -10,8 +10,33 @@ const context = {
   business: { name: "Acme", industry: "Design", location: "Bengaluru", services: ["Interior design"], description: "Interior design in Bengaluru.", targetAudience: "Homeowners", brandStyle: "Modern" },
   branding: { palette: "Navy #001122", typography: "Inter", voice: "Clear and confident", direction: "Modern and clear" },
 };
+const nestoraContext = {
+  website: { published: true, url: "https://nestora.example/properties" },
+  business: {
+    name: "Nestora Realty",
+    industry: "Real Estate",
+    location: "Bengaluru",
+    services: ["residential property guidance"],
+    description: "Nestora Realty helps buyers and sellers navigate residential property decisions in Bengaluru.",
+    targetAudience: "home buyers and property investors",
+    brandStyle: "Premium",
+  },
+  branding: { palette: "Ivory and charcoal", typography: "Elegant serif with clean sans", voice: "Calm and trustworthy", direction: "Premium and minimal" },
+};
 const fields = ["accessibility", "designSystem", "desktopExperience", "microInteractions", "mobileExperience", "uiuxStrategy", "userFlow", "userPersonas", "wireframes"];
 const output = (text) => Object.fromEntries(fields.map((field) => [field, text]));
+const nestoraPayload = {
+  accessibility: "Make the website WCAG compliant with readable contrast and descriptive labels.",
+  designSystem: "Use a premium ivory and charcoal palette with elegant serif typography and a calm brand voice.",
+  desktopExperience: "Use comparison-friendly layouts and visible enquiry actions on larger screens.",
+  microInteractions: "Increase conversions by 25% with hover cues and instant response feedback.",
+  mobileExperience: "Prioritize thumb-friendly filters, quick calls, and short enquiry forms.",
+  uiuxStrategy: "Use a premium ivory and charcoal palette with elegant serif typography and a calm brand voice across the experience.",
+  userFlow: "Landing page to property categories to listing detail to enquiry form.",
+  userPersonas: "Busy home buyers comparing verified listings and investors evaluating fit.",
+  wireframes: "Homepage, listings page, property detail page, enquiry page.",
+  designRecommendations: "Use warm photography and premium spacing.",
+};
 
 test("UI/UX sanitizer treats research, metrics and compliance as unverified", () => {
   const result = sanitizeUiuxOutput(output("Usability testing found users preferred this. Conversion increased 35%. The website is WCAG compliant."), context);
@@ -68,6 +93,26 @@ test("shared UI/UX webhook validation revalidates the sanitized payload before p
   };
   assert.deepEqual(validateUiuxOutput(oversized), oversized);
   assert.equal(validateUiuxWebhookOutput({ result: JSON.stringify(oversized) }, context), null);
+});
+
+test("Nestora-shaped canonical UI/UX payload repairs emptied required fields and keeps only safe recommendations", () => {
+  const result = validateUiuxWebhookOutput({ output: nestoraPayload }, nestoraContext);
+  assert.ok(result);
+  assert.equal(
+    result.uiuxStrategy,
+    "Guide home buyers and property investors from discovery to a clear next step using verified business context for residential property guidance.",
+  );
+  assert.match(result.designSystem, /^Verified Branding system \u2014 palette: Ivory and charcoal; typography: Elegant serif with clean sans;/);
+  assert.equal(
+    result.accessibility,
+    "Use accessibility standards as implementation guidance and verify compliance through a formal audit.",
+  );
+  assert.equal(
+    result.microInteractions,
+    "Treat conversion and usability improvements as testable objectives, not measured results.",
+  );
+  assert.match(result.userPersonas, /^Hypothetical \/ Proposed personas:/);
+  assert.doesNotMatch(JSON.stringify(result), /25%|WCAG compliant/i);
 });
 
 test("customer proof stays factual only when owner-approved and formatting artifacts are removed", () => {
@@ -137,8 +182,7 @@ test("Easy Mode applies the shared UI/UX sanitizer before persistence", async ()
     source("app/lib/easy-mode-specialist-persistence.ts"),
   ]);
   assert.match(adapter, /validateUiuxWebhookOutput/);
-  assert.match(persistence, /sanitizeUiuxOutput\(output, uiuxContext\)/);
-  assert.match(persistence, /getModuleAdapter\("uiux"\)\?\.validateOutput\?\.\(sanitizeUiuxOutput\(output, uiuxContext\)\)/);
+  assert.match(persistence, /validateUiuxWebhookOutput\(output, uiuxContext\)/);
 });
 
 test("UI/UX persistence completes usage in the same transaction after output", async () => {
