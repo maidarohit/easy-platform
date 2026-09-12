@@ -26,13 +26,17 @@ import { loadOwnedMarketingContext } from "@/app/lib/marketing-business-context"
 import { validateMarketingWebhookOutput } from "@/app/lib/marketing-insight-safety";
 import { loadOwnedSalesContext } from "@/app/lib/sales-business-context";
 import { validateSalesWebhookOutput } from "@/app/lib/sales-insight-safety";
+import { validateSeoWebhookOutput } from "@/app/lib/seo-opportunity-safety";
 import { validateTextSpecialistWebhookOutput, type TextSpecialistModule } from "@/app/lib/text-specialist-execution";
+import { loadOwnedUiuxContext } from "@/app/lib/uiux-business-context";
+import { validateUiuxWebhookOutput } from "@/app/lib/uiux-insight-safety";
+import { validateAnalyticsWebhookOutput } from "@/app/lib/analytics-insight-safety";
 
 const MAX_ID_LENGTH = 128;
 const MAX_ERROR_LENGTH = 2_000;
 const CALLBACK_STATUS_SUCCESS = new Set(["completed", "success"]);
 const CALLBACK_STATUS_FAILURE = new Set(["failed"]);
-const OUTPUT_WRAPPER_KEYS = ["output", "result", "response", "data", "body", "json"] as const;
+const OUTPUT_WRAPPER_KEYS = ["output", "result", "response", "data", "body", "json", "text"] as const;
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type SpecialistProviderModule = Exclude<EasyModeModuleId, "ai-manager" | "branding-context">;
@@ -247,6 +251,15 @@ async function validateCallbackOutput(
     const salesContext = await loadOwnedSalesContext(context.userId, context.projectId);
     return salesContext ? validateSalesWebhookOutput(outputPayload, salesContext) : null;
   }
+  if (module === "seo") {
+    const seoContext = await loadOwnedMarketingContext(context.userId, context.projectId);
+    return seoContext ? validateSeoWebhookOutput(outputPayload, seoContext) : null;
+  }
+  if (module === "uiux") {
+    const uiuxContext = await loadOwnedUiuxContext(context.userId, context.projectId);
+    return uiuxContext ? validateUiuxWebhookOutput(outputPayload, uiuxContext) : null;
+  }
+  if (module === "analytics") return validateAnalyticsWebhookOutput(outputPayload);
   return validateTextSpecialistWebhookOutput(module as TextSpecialistModule, outputPayload);
 }
 

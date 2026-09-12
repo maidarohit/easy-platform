@@ -44,6 +44,17 @@ const completedMarketingOutput = {
   customerJourney: "Guide customers from discovery to an owner-approved next step.",
   contentMix: "Balance educational, proof, and service-focused content using verified inputs.",
 };
+const completedUiuxOutput = {
+  accessibility: "Use accessible labels and readable contrast throughout the primary journey.",
+  designSystem: "Use a consistent component system grounded in the verified brand direction.",
+  desktopExperience: "Keep the primary contact action visible in desktop layouts.",
+  microInteractions: "Use subtle feedback for taps, hovers, and form confirmation states.",
+  mobileExperience: "Prioritize fast mobile navigation and short forms.",
+  uiuxStrategy: "Guide customers from discovery to a clear next step using verified business context.",
+  userFlow: "Homepage to services to contact enquiry.",
+  userPersonas: "Hypothetical / Proposed personas:\nBusiness owners evaluating practical solutions.",
+  wireframes: "Home, Services, About, Contact.",
+};
 const completedSalesOutput = {
   executiveSummary: "A grounded sales summary.",
   targetCustomerProfile: "Business owners evaluating practical solutions.",
@@ -352,6 +363,107 @@ test("the same failed 7/7 run retries Branding once, does not regenerate complet
     "website-load",
     "website-execute",
     "website-persist",
+  ]);
+  assert.equal(claims.length, 0);
+});
+
+test("failed UI/UX phase retries once, persists once, and then advances to Sales", async () => {
+  const uiuxTask = claimFor("uiux", 5, 1);
+  const retriedUiuxTask = claimFor("uiux", 5, 2);
+  const salesTask = claimFor("sales", 6, 1);
+  const claims = [uiuxTask, retriedUiuxTask, salesTask];
+  const claimedModules = [];
+  const retriedAttempts = [];
+  const events = [];
+  let uiuxLoads = 0;
+  let uiuxExecutions = 0;
+  let uiuxPersists = 0;
+  let salesExecutions = 0;
+  let salesPersists = 0;
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => {
+      const claim = claims.shift() ?? null;
+      if (claim) claimedModules.push(claim.moduleId);
+      return claim;
+    },
+    loadTextInput: async (_context, module) => {
+      if (module === "uiux") {
+        uiuxLoads += 1;
+        if (uiuxLoads === 1) throw new Error("temporary uiux failure");
+        events.push("uiux-load");
+      } else {
+        assert.equal(module, "sales");
+        events.push("sales-load");
+      }
+      return { companyName: "Example" };
+    },
+    prepareRetry: async (input) => {
+      retriedAttempts.push(input.attemptId);
+      return { taskId: uiuxTask.taskId, retryReady: true };
+    },
+    startUsage: async ({ module }) => `${module === "uiux" ? "bbbbbbbb" : "cccccccc"}-5555-4555-8555-555555555555`,
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    executeText: async ({ module }) => {
+      if (module === "uiux") {
+        uiuxExecutions += 1;
+        events.push("uiux-execute");
+        return { output: completedUiuxOutput };
+      }
+      assert.equal(module, "sales");
+      salesExecutions += 1;
+      events.push("sales-execute");
+      return { output: completedSalesOutput };
+    },
+    persistText: async (_context, module, value) => {
+      if (module === "uiux") {
+        assert.deepEqual(value, completedUiuxOutput);
+        uiuxPersists += 1;
+        events.push("uiux-persist");
+        return { id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" };
+      }
+      assert.equal(module, "sales");
+      assert.deepEqual(value, completedSalesOutput);
+      salesPersists += 1;
+      events.push("sales-persist");
+      return { id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" };
+    },
+    markRunning: async () => {},
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failBeforeDispatch: async () => {},
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    failUsage: async () => assert.fail("unexpected usage finalization failure"),
+    progress: async () => ({ runStatus: salesPersists > 0 ? "Completed" : "In progress", tasks: [] }),
+  };
+
+  const first = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.deepEqual(retriedAttempts, [uiuxTask.attemptId]);
+  assert.equal(uiuxExecutions, 0);
+  assert.equal(uiuxPersists, 0);
+
+  const second = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "in_progress");
+  assert.equal(uiuxExecutions, 1);
+  assert.equal(uiuxPersists, 1);
+  assert.equal(salesExecutions, 0);
+
+  const third = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
+  assert.equal(third.state, "completed");
+  assert.deepEqual(claimedModules, ["uiux", "uiux", "sales"]);
+  assert.equal(uiuxExecutions, 1);
+  assert.equal(uiuxPersists, 1);
+  assert.equal(salesExecutions, 1);
+  assert.equal(salesPersists, 1);
+  assert.deepEqual(events, [
+    "uiux-load",
+    "uiux-execute",
+    "uiux-persist",
+    "sales-load",
+    "sales-execute",
+    "sales-persist",
   ]);
   assert.equal(claims.length, 0);
 });

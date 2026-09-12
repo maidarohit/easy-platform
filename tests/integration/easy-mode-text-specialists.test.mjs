@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createTrustedModuleExecutionContext, getModuleAdapter } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { validateMarketingWebhookOutput } from "../../app/lib/marketing-insight-safety.ts";
+import { validateSeoWebhookOutput } from "../../app/lib/seo-opportunity-safety.ts";
+import { validateUiuxWebhookOutput } from "../../app/lib/uiux-insight-safety.ts";
+import { validateAnalyticsWebhookOutput } from "../../app/lib/analytics-insight-safety.ts";
 import { executeTextSpecialistService, TEXT_SPECIALIST_MODULES } from "../../app/lib/text-specialist-execution.ts";
+import { validateBrandingWebhookOutput } from "../../app/lib/branding-execution.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const fields = {
@@ -18,6 +22,22 @@ const brandInput = { companyName: "Example", industry: "Services", targetAudienc
 const websiteInput = { ...brandInput, primaryLanguage: "English" };
 const salesInput = { companyName: "Example", industry: "Services", salesGoal: "Grow sales", targetAudience: "Owners", businessDescription: "Helpful services." };
 const analyticsInput = { companyName: "Example", industry: "Services", monthlyVisitors: "Unknown", monthlyLeads: "Unknown", monthlySales: "Unknown", monthlyRevenue: "Unknown", marketingBudget: "Unknown", businessGoal: "Grow", businessDescription: "Helpful services." };
+const canonicalBranding = {
+  brandName: "Example",
+  tagline: "Clear value for owners.",
+  story: "A grounded brand story.",
+  mission: "A grounded mission.",
+  vision: "A grounded vision.",
+  brandVoice: "Clear and confident.",
+  colorPalette: "Navy and white.",
+  typography: "Readable type.",
+  logoConcept: "Simple mark.",
+  marketingSuggestions: "Use verified value points.",
+  brandStyleGuide: "Keep branding consistent.",
+};
+const canonicalUiux = Object.fromEntries(fields.uiux.map((field) => [field, `uiux ${field} result`]));
+const canonicalWebsite = Object.fromEntries(fields.website.map((field) => [field, `website ${field} result`]));
+const canonicalAnalytics = Object.fromEntries(fields.analytics.map((field) => [field, `analytics ${field} result`]));
 const canonicalSales = Object.fromEntries(fields.sales.map((field) => [field, `sales ${field} result`]));
 const marketingValidationContext = {
   website: { published: true, url: "https://example.test" },
@@ -33,6 +53,24 @@ const marketingValidationContext = {
   channels: { meta: "not_connected", linkedin: "connected", whatsapp: "not_connected" },
   savedEnquiries: 2,
   unavailableMetrics: ["website visitors", "CTR", "campaign ROI", "CAC"],
+};
+const uiuxValidationContext = {
+  website: { published: true, url: "https://example.test" },
+  business: {
+    name: "Example",
+    industry: "Services",
+    location: "Bengaluru",
+    services: ["Helpful services"],
+    description: "Helpful services.",
+    targetAudience: "Owners",
+    brandStyle: "Clear",
+  },
+  branding: {
+    palette: "Navy #001122",
+    typography: "Inter",
+    voice: "Clear and confident",
+    direction: "Modern and clear",
+  },
 };
 const salesValidationContext = {
   project: { id: "project-1", goal: "Grow sales" },
@@ -92,15 +130,144 @@ test("all six text specialists normalize a single-item n8n envelope through stri
     const result = await executeTextSpecialistService({
       module: specialistModule, context, input,
       ...(specialistModule === "marketing" ? { marketingValidationContext } : {}),
+      ...(specialistModule === "seo" ? { seoValidationContext: marketingValidationContext } : {}),
+      ...(specialistModule === "uiux" ? { uiuxValidationContext } : {}),
       ...(specialistModule === "sales" ? { salesValidationContext } : {}),
       fetcher: async () => new Response(JSON.stringify([{ output }]), { status: 200 }),
       webhookConfig: { url: `https://example.invalid/${specialistModule}`, headers: {} },
     });
     const expected = specialistModule === "marketing"
       ? validateMarketingWebhookOutput({ output }, marketingValidationContext)
+      : specialistModule === "seo"
+        ? validateSeoWebhookOutput({ output }, marketingValidationContext)
+        : specialistModule === "uiux"
+          ? validateUiuxWebhookOutput({ output }, uiuxValidationContext)
+          : specialistModule === "analytics"
+            ? validateAnalyticsWebhookOutput({ output })
       : getModuleAdapter(specialistModule).validateOutput(output);
     assert.deepEqual(result.output, expected, specialistModule);
   }
+});
+
+test("normal UI/UX execution accepts direct, output-wrapped, result-string, and text-string payloads", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const responses = [
+    ["direct", canonicalUiux],
+    ["output", { output: canonicalUiux }],
+    ["result-string", { result: JSON.stringify(canonicalUiux) }],
+    ["text-string", { text: JSON.stringify(canonicalUiux) }],
+  ];
+  for (const [label, response] of responses) {
+    const result = await executeTextSpecialistService({
+      module: "uiux",
+      context,
+      input: brandInput,
+      uiuxValidationContext,
+      fetcher: async () => new Response(JSON.stringify(response), { status: 200 }),
+      webhookConfig: { url: "https://example.invalid/uiux", headers: {} },
+    });
+    assert.deepEqual(result.output, validateUiuxWebhookOutput(response, uiuxValidationContext), label);
+  }
+});
+
+test("Branding shared validation accepts stringified result and text payloads", () => {
+  assert.deepEqual(
+    validateBrandingWebhookOutput(brandInput, { result: JSON.stringify(canonicalBranding) }),
+    canonicalBranding,
+  );
+  assert.deepEqual(
+    validateBrandingWebhookOutput(brandInput, { text: JSON.stringify(canonicalBranding) }),
+    canonicalBranding,
+  );
+});
+
+test("Website execution accepts stringified result and text payloads without weakening the contract", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  for (const response of [{ result: JSON.stringify(canonicalWebsite) }, { text: JSON.stringify(canonicalWebsite) }]) {
+    const result = await executeTextSpecialistService({
+      module: "website",
+      context,
+      input: websiteInput,
+      fetcher: async () => new Response(JSON.stringify(response), { status: 200 }),
+      webhookConfig: { url: "https://example.invalid/website", headers: {} },
+    });
+    assert.deepEqual(result.output, canonicalWebsite);
+  }
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "website",
+    context,
+    input: websiteInput,
+    fetcher: async () => new Response(JSON.stringify({ result: JSON.stringify({ ...canonicalWebsite, unexpected: "no" }) }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/website", headers: {} },
+  }));
+});
+
+test("SEO execution normalizes standalone-style payloads and strips unsupported metrics", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const standaloneSeo = {
+    keywordResearch: "Guaranteed rankings. Useful customer questions.",
+    metaTitles: "Helpful title ideas.",
+    metaDescriptions: "Create concise descriptions for verified services.",
+    internalLinking: "Link service pages to contact pages.",
+    blogTopics: "Write answers to common customer questions.",
+    technicalSEO: "Do not use keyword density. Improve crawlable headings.",
+    seoStrategy: "Grow traffic 40% with search volume wins. Focus on verified service pages.",
+    growthRecommendations: "Increase traffic 25%. Improve local visibility with verified service language.",
+  };
+  const result = await executeTextSpecialistService({
+    module: "seo",
+    context,
+    input: brandInput,
+    seoValidationContext: marketingValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ output: standaloneSeo }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/seo", headers: {} },
+  });
+  assert.deepEqual(Object.keys(result.output).sort(), [...fields.seo].sort());
+  assert.match(result.output.keywords, /Useful customer questions/);
+  assert.doesNotMatch(JSON.stringify(result.output), /Guaranteed rankings|search volume|keyword density|40%|25%/i);
+});
+
+test("Analytics execution applies the same safety sanitization as standalone", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const payload = {
+    ...canonicalAnalytics,
+    trafficAnalysis: "Traffic will grow 40%. Visitor data is unavailable.",
+  };
+  const result = await executeTextSpecialistService({
+    module: "analytics",
+    context,
+    input: analyticsInput,
+    fetcher: async () => new Response(JSON.stringify({ result: JSON.stringify(payload) }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/analytics", headers: {} },
+  });
+  assert.equal(result.output.trafficAnalysis, "Visitor data is unavailable.");
+});
+
+test("new shared UI/UX, SEO, and Analytics validators still fail closed on malformed JSON or invalid schemas", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "uiux",
+    context,
+    input: brandInput,
+    uiuxValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ result: "{\"accessibility\":" }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/uiux", headers: {} },
+  }));
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "seo",
+    context,
+    input: brandInput,
+    seoValidationContext: marketingValidationContext,
+    fetcher: async () => new Response(JSON.stringify({ output: { seoStrategy: "Only one field" } }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/seo", headers: {} },
+  }));
+  await assert.rejects(() => executeTextSpecialistService({
+    module: "analytics",
+    context,
+    input: analyticsInput,
+    fetcher: async () => new Response(JSON.stringify({ output: { executiveSummary: "Only one field" } }), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/analytics", headers: {} },
+  }));
 });
 
 test("text specialists accept only the strict async acknowledgement contract", async () => {
@@ -322,10 +489,16 @@ test("executor enables only approved text specialists and preserves persistence/
   assert.match(adapter, /N8N_ANALYTICS_AI_WEBHOOK_URL/);
   assert.match(adapter, /validateMarketingWebhookOutput/);
   assert.match(adapter, /validateSalesWebhookOutput/);
+  assert.match(adapter, /validateSeoWebhookOutput/);
+  assert.match(adapter, /validateUiuxWebhookOutput/);
+  assert.match(adapter, /validateAnalyticsWebhookOutput/);
   assert.match(executor, /buildSpecialistCallbackUrl/);
   assert.match(adapter, /asyncDispatch/);
   assert.match(callbacks, /validateMarketingWebhookOutput/);
   assert.match(callbacks, /validateSalesWebhookOutput/);
+  assert.match(callbacks, /validateSeoWebhookOutput/);
+  assert.match(callbacks, /validateUiuxWebhookOutput/);
+  assert.match(callbacks, /validateAnalyticsWebhookOutput/);
   assert.match(marketingSafety, /validateMarketingWebhookOutput/);
   assert.match(salesSafety, /validateSalesWebhookOutput/);
   assert.doesNotMatch(executor, /publishWebsite|websitePublications|publishedWebsites/);

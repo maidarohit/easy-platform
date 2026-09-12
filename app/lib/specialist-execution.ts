@@ -90,7 +90,20 @@ function exactKeys(value: Record<string, unknown>, required: readonly string[], 
   return required.every((key) => Object.hasOwn(value, key)) && Object.keys(value).every((key) => allowed.has(key));
 }
 
-const WEBHOOK_WRAPPER_KEYS = new Set(["body", "data", "json", "output", "response", "result"]);
+const WEBHOOK_WRAPPER_KEYS = ["body", "data", "json", "output", "response", "result", "text"] as const;
+
+function parseJsonString(value: unknown) {
+  let current = value;
+  for (let depth = 0; depth < 4 && typeof current === "string"; depth += 1) {
+    if (Buffer.byteLength(current, "utf8") > MAX_RESPONSE_BYTES) return null;
+    try {
+      current = JSON.parse(current) as unknown;
+    } catch {
+      break;
+    }
+  }
+  return current;
+}
 
 export function validateWrappedWebhookOutput<T extends NormalizedModuleOutput>(
   value: unknown,
@@ -99,6 +112,8 @@ export function validateWrappedWebhookOutput<T extends NormalizedModuleOutput>(
   const found = new Map<string, T>();
   const visit = (candidate: unknown, depth: number) => {
     if (depth > 8) return;
+    candidate = parseJsonString(candidate);
+    if (candidate === null) return;
     const output = validate(candidate);
     if (output) found.set(JSON.stringify(output), output);
     if (Array.isArray(candidate)) {
@@ -107,7 +122,9 @@ export function validateWrappedWebhookOutput<T extends NormalizedModuleOutput>(
     }
     if (!candidate || typeof candidate !== "object") return;
     for (const [key, nested] of Object.entries(candidate)) {
-      if (WEBHOOK_WRAPPER_KEYS.has(key)) visit(nested, depth + 1);
+      if (WEBHOOK_WRAPPER_KEYS.includes(key as (typeof WEBHOOK_WRAPPER_KEYS)[number])) {
+        visit(nested, depth + 1);
+      }
     }
   };
   visit(value, 0);

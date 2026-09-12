@@ -68,6 +68,66 @@ test("specialist callback body validates bounded success and failure contracts",
     status: "failed",
     error: "Workflow failed safely.",
   });
+
+  assert.deepEqual(validateSpecialistCallbackBody({
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "marketing-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "marketing",
+    status: "success",
+    text: JSON.stringify({ marketingStrategy: "Strategy" }),
+  }, "33333333-3333-4333-8333-333333333333"), {
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "marketing-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "marketing",
+    status: "completed",
+    outputPayload: JSON.stringify({ marketingStrategy: "Strategy" }),
+  });
+
+  assert.deepEqual(validateSpecialistCallbackBody({
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "sales-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "sales",
+    status: "success",
+    text: JSON.stringify({ executiveSummary: "Summary" }),
+  }, "33333333-3333-4333-8333-333333333333"), {
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "sales-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "sales",
+    status: "completed",
+    outputPayload: JSON.stringify({ executiveSummary: "Summary" }),
+  });
+
+  assert.deepEqual(validateSpecialistCallbackBody({
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "uiux-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "uiux",
+    status: "success",
+    text: JSON.stringify({ accessibility: "Accessible controls" }),
+  }, "33333333-3333-4333-8333-333333333333"), {
+    attemptId: "33333333-3333-4333-8333-333333333333",
+    executionKey: "uiux-1",
+    runId: "11111111-1111-4111-8111-111111111111",
+    taskId: "22222222-2222-4222-8222-222222222222",
+    projectId: "project-1",
+    module: "uiux",
+    status: "completed",
+    outputPayload: JSON.stringify({ accessibility: "Accessible controls" }),
+  });
 });
 
 test("specialist callback rejects malformed or mismatched correlation", () => {
@@ -170,4 +230,8 @@ test("shared specialist callback route and sync logic retain auth, idempotency, 
   assert.match(callbackLib, /latestAttempt\?\.id === attempt\.id/);
   assert.match(callbackLib, /inArray\(easyModeTaskAttempts\.status, \["dispatching", "running", "failed_uncertain"\]\)/);
   assert.match(callbackLib, /sql`\$\{easyModeTasks\.projectOutputId\} is null`/);
+  assert.match(callbackLib, /"text"/);
+  assert.match(callbackLib, /validateSeoWebhookOutput/);
+  assert.match(callbackLib, /validateUiuxWebhookOutput/);
+  assert.match(callbackLib, /validateAnalyticsWebhookOutput/);
 });

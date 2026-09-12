@@ -15,6 +15,7 @@ import {
   type SpecialistAsyncDispatchContext,
   type SpecialistExecutionResult,
   type SyncSpecialistExecutionResult,
+  validateWrappedWebhookOutput,
 } from "@/app/lib/specialist-execution";
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
@@ -149,26 +150,25 @@ function finalizeSanitizedBrandingOutput(
 
 export function validateBrandingWebhookOutput(input: ModuleExecutionInput, value: unknown) {
   const validator = getModuleAdapter("branding")?.validateOutput;
-  const responseItem = Array.isArray(value) && value.length === 1 ? value[0] : value;
-  const responseOutput = responseItem !== null && typeof responseItem === "object" && !Array.isArray(responseItem) &&
-      Object.hasOwn(responseItem, "output")
-    ? (responseItem as Record<string, unknown>).output
-    : responseItem;
-  const normalizedCandidate = responseOutput !== null && typeof responseOutput === "object" &&
-      !Array.isArray(responseOutput) && !Object.hasOwn(responseOutput, "brandStyleGuide") &&
-      typeof (responseOutput as Record<string, unknown>).brandVoice === "string" &&
-      typeof (responseOutput as Record<string, unknown>).colorPalette === "string" &&
-      typeof (responseOutput as Record<string, unknown>).typography === "string"
-    ? {
-        ...(responseOutput as Record<string, unknown>),
-        brandStyleGuide: [
-          `Brand voice: ${(responseOutput as Record<string, unknown>).brandVoice}`,
-          `Color palette: ${(responseOutput as Record<string, unknown>).colorPalette}`,
-          `Typography: ${(responseOutput as Record<string, unknown>).typography}`,
-        ].join("\n"),
-      }
-    : responseOutput;
-  const validatedOutput = validator?.(responseItem) ?? validator?.(normalizedCandidate);
+  const validatedOutput = validator
+    ? validateWrappedWebhookOutput(value, (candidate) => {
+      const normalizedCandidate = candidate !== null && typeof candidate === "object" &&
+          !Array.isArray(candidate) && !Object.hasOwn(candidate, "brandStyleGuide") &&
+          typeof (candidate as Record<string, unknown>).brandVoice === "string" &&
+          typeof (candidate as Record<string, unknown>).colorPalette === "string" &&
+          typeof (candidate as Record<string, unknown>).typography === "string"
+        ? {
+            ...(candidate as Record<string, unknown>),
+            brandStyleGuide: [
+              `Brand voice: ${(candidate as Record<string, unknown>).brandVoice}`,
+              `Color palette: ${(candidate as Record<string, unknown>).colorPalette}`,
+              `Typography: ${(candidate as Record<string, unknown>).typography}`,
+            ].join("\n"),
+          }
+        : candidate;
+      return validator(candidate) ?? validator(normalizedCandidate);
+    })
+    : null;
   if (!validatedOutput) return null;
   const sanitizedOutput = sanitizeBrandingOutput(validatedOutput, input);
   if (!sanitizedOutput) return null;

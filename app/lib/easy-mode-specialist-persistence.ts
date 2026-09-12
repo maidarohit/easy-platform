@@ -142,7 +142,7 @@ export async function persistTextSpecialistOutputAndMemoryInTransaction(
   if (module === "uiux") {
     const uiuxContext = await loadOwnedUiuxContext(context.userId, context.projectId);
     if (!uiuxContext) throw new Error("UI/UX context not found.");
-    output = sanitizeUiuxOutput(output, uiuxContext);
+    output = getModuleAdapter("uiux")?.validateOutput?.(sanitizeUiuxOutput(output, uiuxContext));
     if (!output) throw new Error("Invalid UI/UX output.");
   }
   const [project] = await transaction.select({ id: projects.id }).from(projects).where(and(

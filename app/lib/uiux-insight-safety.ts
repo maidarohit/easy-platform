@@ -1,5 +1,6 @@
 import type { UiuxBusinessContext } from "@/app/lib/uiux-business-context";
-import type { NormalizedModuleOutput } from "@/app/lib/easy-mode-execution-contracts";
+import { validateUiuxOutput, type NormalizedModuleOutput } from "@/app/lib/easy-mode-execution-contracts";
+import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 
 const RESEARCH = /\b(?:research (?:shows?|found)|users? (?:said|reported|preferred)|we (?:interviewed|surveyed|tested)|usability (?:tests?|testing) (?:showed|found|proved)|heatmaps?|session recordings?)\b/i;
 const METRIC = /\b(?:conversion|engagement|bounce rate|task completion|time on task|success rate|click[- ]through|retention)\b[^.!?\n]{0,80}(?:\d|%|increase|improve|lift|reduce)/i;
@@ -10,13 +11,14 @@ const PROPOSED = /^\s*(?:proposed|recommended|consider|optional|hypothetical|sug
 const BRAND_SYSTEM = /\b(?:colou?r(?:s| scheme)?|palette|fonts?|typeface|typography|brand voice|tone of voice|visual direction|brand direction)\b/i;
 const BRANDING_CONTENT = /^\s*(?:branding|brand(?:ing)? system)\b/i;
 const UI_COLOUR_PROPOSAL = /\b(?:ui|interface|interaction|state|surface|background|accent|semantic|feedback|success|warning|error|info|neutral|border|hover|focus|disabled)\b[^.!?\n]{0,100}\b(?:colou?r|palette|#[\da-f]{3,8}\b)/i;
-const UI_COLOUR_LABEL = /^Proposed UI extension colors\s*[—–-]\s*/i;
+const DASH_CLASS = "[\\u2014\\u2013-]";
+const UI_COLOUR_LABEL = new RegExp(`^Proposed UI extension colors\\s*${DASH_CLASS}\\s*`, "i");
 
 function cleanFormatting(text: string) {
   return text
-    .replace(/^\s*(?:(?:\d+[.)]|[-*•])\s*)+/, "")
-    .replace(/^(?:Proposed recommendation\s*[—–-]\s*)+/i, "Proposed recommendation — ")
-    .replace(/^(Proposed recommendation\s*—)\s*(?:(?:\d+[.)]|[-*•])\s*)+/i, "$1 ")
+    .replace(/^\s*(?:(?:\d+[.)]|[-*\u2022])\s*)+/, "")
+    .replace(new RegExp(`^(?:Proposed recommendation\\s*${DASH_CLASS}\\s*)+`, "i"), "Proposed recommendation \u2014 ")
+    .replace(new RegExp(`^(Proposed recommendation\\s*\\u2014)\\s*(?:(?:\\d+[.)]|[-*\\u2022])\\s*)+`, "i"), "$1 ")
     .trim();
 }
 
@@ -37,7 +39,7 @@ function sanitizeSentence(sentence: string, context: UiuxBusinessContext, corpus
   }
   const capabilities = [...sentence.matchAll(UNVERIFIED_CAPABILITY)].map((match) => match[0].toLowerCase());
   if (capabilities.some((capability) => !corpus.includes(capability)) && !PROPOSED.test(sentence)) {
-    return `Proposed recommendation — ${sentence}`;
+    return `Proposed recommendation \u2014 ${sentence}`;
   }
   return sentence;
 }
@@ -56,14 +58,24 @@ export function sanitizeUiuxOutput(value: unknown, context: UiuxBusinessContext)
     if (key === "colourScheme" && context.branding) text = context.branding.palette;
     if (key === "userPersonas" && !/^Hypothetical \/ Proposed personas:/i.test(text)) text = `Hypothetical / Proposed personas:\n${text}`;
     if (key === "designSystem" && context.branding) {
-      const grounding = `Verified Branding system — palette: ${context.branding.palette}; typography: ${context.branding.typography}; brand voice: ${context.branding.voice}; visual direction: ${context.branding.direction}.`;
+      const grounding = `Verified Branding system \u2014 palette: ${context.branding.palette}; typography: ${context.branding.typography}; brand voice: ${context.branding.voice}; visual direction: ${context.branding.direction}.`;
       const extension = [...new Set(proposedUiColours.map((sentence) => sentence.replace(UI_COLOUR_LABEL, "")))]
-        .map((sentence) => `Proposed UI extension colors — ${sentence}`);
+        .map((sentence) => `Proposed UI extension colors \u2014 ${sentence}`);
       text = [grounding, ...extension, text].filter(Boolean).join("\n");
     }
     return [key, text];
   }));
   return clean as NormalizedModuleOutput;
+}
+
+export function validateUiuxWebhookOutput(value: unknown, context: UiuxBusinessContext) {
+  return validateWrappedWebhookOutput(value, (candidate) => {
+    const validated = validateUiuxOutput(candidate);
+    if (!validated) return null;
+    const sanitized = sanitizeUiuxOutput(validated, context);
+    if (!sanitized) return null;
+    return validateUiuxOutput(sanitized);
+  });
 }
 
 export function readStoredUiuxOutput(value: unknown, context: UiuxBusinessContext, validate: (value: unknown) => NormalizedModuleOutput | null) {

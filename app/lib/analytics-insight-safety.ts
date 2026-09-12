@@ -1,5 +1,8 @@
+import { validateAnalyticsOutput } from "@/app/lib/easy-mode-execution-contracts";
+import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
+
 const UNSUPPORTED_MEASUREMENT = /\b(visitor|traffic\b.*\bgrow|traffic growth|conversion improvement|revenue growth|campaign roi|marketing roi|customer acquisition cost|cac|projection|forecast)\b/i;
-const QUANTIFIED_CLAIM = /(?:\d|%|₹|\binr\b|\brs\.?\b)/i;
+const QUANTIFIED_CLAIM = /(?:\d|%|\u20b9|\binr\b|\brs\.?\b)/i;
 
 function sanitizeText(value: string) {
   const kept = value.split(/(?<=[.!?])\s+/).filter((sentence) =>
@@ -18,4 +21,14 @@ export function sanitizeAnalyticsInsights(value: unknown): Record<string, unknow
     return item;
   };
   return sanitize(value) as Record<string, unknown>;
+}
+
+export function validateAnalyticsWebhookOutput(value: unknown) {
+  return validateWrappedWebhookOutput(value, (candidate) => {
+    const validated = validateAnalyticsOutput(candidate);
+    if (!validated) return null;
+    const sanitized = sanitizeAnalyticsInsights(validated);
+    if (!sanitized) return null;
+    return validateAnalyticsOutput(sanitized);
+  });
 }

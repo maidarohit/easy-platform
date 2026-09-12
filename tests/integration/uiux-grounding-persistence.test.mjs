@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { readStoredUiuxOutput, sanitizeUiuxOutput } from "../../app/lib/uiux-insight-safety.ts";
+import { readStoredUiuxOutput, sanitizeUiuxOutput, validateUiuxWebhookOutput } from "../../app/lib/uiux-insight-safety.ts";
 import { validateUiuxOutput } from "../../app/lib/easy-mode-execution-contracts.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -27,9 +27,9 @@ test("saved UI/UX output is validated and sanitized without generation", () => {
 test("personas are hypothetical and unsupported capabilities remain proposed", () => {
   const result = sanitizeUiuxOutput(output("Add a dashboard, configurator, e-sign, calendar, automation, awards, testimonials, office locations and financing."), context);
   assert.match(result.userPersonas, /^Hypothetical \/ Proposed personas:/);
-  assert.match(result.uiuxStrategy, /Proposed recommendation —/);
+  assert.match(result.uiuxStrategy, /Proposed recommendation \u2014/);
   assert.doesNotMatch(result.uiuxStrategy, /validate with the business owner/i);
-  assert.match(result.designSystem, /Verified Branding system — palette: Navy #001122; typography: Inter; brand voice: Clear and confident; visual direction: Modern and clear/);
+  assert.match(result.designSystem, /Verified Branding system \u2014 palette: Navy #001122; typography: Inter; brand voice: Clear and confident; visual direction: Modern and clear/);
 });
 
 test("verified Branding replaces conflicting legacy palettes, fonts and direction", () => {
@@ -41,31 +41,40 @@ test("verified Branding replaces conflicting legacy palettes, fonts and directio
   assert.match(result.designSystem, /Inter/);
   assert.match(result.designSystem, /Clear and confident/);
   assert.equal(result.colourScheme, "Navy #001122");
-  assert.match(result.uiuxStrategy, /Proposed recommendation —.*client portal and 3D viewer/i);
+  assert.match(result.uiuxStrategy, /Proposed recommendation \u2014.*client portal and 3D viewer/i);
 });
 
 test("Design System keeps verified Branding distinct from proposed UI colors without duplication", () => {
   const proposed = { ...output("Keep content concise."), designSystem: "Branding\nBranding: Navy #001122 and Inter.\nTypography: Roboto. UI accent color: Coral #ff7755." };
   const result = sanitizeUiuxOutput(proposed, context);
   assert.equal(result.designSystem.match(/Verified Branding system/g)?.length, 1);
-  assert.match(result.designSystem, /^Verified Branding system — palette: Navy #001122; typography: Inter;/);
-  assert.match(result.designSystem, /Proposed UI extension colors — UI accent color: Coral #ff7755\./);
+  assert.match(result.designSystem, /^Verified Branding system \u2014 palette: Navy #001122; typography: Inter;/);
+  assert.match(result.designSystem, /Proposed UI extension colors \u2014 UI accent color: Coral #ff7755\./);
   assert.doesNotMatch(result.designSystem, /Roboto|^Branding$/m);
   const restored = readStoredUiuxOutput(JSON.stringify(result), context, validateUiuxOutput);
   assert.equal(restored.designSystem.match(/Proposed UI extension colors/g)?.length, 1);
 });
 
 test("presentation cleanup removes standalone numbering and repeated recommendation labels", () => {
-  const result = sanitizeUiuxOutput(output("1. Add a dashboard.\n2) Proposed recommendation — Proposed recommendation — - Add testimonials."), context);
-  assert.equal(result.uiuxStrategy, "Proposed recommendation — Add a dashboard.\nProposed recommendation — Add testimonials.");
-  assert.doesNotMatch(result.uiuxStrategy, /^(?:\d+[.)]|[-*•])|Proposed recommendation — Proposed recommendation/m);
+  const result = sanitizeUiuxOutput(output("1. Add a dashboard.\n2) Proposed recommendation \u2014 Proposed recommendation \u2014 - Add testimonials."), context);
+  assert.equal(result.uiuxStrategy, "Proposed recommendation \u2014 Add a dashboard.\nProposed recommendation \u2014 Add testimonials.");
+  assert.doesNotMatch(result.uiuxStrategy, /^(?:\d+[.)]|[-*\u2022])|Proposed recommendation \u2014 Proposed recommendation/m);
+});
+
+test("shared UI/UX webhook validation revalidates the sanitized payload before persistence", () => {
+  const oversized = {
+    ...output("Keep the journey simple."),
+    designSystem: "x".repeat(19_980),
+  };
+  assert.deepEqual(validateUiuxOutput(oversized), oversized);
+  assert.equal(validateUiuxWebhookOutput({ result: JSON.stringify(oversized) }, context), null);
 });
 
 test("customer proof stays factual only when owner-approved and formatting artifacts are removed", () => {
-  const unverified = sanitizeUiuxOutput(output("- Awards, testimonials and case studies.\nProposed recommendation — - Add referrals."), context);
-  assert.match(unverified.uiuxStrategy, /Proposed recommendation — Awards, testimonials and case studies\./);
-  assert.match(unverified.uiuxStrategy, /Proposed recommendation — Add referrals\./);
-  assert.doesNotMatch(unverified.uiuxStrategy, /—\s*-/);
+  const unverified = sanitizeUiuxOutput(output("- Awards, testimonials and case studies.\nProposed recommendation \u2014 - Add referrals."), context);
+  assert.match(unverified.uiuxStrategy, /Proposed recommendation \u2014 Awards, testimonials and case studies\./);
+  assert.match(unverified.uiuxStrategy, /Proposed recommendation \u2014 Add referrals\./);
+  assert.doesNotMatch(unverified.uiuxStrategy, /\u2014\s*-/);
 
   const approved = sanitizeUiuxOutput(output("Show testimonials and case studies."), {
     ...context,
@@ -123,8 +132,13 @@ test("authenticated UI/UX GET hydrates latest valid owned output without usage",
 });
 
 test("Easy Mode applies the shared UI/UX sanitizer before persistence", async () => {
-  const executor = await source("app/lib/easy-mode-executor.ts");
-  assert.match(executor, /module === "uiux"[\s\S]*sanitizeUiuxOutput\(output, uiuxContext\)[\s\S]*insertProjectOutput/);
+  const [adapter, persistence] = await Promise.all([
+    source("app/lib/text-specialist-execution.ts"),
+    source("app/lib/easy-mode-specialist-persistence.ts"),
+  ]);
+  assert.match(adapter, /validateUiuxWebhookOutput/);
+  assert.match(persistence, /sanitizeUiuxOutput\(output, uiuxContext\)/);
+  assert.match(persistence, /getModuleAdapter\("uiux"\)\?\.validateOutput\?\.\(sanitizeUiuxOutput\(output, uiuxContext\)\)/);
 });
 
 test("UI/UX persistence completes usage in the same transaction after output", async () => {
