@@ -7,6 +7,22 @@ import { evaluateFailedTaskRetryEligibility } from "../../app/lib/easy-mode-task
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const runId = "11111111-1111-4111-8111-111111111111";
+const completedBrandingOutput = {
+  brandName: "Example",
+  tagline: "Example helps owners move forward with clarity.",
+  story: "Example brings a professional brand direction to services, with a clear focus on owners.",
+  mission: "Present Example with clear messaging that reflects its services offering and customer focus.",
+  vision: "Build a consistent professional brand presence that helps owners understand the value example provides.",
+  brandVoice: "Clear, professional, and focused on the verified needs of owners.",
+  colorPalette: "Use a simple, accessible color system that supports a professional services brand presentation.",
+  typography: "Use readable typography with clear hierarchy for headings, body copy, and calls to action.",
+  logoConcept: "Create a simple logo direction for Example that reflects its services focus and professional style.",
+  marketingSuggestions: "Focus marketing on the verified services, customer needs, and practical outcomes Example provides for owners.",
+  brandStyleGuide: "Use a professional visual direction, clear messaging for owners, and accessible presentation across customer-facing materials.",
+};
+const completedWebsiteOutput = {
+  websiteOverview: "A customer-ready website overview.",
+};
 const baseDigit = (taskNumber) => String(taskNumber + 2);
 
 function claimFor(moduleId, taskNumber, attemptNumber = 1) {
@@ -205,18 +221,25 @@ test("first-phase retryable failure re-queues phase 1 and leaves later phases un
   assert.equal(claims[0].moduleId, "branding");
 });
 
-test("middle-phase retry reruns only the failed phase and later work advances on the following request", async () => {
+test("the same failed 7/7 run retries Branding once, does not regenerate completed Branding, and then advances to Website", async () => {
   const brandingTask = claimFor("branding", 1, 1);
   const retriedBrandingTask = claimFor("branding", 1, 2);
   const websiteTask = claimFor("website", 2, 1);
   const claims = [brandingTask, retriedBrandingTask, websiteTask];
+  const claimedModules = [];
   const events = [];
   const retriedAttempts = [];
   let brandingLoads = 0;
+  let brandingExecutions = 0;
+  let websiteExecutions = 0;
   let websiteCompleted = false;
   const dependencies = {
     enabled: () => true,
-    claim: async () => claims.shift() ?? null,
+    claim: async () => {
+      const claim = claims.shift() ?? null;
+      if (claim) claimedModules.push(claim.moduleId);
+      return claim;
+    },
     loadBrandingInput: async () => {
       brandingLoads += 1;
       if (brandingLoads === 1) throw new Error("temporary branding failure");
@@ -237,8 +260,9 @@ test("middle-phase retry reruns only the failed phase and later work advances on
     bindUsage: async () => {},
     markDispatching: async () => {},
     executeBranding: async () => {
+      brandingExecutions += 1;
       events.push("branding-execute");
-      return { output: { brandName: "Example" } };
+      return { output: completedBrandingOutput };
     },
     persistBranding: async () => {
       events.push("branding-persist");
@@ -251,8 +275,9 @@ test("middle-phase retry reruns only the failed phase and later work advances on
     },
     executeText: async ({ module }) => {
       assert.equal(module, "website");
+      websiteExecutions += 1;
       events.push("website-execute");
-      return { output: { websiteOverview: "Ready" } };
+      return { output: completedWebsiteOutput };
     },
     persistText: async (_context, module) => {
       assert.equal(module, "website");
@@ -282,6 +307,9 @@ test("middle-phase retry reruns only the failed phase and later work advances on
 
   const third = await executeEasyModeRun({ runId, userId: "firebase-user" }, dependencies);
   assert.equal(third.state, "completed");
+  assert.deepEqual(claimedModules, ["branding", "branding", "website"]);
+  assert.equal(brandingExecutions, 1);
+  assert.equal(websiteExecutions, 1);
   assert.deepEqual(events, [
     "branding-load",
     "branding-execute",

@@ -19,6 +19,19 @@ import {
 
 export const BRANDING_AI_WORKFLOW = "branding-api";
 const PROVIDER_TIMEOUT_MS = 120_000;
+const BRANDING_REQUIRED_FIELDS = [
+  "brandName",
+  "tagline",
+  "story",
+  "mission",
+  "vision",
+  "brandVoice",
+  "colorPalette",
+  "typography",
+  "logoConcept",
+  "marketingSuggestions",
+  "brandStyleGuide",
+] as const;
 
 export type BrandingFailurePoint = "before_dispatch" | "uncertain";
 export type BrandingSafeErrorCode = "PROVIDER_UNAVAILABLE" | "OUTPUT_INVALID" | "DELIVERY_UNCERTAIN";
@@ -54,6 +67,9 @@ type BrandingWebhookConfig = Readonly<{
   headers: Readonly<Record<string, string>>;
 }>;
 
+type BrandingField = (typeof BRANDING_REQUIRED_FIELDS)[number];
+type BrandingOutput = Readonly<Record<BrandingField, string>>;
+
 export type BrandingExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
   input?: unknown;
@@ -85,6 +101,52 @@ export async function loadCanonicalBrandingInput(
   return validated;
 }
 
+function brandingInputText(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function buildSafeBrandingFallbacks(input: ModuleExecutionInput): BrandingOutput {
+  const companyName = brandingInputText(input.companyName, "The business");
+  const industry = brandingInputText(input.industry, "business services");
+  const targetAudience = brandingInputText(input.targetAudience, "customers");
+  const brandStyle = brandingInputText(input.brandStyle, "professional");
+  const companyNameLower = companyName.toLowerCase();
+  const industryLower = industry.toLowerCase();
+  const targetAudienceLower = targetAudience.toLowerCase();
+  const brandStyleLower = brandStyle.toLowerCase();
+
+  return Object.freeze({
+    brandName: companyName,
+    tagline: `${companyName} helps ${targetAudienceLower} move forward with clarity.`,
+    story: `${companyName} brings a ${brandStyleLower} brand direction to ${industryLower}, with a clear focus on ${targetAudienceLower}.`,
+    mission: `Present ${companyName} with clear messaging that reflects its ${industryLower} offering and customer focus.`,
+    vision: `Build a consistent ${brandStyleLower} brand presence that helps ${targetAudienceLower} understand the value ${companyNameLower} provides.`,
+    brandVoice: `Clear, ${brandStyleLower}, and focused on the verified needs of ${targetAudienceLower}.`,
+    colorPalette: `Use a simple, accessible color system that supports a ${brandStyleLower} ${industryLower} brand presentation.`,
+    typography: "Use readable typography with clear hierarchy for headings, body copy, and calls to action.",
+    logoConcept: `Create a simple logo direction for ${companyName} that reflects its ${industryLower} focus and ${brandStyleLower} style.`,
+    marketingSuggestions: `Focus marketing on the verified services, customer needs, and practical outcomes ${companyName} provides for ${targetAudienceLower}.`,
+    brandStyleGuide: `Use a ${brandStyleLower} visual direction, clear messaging for ${targetAudienceLower}, and accessible presentation across customer-facing materials.`,
+  });
+}
+
+function finalizeSanitizedBrandingOutput(
+  input: ModuleExecutionInput,
+  value: Record<string, string>,
+): BrandingOutput | null {
+  const validator = getModuleAdapter("branding")?.validateOutput;
+  if (!validator) return null;
+  const fallbacks = buildSafeBrandingFallbacks(input);
+  const completed = Object.fromEntries(
+    BRANDING_REQUIRED_FIELDS.map((field) => {
+      const current = typeof value[field] === "string" ? value[field].trim() : "";
+      return [field, current || fallbacks[field]];
+    }),
+  );
+  const validated = validator(completed);
+  return validated ? (validated as BrandingOutput) : null;
+}
+
 export function validateBrandingWebhookOutput(input: ModuleExecutionInput, value: unknown) {
   const validator = getModuleAdapter("branding")?.validateOutput;
   const responseItem = Array.isArray(value) && value.length === 1 ? value[0] : value;
@@ -107,7 +169,10 @@ export function validateBrandingWebhookOutput(input: ModuleExecutionInput, value
       }
     : responseOutput;
   const validatedOutput = validator?.(responseItem) ?? validator?.(normalizedCandidate);
-  return validatedOutput ? sanitizeBrandingOutput(validatedOutput, input) : null;
+  if (!validatedOutput) return null;
+  const sanitizedOutput = sanitizeBrandingOutput(validatedOutput, input);
+  if (!sanitizedOutput) return null;
+  return finalizeSanitizedBrandingOutput(input, sanitizedOutput as Record<string, string>);
 }
 
 export function executeBrandingService(

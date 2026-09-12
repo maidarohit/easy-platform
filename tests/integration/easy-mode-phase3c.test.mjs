@@ -47,6 +47,10 @@ const brandingOutput = {
 const productionBrandingOutput = Object.fromEntries(
   Object.entries(brandingOutput).filter(([key]) => key !== "brandStyleGuide"),
 );
+const brandingOutputWithUnsafeMarketingSuggestions = {
+  ...productionBrandingOutput,
+  marketingSuggestions: "Email hello@example.com or call +91 90000 00000.",
+};
 const progress = { runStatus: "In progress", tasks: [{ label: "Brand identity", status: "Waiting" }] };
 
 function claim(moduleId) {
@@ -261,7 +265,26 @@ test("shared branding service accepts the successful single-item n8n response", 
   assert.equal(result.providerExecutionId, "branding-execution-123");
 });
 
-test("successful n8n envelope persists, finalizes usage, records execution, and completes", async () => {
+test("shared branding service restores sanitized-empty required fields with deterministic safe fallback copy", async () => {
+  const result = await executeBrandingService({
+    context,
+    input: brandingInput,
+    fetcher: async () => new Response(JSON.stringify([{
+      output: brandingOutputWithUnsafeMarketingSuggestions,
+    }]), {
+      status: 200,
+      headers: { "x-easy-n8n-execution-id": "branding-execution-123" },
+    }),
+    webhookConfig: { url: "https://example.invalid/branding", headers: {} },
+  });
+  assert.equal(
+    result.output.marketingSuggestions,
+    "Focus marketing on the verified services, customer needs, and practical outcomes Buzypeezy provides for small business owners.",
+  );
+  assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput(result.output));
+});
+
+test("successful n8n envelope persists, finalizes usage, records execution, and completes after required-field fallback repair", async () => {
   const fixture = dependencies();
   const result = await executeNextEasyModeTask(
     { runId: ids.run, userId: "firebase-user" },
@@ -270,7 +293,7 @@ test("successful n8n envelope persists, finalizes usage, records execution, and 
       executeBranding: (options) => executeBrandingService({
         ...options,
         fetcher: async () => new Response(JSON.stringify([{
-          output: productionBrandingOutput,
+          output: brandingOutputWithUnsafeMarketingSuggestions,
         }]), {
           status: 200,
           headers: { "x-easy-n8n-execution-id": "branding-execution-123" },
@@ -306,12 +329,12 @@ test("route, persistence, UI, and AI Manager race contracts remain controlled", 
   assert.match(attempts, /resolveEasyModePlan\(run\.goalId\)/);
   assert.match(attempts, /allowedModuleIds\.includes/);
   assert.match(executor, /projectOutputs/);
-  assert.match(executor, /projectMemory/);
-  assert.match(executor, /db\.transaction/);
+  assert.match(executor, /persistBrandingOutputAndMemory/);
   assert.doesNotMatch(executor, /publishWebsite|websitePublications/);
   assert.match(brandingRoute, /executeBrandingService/);
   assert.match(brandingRoute, /verifyFirebaseIdToken/);
-  assert.match(brandingRoute, /startAiUsage/);
+  assert.match(brandingRoute, /claimIdempotentAiUsage/);
+  assert.match(brandingRoute, /persistCompletedBrandingGeneration/);
   assert.doesNotMatch(page, />Start Building</);
   assert.match(page, /execute-next/);
   assert.match(page, /window\.setInterval/);
