@@ -6,7 +6,9 @@ import { validateAiManagerRequestBody } from "../../app/api/ai-manager/route.ts"
 import {
   POST as handleAiManagerCallback,
   validateAiManagerCallbackBody,
+  validateAiManagerJobsCallbackBody,
 } from "../../app/api/ai-manager/jobs/[jobId]/route.ts";
+import { validateBrandingWebhookOutput } from "../../app/lib/branding-execution.ts";
 import { validateSpecialistCallbackBody } from "../../app/lib/easy-mode-specialist-callbacks.ts";
 import {
   MalformedJsonBodyError,
@@ -115,6 +117,35 @@ const validStrategy = Object.fromEntries(
   ["overview", "branding", "website", "marketing", "seo", "uiux", "sales", "analytics"]
     .map((key) => [key, `${key} strategy`]),
 );
+const brandingInput = {
+  companyName: "Example Company",
+  industry: "Technology",
+  targetAudience: "Founders",
+  brandStyle: "Clear",
+  brandDescription: "A bounded business description.",
+};
+const canonicalBranding = {
+  brandName: "Example Company",
+  tagline: "Clear value for founders.",
+  story: "A grounded brand story.",
+  mission: "A grounded mission.",
+  vision: "A grounded vision.",
+  brandVoice: "Clear and confident.",
+  colorPalette: "Navy and white.",
+  typography: "Readable type.",
+  logoConcept: "Simple mark.",
+  marketingSuggestions: "Use verified value points.",
+  brandStyleGuide: "Keep branding consistent.",
+};
+const brandingCallbackMeta = {
+  attemptId: "33333333-3333-4333-8333-333333333333",
+  executionKey: "branding-1",
+  runId: "11111111-1111-4111-8111-111111111111",
+  taskId: "22222222-2222-4222-8222-222222222222",
+  projectId: "project-1",
+  module: "branding",
+  status: "completed",
+};
 
 test("AI Manager callback validates bounded success and failure shapes", () => {
   assert.ok(validateAiManagerCallbackBody({
@@ -168,6 +199,26 @@ test("AI Manager callback validates bounded success and failure shapes", () => {
     status: "completed",
     output: { overview: "Only one section" },
   }, "job-1"), null);
+});
+
+test("AI Manager jobs callback preserves Branding specialist payloads for the shared validator", () => {
+  const cases = [
+    { output: canonicalBranding },
+    { result: JSON.stringify(canonicalBranding) },
+    { ...canonicalBranding },
+  ];
+
+  for (const payload of cases) {
+    const validated = validateAiManagerJobsCallbackBody({
+      ...brandingCallbackMeta,
+      ...payload,
+    }, brandingCallbackMeta.attemptId);
+    assert.equal(validated?.kind, "branding-specialist");
+    assert.deepEqual(
+      validateBrandingWebhookOutput(brandingInput, validated?.body.outputPayload),
+      canonicalBranding,
+    );
+  }
 });
 
 test("AI Manager callback rejects oversized bodies and invalid auth", async () => {

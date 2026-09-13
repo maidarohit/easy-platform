@@ -226,7 +226,15 @@ test("Nestora-shaped canonical UI/UX execution survives sanitize plus post-sanit
   assert.doesNotMatch(JSON.stringify(result.output), /25%|WCAG compliant/i);
 });
 
-test("Branding shared validation accepts stringified result and text payloads", () => {
+test("Branding shared validation accepts direct, output-wrapped, and stringified payloads", () => {
+  assert.deepEqual(
+    validateBrandingWebhookOutput(brandInput, canonicalBranding),
+    canonicalBranding,
+  );
+  assert.deepEqual(
+    validateBrandingWebhookOutput(brandInput, { output: canonicalBranding }),
+    canonicalBranding,
+  );
   assert.deepEqual(
     validateBrandingWebhookOutput(brandInput, { result: JSON.stringify(canonicalBranding) }),
     canonicalBranding,

@@ -6,6 +6,12 @@ import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { syncEasyModeAiManagerTask } from "@/app/lib/easy-mode-ai-manager";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
 import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
+import {
+  SpecialistCallbackError,
+  syncEasyModeSpecialistCallback,
+  type ValidSpecialistCallbackBody,
+  validateSpecialistCallbackBody,
+} from "@/app/lib/easy-mode-specialist-callbacks";
 import { validateWrappedWebhookOutput } from "@/app/lib/specialist-execution";
 import {
   MalformedJsonBodyError,
@@ -30,6 +36,18 @@ const MAX_CALLBACK_BODY_BYTES = 256 * 1024;
 const MAX_JOB_ID_LENGTH = 128;
 const MAX_ERROR_LENGTH = 2_000;
 const MAX_STRATEGY_SECTION_BYTES = 25 * 1024;
+const BRANDING_SPECIALIST_METADATA_KEYS = [
+  "attemptId",
+  "executionKey",
+  "runId",
+  "taskId",
+  "projectId",
+  "module",
+  "status",
+  "providerExecutionId",
+  "usage",
+  "jobId",
+] as const;
 
 const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -42,6 +60,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 type ValidCallbackBody =
   | { jobId: string; status: "completed"; output: AiManagerStrategy }
   | { jobId: string; status: "failed"; error?: string };
+type BrandingSpecialistCallbackBody =
+  ValidSpecialistCallbackBody & Readonly<{ module: "branding" }>;
+type ValidJobsCallbackBody =
+  | Readonly<{ kind: "ai-manager"; body: ValidCallbackBody }>
+  | Readonly<{
+    kind: "branding-specialist";
+    body: BrandingSpecialistCallbackBody;
+  }>;
 
 function validateAiManagerStrategyCandidate(value: unknown): AiManagerStrategy | null {
   const validatedOutput = getModuleAdapter("ai-manager")?.validateOutput?.(value);
@@ -108,6 +134,50 @@ export function validateAiManagerCallbackBody(
     }
   }
   return { jobId, status: "completed", output };
+}
+
+function validateBrandingSpecialistJobsCallbackBody(
+  value: unknown,
+  expectedAttemptId: string,
+): BrandingSpecialistCallbackBody | null {
+  if (!isRecord(value)) return null;
+
+  const candidate = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "jobId"),
+  );
+  const validated = validateSpecialistCallbackBody(candidate, expectedAttemptId);
+  if (validated?.module === "branding") return validated as BrandingSpecialistCallbackBody;
+
+  const wrapperKeys = ["output", "result", "response", "data", "body", "json", "text"];
+  if (wrapperKeys.some((key) => Object.hasOwn(candidate, key))) return null;
+
+  const metadataKeys = new Set<string>(BRANDING_SPECIALIST_METADATA_KEYS);
+  const metadata = Object.fromEntries(
+    Object.entries(candidate).filter(([key]) => metadataKeys.has(key)),
+  );
+  const payload = Object.fromEntries(
+    Object.entries(candidate).filter(([key]) => !metadataKeys.has(key)),
+  );
+  if (Object.keys(payload).length === 0) return null;
+
+  const wrapped = validateSpecialistCallbackBody({
+    ...metadata,
+    output: payload,
+  }, expectedAttemptId);
+  return wrapped?.module === "branding" ? wrapped as BrandingSpecialistCallbackBody : null;
+}
+
+export function validateAiManagerJobsCallbackBody(
+  value: unknown,
+  expectedId: string,
+): ValidJobsCallbackBody | null {
+  const brandingSpecialist = validateBrandingSpecialistJobsCallbackBody(value, expectedId);
+  if (brandingSpecialist) {
+    return Object.freeze({ kind: "branding-specialist", body: brandingSpecialist });
+  }
+
+  const aiManager = validateAiManagerCallbackBody(value, expectedId);
+  return aiManager ? Object.freeze({ kind: "ai-manager", body: aiManager }) : null;
 }
 
 type JobRouteContext = { params: Promise<{ jobId: string }> };
@@ -191,8 +261,34 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     return Response.json({ error: "Invalid callback body." }, { status: 400 });
   }
 
-  const body = validateAiManagerCallbackBody(parsedBody, jobId);
+  const body = validateAiManagerJobsCallbackBody(parsedBody, jobId);
   if (!body) return Response.json({ error: "Invalid callback body." }, { status: 400 });
+
+  if (body.kind === "branding-specialist") {
+    try {
+      const result = await syncEasyModeSpecialistCallback(jobId, body.body);
+      const continuation = result.continuation;
+      if (continuation) {
+        after(async () => {
+          try {
+            await executeEasyModeRun(continuation);
+          } catch (error) {
+            console.error("Easy Mode continuation failed after branding callback via jobs route:", error);
+          }
+        });
+      }
+      return Response.json({
+        attemptId: jobId,
+        module: body.body.module,
+        status: result.state === "ignored" ? "ignored" : body.body.status,
+      }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      if (error instanceof SpecialistCallbackError) {
+        return Response.json({ error: error.message }, { status: error.httpStatus });
+      }
+      throw error;
+    }
+  }
 
   const [job] = await db
     .select()
@@ -210,10 +306,10 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     return Response.json({ jobId, status: job.status });
   }
 
-  const outputIsValid = body.status === "completed";
-  const nextStatus: TerminalStatus = body.status;
-  const error = body.status === "failed"
-    ? body.error || "AI Manager workflow failed."
+  const outputIsValid = body.body.status === "completed";
+  const nextStatus: TerminalStatus = body.body.status;
+  const error = body.body.status === "failed"
+    ? body.body.error || "AI Manager workflow failed."
     : null;
 
   const [transitionedJob] = await db
@@ -222,7 +318,7 @@ export async function POST(request: Request, { params }: JobRouteContext) {
       nextStatus === "completed" && outputIsValid
         ? {
             status: "completed",
-            result: JSON.stringify({ output: body.output }),
+            result: JSON.stringify({ output: body.body.output }),
             error: null,
             updatedAt: new Date(),
           }
