@@ -130,6 +130,33 @@ const salesValidationContext = {
 };
 
 const canonicalMarketing = Object.fromEntries(fields.marketing.map((field) => [field, `marketing ${field} result`]));
+const canvasNestMarketingPayload = {
+  output: {
+    marketingStrategy: "Focus on curated storytelling that helps buyers discover original artwork.",
+    targetAudienceAnalysis: "People looking for meaningful original artwork and gifts may respond to artist-led discovery.",
+    socialMediaStrategy: "Share artist stories, studio moments, and collection highlights.",
+    contentCalendar: "Plan weekly artist features, collection spotlights, and buying guides.",
+    contentIdeas: "Feature independent artist stories, curated collections, and first-time buyer education.",
+    emailMarketing: "Send curated collection highlights and artist spotlights to interested subscribers.",
+    paidAdsStrategy: "Promote curated collections and seasonal buying intent pages with modest tests.",
+    typography: "Use editorial serif headlines with clean supporting sans-serif body copy.",
+    recommendedTechStack: "Use the existing Buzypeezy website with optional email and analytics tooling when needed.",
+    seoRecommendations: "Publish artist pages, collection pages, and educational content for original art buyers.",
+    funnelSuggestions: "Guide visitors from discovery pages to collection pages to artist trust content and enquiry.",
+    growthRecommendations: "Double down on the content themes and channels that attract qualified buyer interest.",
+    bestChannels: "Instagram, Pinterest, search, and email.",
+    campaignTimeline: "Start with artist storytelling, then expand into seasonal collection campaigns.",
+    customerJourney: "Discover artwork, explore artists, build trust, and enquire or purchase with confidence.",
+    contentMix: "Balance artist stories, collection curation, buyer education, and trust-building proof.",
+    adCopy: "Discover original artwork from independent artists at CanvasNest.",
+  },
+};
+const canvasNestNormalizedMarketing = {
+  ...canvasNestMarketingPayload.output,
+  targetAudienceAnalysis: "Potential audience segments and suggested motivations (recommendations, not measured facts):\nPeople looking for meaningful original artwork and gifts may respond to artist-led discovery.",
+  kpis: "Use only the verified business context and connected channels shown above.",
+  marketingScore: "Treat any marketing score as a planning note, not a verified customer metric.",
+};
 const legacyMarketing320 = {
   ...Object.fromEntries(Object.entries(canonicalMarketing).filter(([key]) => !["kpis", "marketingScore"].includes(key))),
   marketingDashboard: {
@@ -145,6 +172,46 @@ const legacyMarketing320 = {
     ],
   },
 };
+
+function describeMarketingValidationFailure(payload, stage = "validation") {
+  const wrapped = payload && typeof payload === "object" && !Array.isArray(payload) && Object.hasOwn(payload, "output")
+    ? payload.output
+    : payload;
+  if (!wrapped || typeof wrapped !== "object" || Array.isArray(wrapped)) {
+    return `Marketing ${stage} failed: expected an object after wrapper extraction but received ${Array.isArray(wrapped) ? "array" : typeof wrapped}.`;
+  }
+  const candidate = wrapped;
+  const checks = [
+    ["marketingStrategy", typeof candidate.marketingStrategy === "string", typeof candidate.marketingStrategy],
+    ["contentIdeas", typeof candidate.contentIdeas === "string", typeof candidate.contentIdeas],
+    ["socialMediaStrategy", typeof candidate.socialMediaStrategy === "string", typeof candidate.socialMediaStrategy],
+    ["adCopy", typeof candidate.adCopy === "string", typeof candidate.adCopy],
+    ["contentCalendar", typeof candidate.contentCalendar === "string", typeof candidate.contentCalendar],
+    ["targetAudienceAnalysis", typeof candidate.targetAudienceAnalysis === "string", typeof candidate.targetAudienceAnalysis],
+    ["emailMarketing", typeof candidate.emailMarketing === "string", typeof candidate.emailMarketing],
+    ["paidAdsStrategy", typeof candidate.paidAdsStrategy === "string", typeof candidate.paidAdsStrategy],
+    ["typography", typeof candidate.typography === "string", typeof candidate.typography],
+    ["recommendedTechStack", typeof candidate.recommendedTechStack === "string", typeof candidate.recommendedTechStack],
+    ["seoRecommendations", typeof candidate.seoRecommendations === "string", typeof candidate.seoRecommendations],
+    ["funnelSuggestions", typeof candidate.funnelSuggestions === "string", typeof candidate.funnelSuggestions],
+    ["growthRecommendations", typeof candidate.growthRecommendations === "string", typeof candidate.growthRecommendations],
+    ["bestChannels", typeof candidate.bestChannels === "string", typeof candidate.bestChannels],
+    ["campaignTimeline", typeof candidate.campaignTimeline === "string", typeof candidate.campaignTimeline],
+    ["customerJourney", typeof candidate.customerJourney === "string", typeof candidate.customerJourney],
+    ["contentMix", typeof candidate.contentMix === "string", typeof candidate.contentMix],
+    ["kpis", !Object.hasOwn(candidate, "kpis") || typeof candidate.kpis === "string", typeof candidate.kpis],
+    ["marketingScore", !Object.hasOwn(candidate, "marketingScore") || typeof candidate.marketingScore === "string", typeof candidate.marketingScore],
+  ];
+  const failed = checks.find(([, ok]) => !ok);
+  if (failed) return `Marketing ${stage} failed at field ${failed[0]}: received ${failed[2]}.`;
+  return `Marketing ${stage} failed after field-shape checks passed.`;
+}
+
+function expectValidMarketingWebhookOutput(payload) {
+  const validated = validateMarketingWebhookOutput(payload, marketingValidationContext);
+  assert.ok(validated, describeMarketingValidationFailure(payload));
+  return validated;
+}
 
 test("all six text specialists normalize a single-item n8n envelope through strict validators", async () => {
   const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
@@ -502,6 +569,23 @@ test("hybrid and legacy Marketing payloads do not persist projected dashboard me
   });
   assert.equal(result.output.kpis, "Use only the verified business context and connected channels shown above.");
   assert.doesNotMatch(JSON.stringify(result.output), /Projected leads|Conversion rate|Monthly traffic|Channel mix|3\.5%|9000|82/);
+});
+
+test("normal Marketing execution accepts the CanvasNest payload without fabricated dashboard metrics", async () => {
+  const context = createTrustedModuleExecutionContext({ userId: "firebase-user", projectId: "project-1" });
+  const validated = expectValidMarketingWebhookOutput(canvasNestMarketingPayload);
+  assert.deepEqual(validated, canvasNestNormalizedMarketing);
+  assert.deepEqual(validated, getModuleAdapter("marketing").validateOutput(validated));
+
+  const result = await executeTextSpecialistService({
+    module: "marketing",
+    context,
+    input: brandInput,
+    marketingValidationContext,
+    fetcher: async () => new Response(JSON.stringify(canvasNestMarketingPayload), { status: 200 }),
+    webhookConfig: { url: "https://example.invalid/marketing", headers: {} },
+  });
+  assert.deepEqual(result.output, canvasNestNormalizedMarketing);
 });
 
 test("malformed Marketing payload still fails safely", async () => {

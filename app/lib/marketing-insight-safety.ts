@@ -16,6 +16,7 @@ const COMPLETED_WORK = /\b(?:we|our team)\s+(?:transformed|completed|delivered|c
 const CLIENT_RESULT = /\bour clients?\s+(?:achieved|increased|improved|saved|grew|generated)\b/i;
 const PAST_CHANNEL_ACTIVITY = /\b(?:was|were|is|are|has been|have been)\s+(?:posted|published|scheduled|launched|running)\b/i;
 const CHANNEL_EXECUTION = /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|carousel|reel|story|post|publish|schedule|launch|run|campaign)\b/i;
+const SAFE_UNMEASURED_MARKETING_KPIS = "Use only the verified business context and connected channels shown above.";
 const SAFE_MARKETING_SCORE = "Treat any marketing score as a planning note, not a verified customer metric.";
 
 function verifiedCorpus(context: MarketingBusinessContext) {
@@ -91,6 +92,14 @@ function labelAudienceHypotheses(value: string) {
   return `Potential audience segments and suggested motivations (recommendations, not measured facts):\n${value}`;
 }
 
+function completeUnmeasuredMarketingFields(value: Record<string, unknown>) {
+  return {
+    ...value,
+    ...(Object.hasOwn(value, "kpis") ? {} : { kpis: SAFE_UNMEASURED_MARKETING_KPIS }),
+    ...(Object.hasOwn(value, "marketingScore") ? {} : { marketingScore: SAFE_MARKETING_SCORE }),
+  };
+}
+
 export function sanitizeMarketingInsights(value: unknown, context: MarketingBusinessContext): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const clean = (item: unknown, key = ""): unknown => typeof item === "string"
@@ -107,9 +116,11 @@ export function sanitizeMarketingInsights(value: unknown, context: MarketingBusi
 function normalizeMarketingProviderCandidate(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (!Object.hasOwn(record, "marketingDashboard")) return record;
   const withoutDashboard = Object.fromEntries(Object.entries(record).filter(([key]) => key !== "marketingDashboard"));
-  return validateMarketingOutput(withoutDashboard) ? withoutDashboard : record;
+  const normalized = completeUnmeasuredMarketingFields(withoutDashboard);
+  if (validateMarketingOutput(normalized)) return normalized;
+  if (Object.hasOwn(record, "marketingDashboard") && validateMarketingOutput(withoutDashboard)) return withoutDashboard;
+  return record;
 }
 
 export function validateMarketingWebhookOutput(value: unknown, context: MarketingBusinessContext) {

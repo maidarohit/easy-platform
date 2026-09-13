@@ -15,6 +15,7 @@ import {
   EasyModeAttemptError,
 } from "../../app/lib/easy-mode-task-attempts.ts";
 import { sanitizeBrandingOutput } from "../../app/lib/branding-insight-safety.ts";
+import { sanitizeMarketingInsights, validateMarketingWebhookOutput } from "../../app/lib/marketing-insight-safety.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const ids = {
@@ -102,6 +103,58 @@ const canvasNestNormalizedOutput = {
     "Typography: Heading: Playfair Display\nBody: Inter",
   ].join("\n"),
 };
+const canvasNestMarketingPayload = {
+  output: {
+    marketingStrategy: "Focus on curated storytelling that helps buyers discover original artwork.",
+    targetAudienceAnalysis: "People looking for meaningful original artwork and gifts may respond to artist-led discovery.",
+    socialMediaStrategy: "Share artist stories, studio moments, and collection highlights.",
+    contentCalendar: "Plan weekly artist features, collection spotlights, and buying guides.",
+    contentIdeas: "Feature independent artist stories, curated collections, and first-time buyer education.",
+    emailMarketing: "Send curated collection highlights and artist spotlights to interested subscribers.",
+    paidAdsStrategy: "Promote curated collections and seasonal buying intent pages with modest tests.",
+    typography: "Use editorial serif headlines with clean supporting sans-serif body copy.",
+    recommendedTechStack: "Use the existing Buzypeezy website with optional email and analytics tooling when needed.",
+    seoRecommendations: "Publish artist pages, collection pages, and educational content for original art buyers.",
+    funnelSuggestions: "Guide visitors from discovery pages to collection pages to artist trust content and enquiry.",
+    growthRecommendations: "Double down on the content themes and channels that attract qualified buyer interest.",
+    bestChannels: "Instagram, Pinterest, search, and email.",
+    campaignTimeline: "Start with artist storytelling, then expand into seasonal collection campaigns.",
+    customerJourney: "Discover artwork, explore artists, build trust, and enquire or purchase with confidence.",
+    contentMix: "Balance artist stories, collection curation, buyer education, and trust-building proof.",
+    adCopy: "Discover original artwork from independent artists at CanvasNest.",
+  },
+};
+const canvasNestNormalizedMarketing = {
+  ...canvasNestMarketingPayload.output,
+  targetAudienceAnalysis: "Potential audience segments and suggested motivations (recommendations, not measured facts):\nPeople looking for meaningful original artwork and gifts may respond to artist-led discovery.",
+  kpis: "Use only the verified business context and connected channels shown above.",
+  marketingScore: "Treat any marketing score as a planning note, not a verified customer metric.",
+};
+const marketingValidationContext = {
+  website: { published: true, url: "https://canvasnest.example" },
+  business: {
+    name: "CanvasNest",
+    industry: "Art marketplace",
+    location: "Bengaluru",
+    services: ["original artwork discovery", "curated collections"],
+    description: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+    targetAudience: "People looking for meaningful original artwork",
+  },
+  channels: { meta: "not_connected", linkedin: "not_connected", whatsapp: "not_connected" },
+  savedEnquiries: 0,
+  unavailableMetrics: ["website visitors", "CTR", "campaign ROI", "CAC"],
+};
+const seoOutput = {
+  seoAudit: "Prioritize artist and collection pages with clear internal links.",
+  keywords: "original artwork, curated art collections, independent artists",
+  metaTitles: "Discover original artwork from independent artists | CanvasNest",
+  metaDescriptions: "Explore curated original artwork and artist stories at CanvasNest.",
+  internalLinking: "Link collection pages to artist pages and buyer education guides.",
+  blogTopics: "How to buy original artwork, how to style art at home, artist spotlight stories",
+  technicalSEO: "Keep collection pages crawlable and optimize image alt text.",
+  kpis: "Use publishing consistency and search visibility checks as planning signals.",
+  growthRecommendations: "Expand high-intent collection and artist landing pages over time.",
+};
 const progress = { runStatus: "In progress", tasks: [{ label: "Brand identity", status: "Waiting" }] };
 
 function claim(moduleId) {
@@ -163,6 +216,46 @@ function describeBrandingValidationFailure(payload) {
 function expectValidBrandingWebhookOutput(input, payload) {
   const validated = validateBrandingWebhookOutput(input, payload);
   assert.ok(validated, describeBrandingValidationFailure(payload));
+  return validated;
+}
+
+function describeMarketingValidationFailure(payload, stage = "validation") {
+  const wrapped = payload && typeof payload === "object" && !Array.isArray(payload) && Object.hasOwn(payload, "output")
+    ? payload.output
+    : payload;
+  if (!wrapped || typeof wrapped !== "object" || Array.isArray(wrapped)) {
+    return `Marketing ${stage} failed: expected an object after wrapper extraction but received ${Array.isArray(wrapped) ? "array" : typeof wrapped}.`;
+  }
+  const candidate = wrapped;
+  const checks = [
+    ["marketingStrategy", typeof candidate.marketingStrategy === "string", typeof candidate.marketingStrategy],
+    ["contentIdeas", typeof candidate.contentIdeas === "string", typeof candidate.contentIdeas],
+    ["socialMediaStrategy", typeof candidate.socialMediaStrategy === "string", typeof candidate.socialMediaStrategy],
+    ["adCopy", typeof candidate.adCopy === "string", typeof candidate.adCopy],
+    ["contentCalendar", typeof candidate.contentCalendar === "string", typeof candidate.contentCalendar],
+    ["targetAudienceAnalysis", typeof candidate.targetAudienceAnalysis === "string", typeof candidate.targetAudienceAnalysis],
+    ["emailMarketing", typeof candidate.emailMarketing === "string", typeof candidate.emailMarketing],
+    ["paidAdsStrategy", typeof candidate.paidAdsStrategy === "string", typeof candidate.paidAdsStrategy],
+    ["typography", typeof candidate.typography === "string", typeof candidate.typography],
+    ["recommendedTechStack", typeof candidate.recommendedTechStack === "string", typeof candidate.recommendedTechStack],
+    ["seoRecommendations", typeof candidate.seoRecommendations === "string", typeof candidate.seoRecommendations],
+    ["funnelSuggestions", typeof candidate.funnelSuggestions === "string", typeof candidate.funnelSuggestions],
+    ["growthRecommendations", typeof candidate.growthRecommendations === "string", typeof candidate.growthRecommendations],
+    ["bestChannels", typeof candidate.bestChannels === "string", typeof candidate.bestChannels],
+    ["campaignTimeline", typeof candidate.campaignTimeline === "string", typeof candidate.campaignTimeline],
+    ["customerJourney", typeof candidate.customerJourney === "string", typeof candidate.customerJourney],
+    ["contentMix", typeof candidate.contentMix === "string", typeof candidate.contentMix],
+    ["kpis", !Object.hasOwn(candidate, "kpis") || typeof candidate.kpis === "string", typeof candidate.kpis],
+    ["marketingScore", !Object.hasOwn(candidate, "marketingScore") || typeof candidate.marketingScore === "string", typeof candidate.marketingScore],
+  ];
+  const failed = checks.find(([, ok]) => !ok);
+  if (failed) return `Marketing ${stage} failed at field ${failed[0]}: received ${failed[2]}.`;
+  return `Marketing ${stage} failed after field-shape checks passed.`;
+}
+
+function expectValidMarketingWebhookOutput(payload) {
+  const validated = validateMarketingWebhookOutput(payload, marketingValidationContext);
+  assert.ok(validated, describeMarketingValidationFailure(payload));
   return validated;
 }
 
@@ -408,6 +501,13 @@ test("shared branding service restores sanitized-empty required fields with dete
   assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput(result.output));
 });
 
+test("shared Marketing validation accepts the CanvasNest payload, sanitizes it, and keeps the final contract valid", () => {
+  const validated = expectValidMarketingWebhookOutput(canvasNestMarketingPayload);
+  assert.deepEqual(validated, canvasNestNormalizedMarketing);
+  assert.deepEqual(sanitizeMarketingInsights(validated, marketingValidationContext), canvasNestNormalizedMarketing);
+  assert.deepEqual(validated, getModuleAdapter("marketing").validateOutput(validated));
+});
+
 test("successful n8n envelope persists, finalizes usage, records execution, and completes after required-field fallback repair", async () => {
   const fixture = dependencies();
   const result = await executeNextEasyModeTask(
@@ -576,6 +676,173 @@ test("CanvasNest Branding completes once on the normal Easy Mode path and the sa
   assert.equal(calls.aiManagerLoads, 0);
   assert.equal(calls.aiManagerStarts, 0);
   assert.deepEqual(completedAttempts, [ids.attempt, websiteAttemptId]);
+});
+
+test("CanvasNest Marketing completes once on the normal Easy Mode path and the same run advances to SEO without regenerating Branding or Website", async () => {
+  const marketingTaskId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const marketingAttemptId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const marketingLeaseToken = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const seoTaskId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const seoAttemptId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const seoLeaseToken = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const marketingContext = createTrustedModuleExecutionContext({
+    userId: "firebase-user",
+    projectId: "project-1",
+    runId: ids.run,
+    taskId: marketingTaskId,
+  });
+  const seoContext = createTrustedModuleExecutionContext({
+    userId: "firebase-user",
+    projectId: "project-1",
+    runId: ids.run,
+    taskId: seoTaskId,
+  });
+  const claims = [
+    {
+      context: marketingContext,
+      runId: ids.run,
+      taskId: marketingTaskId,
+      attemptId: marketingAttemptId,
+      attemptNumber: 1,
+      moduleId: "marketing",
+      executionKey: "marketing-execution-key",
+      leaseToken: marketingLeaseToken,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    },
+    {
+      context: seoContext,
+      runId: ids.run,
+      taskId: seoTaskId,
+      attemptId: seoAttemptId,
+      attemptNumber: 1,
+      moduleId: "seo",
+      executionKey: "seo-execution-key",
+      leaseToken: seoLeaseToken,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    },
+  ];
+  const calls = {
+    executeBranding: 0,
+    executeWebsite: 0,
+    executeMarketing: 0,
+    executeSeo: 0,
+    persistMarketing: 0,
+    persistSeo: 0,
+    completeAttempt: 0,
+    aiManagerLoads: 0,
+    aiManagerStarts: 0,
+  };
+  const completedAttempts = [];
+  const progressState = () => ({
+    runStatus: claims.length === 0 && calls.executeSeo === 1 ? "Completed" : "In progress",
+    tasks: [],
+  });
+
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadBrandingInput: async () => { calls.executeBranding += 1; throw new Error("branding should not execute"); },
+    executeBranding: async () => { calls.executeBranding += 1; throw new Error("branding should not execute"); },
+    loadLogoInput: async () => assert.fail("logo should not execute"),
+    executeLogo: async () => assert.fail("logo should not execute"),
+    loadContentInput: async () => assert.fail("content should not execute"),
+    executeContent: async () => assert.fail("content should not execute"),
+    loadAiManagerInput: async () => { calls.aiManagerLoads += 1; throw new Error("ai-manager should not execute"); },
+    startAiManagerJob: async () => { calls.aiManagerStarts += 1; throw new Error("ai-manager should not execute"); },
+    loadTextInput: async (_context, module) => {
+      if (module === "marketing") return canvasNestBrandingInput;
+      if (module === "seo") {
+        return {
+          companyName: "CanvasNest",
+          industry: "Art marketplace",
+          targetAudience: "Collectors",
+          brandStyle: "Curated",
+          brandDescription: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+        };
+      }
+      if (module === "website") {
+        calls.executeWebsite += 1;
+        throw new Error("website should not execute");
+      }
+      throw new Error(`unexpected text module ${module}`);
+    },
+    executeText: async (options) => {
+      if (options.module === "marketing") {
+        calls.executeMarketing += 1;
+        return {
+          dispatchMode: "sync",
+          output: expectValidMarketingWebhookOutput(canvasNestMarketingPayload),
+        };
+      }
+      if (options.module === "seo") {
+        calls.executeSeo += 1;
+        return { dispatchMode: "sync", output: seoOutput };
+      }
+      if (options.module === "website") {
+        calls.executeWebsite += 1;
+        throw new Error("website should not execute");
+      }
+      throw new Error(`unexpected executeText module ${options.module}`);
+    },
+    startUsage: async () => ids.usage,
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    markRunning: async () => {},
+    completeAttempt: async (input) => {
+      calls.completeAttempt += 1;
+      completedAttempts.push(input.attemptId);
+    },
+    failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    prepareRetry: async () => assert.fail("retry should not be needed"),
+    reconcileUncertain: async () => assert.fail("reconcile should not be needed"),
+    completeUsage: async () => {},
+    failUsage: async () => assert.fail("usage should not fail"),
+    loadBrandingContext: async () => ({ project: { name: "CanvasNest", industry: "Art marketplace" } }),
+    persistBranding: async () => assert.fail("branding should not persist"),
+    persistLogo: async () => assert.fail("logo should not persist"),
+    persistContent: async () => assert.fail("content should not persist"),
+    persistText: async (_context, module, output) => {
+      if (module === "marketing") {
+        calls.persistMarketing += 1;
+        assert.deepEqual(output, canvasNestNormalizedMarketing);
+        return { id: marketingAttemptId };
+      }
+      if (module === "seo") {
+        calls.persistSeo += 1;
+        assert.deepEqual(output, seoOutput);
+        return { id: seoAttemptId };
+      }
+      throw new Error(`unexpected persisted module ${module}`);
+    },
+    persistContext: async () => assert.fail("branding-context should not persist"),
+    progress: async () => progressState(),
+  };
+
+  const first = await executeEasyModeRun({ runId: ids.run, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.equal(calls.executeMarketing, 1);
+  assert.equal(calls.persistMarketing, 1);
+  assert.equal(calls.executeSeo, 0);
+  assert.equal(calls.completeAttempt, 1);
+  assert.equal(calls.executeBranding, 0);
+  assert.equal(calls.executeWebsite, 0);
+  assert.equal(calls.aiManagerLoads, 0);
+  assert.equal(calls.aiManagerStarts, 0);
+  assert.deepEqual(completedAttempts, [marketingAttemptId]);
+
+  const second = await executeEasyModeRun({ runId: ids.run, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.equal(calls.executeMarketing, 1);
+  assert.equal(calls.persistMarketing, 1);
+  assert.equal(calls.executeSeo, 1);
+  assert.equal(calls.persistSeo, 1);
+  assert.equal(calls.completeAttempt, 2);
+  assert.equal(calls.executeBranding, 0);
+  assert.equal(calls.executeWebsite, 0);
+  assert.equal(calls.aiManagerLoads, 0);
+  assert.equal(calls.aiManagerStarts, 0);
+  assert.deepEqual(completedAttempts, [marketingAttemptId, seoAttemptId]);
 });
 
 test("route, persistence, UI, and AI Manager race contracts remain controlled", async () => {
