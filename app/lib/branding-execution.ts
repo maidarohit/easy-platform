@@ -33,6 +33,7 @@ const BRANDING_REQUIRED_FIELDS = [
   "marketingSuggestions",
   "brandStyleGuide",
 ] as const;
+const BRANDING_PROVIDER_TYPOGRAPHY_KEYS = ["heading", "body"] as const;
 
 export type BrandingFailurePoint = "before_dispatch" | "uncertain";
 export type BrandingSafeErrorCode = "PROVIDER_UNAVAILABLE" | "OUTPUT_INVALID" | "DELIVERY_UNCERTAIN";
@@ -70,6 +71,15 @@ type BrandingWebhookConfig = Readonly<{
 
 type BrandingField = (typeof BRANDING_REQUIRED_FIELDS)[number];
 type BrandingOutput = Readonly<Record<BrandingField, string>>;
+type BrandingTypographyKey = (typeof BRANDING_PROVIDER_TYPOGRAPHY_KEYS)[number];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null);
+}
 
 export type BrandingExecutionOptions = Readonly<{
   context: TrustedModuleExecutionContext;
@@ -104,6 +114,67 @@ export async function loadCanonicalBrandingInput(
 
 function brandingInputText(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function nonEmptyBrandingText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeBrandingStringList(value: unknown, separator: string): string | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const items = value
+    .map((item) => nonEmptyBrandingText(item))
+    .filter((item): item is string => Boolean(item));
+  return items.length === value.length ? items.join(separator) : null;
+}
+
+function normalizeBrandingTypography(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (!isRecord(value)) return null;
+  if (Object.keys(value).some((key) => !BRANDING_PROVIDER_TYPOGRAPHY_KEYS.includes(key as BrandingTypographyKey))) {
+    return null;
+  }
+  const heading = nonEmptyBrandingText(value.heading);
+  const body = nonEmptyBrandingText(value.body);
+  return heading && body ? `Heading: ${heading}\nBody: ${body}` : null;
+}
+
+function normalizeBrandingProviderField(field: BrandingField, value: unknown): unknown {
+  if (field === "colorPalette") {
+    return typeof value === "string" ? value : normalizeBrandingStringList(value, ", ") ?? value;
+  }
+  if (field === "typography") {
+    return normalizeBrandingTypography(value) ?? value;
+  }
+  if (field === "marketingSuggestions") {
+    return typeof value === "string" ? value : normalizeBrandingStringList(value, "\n") ?? value;
+  }
+  return value;
+}
+
+function normalizeBrandingProviderCandidate(candidate: unknown): unknown {
+  if (!isRecord(candidate)) return candidate;
+
+  const normalized: Record<string, unknown> = { ...candidate };
+  for (const field of BRANDING_REQUIRED_FIELDS) {
+    if (!Object.hasOwn(candidate, field)) continue;
+    normalized[field] = normalizeBrandingProviderField(field, candidate[field]);
+  }
+
+  if (!Object.hasOwn(normalized, "brandStyleGuide")) {
+    const brandVoice = nonEmptyBrandingText(normalized.brandVoice);
+    const colorPalette = nonEmptyBrandingText(normalized.colorPalette);
+    const typography = nonEmptyBrandingText(normalized.typography);
+    if (brandVoice && colorPalette && typography) {
+      normalized.brandStyleGuide = [
+        `Brand voice: ${brandVoice}`,
+        `Color palette: ${colorPalette}`,
+        `Typography: ${typography}`,
+      ].join("\n");
+    }
+  }
+
+  return normalized;
 }
 
 function buildSafeBrandingFallbacks(input: ModuleExecutionInput): BrandingOutput {
@@ -152,20 +223,7 @@ export function validateBrandingWebhookOutput(input: ModuleExecutionInput, value
   const validator = getModuleAdapter("branding")?.validateOutput;
   const validatedOutput = validator
     ? validateWrappedWebhookOutput(value, (candidate) => {
-      const normalizedCandidate = candidate !== null && typeof candidate === "object" &&
-          !Array.isArray(candidate) && !Object.hasOwn(candidate, "brandStyleGuide") &&
-          typeof (candidate as Record<string, unknown>).brandVoice === "string" &&
-          typeof (candidate as Record<string, unknown>).colorPalette === "string" &&
-          typeof (candidate as Record<string, unknown>).typography === "string"
-        ? {
-            ...(candidate as Record<string, unknown>),
-            brandStyleGuide: [
-              `Brand voice: ${(candidate as Record<string, unknown>).brandVoice}`,
-              `Color palette: ${(candidate as Record<string, unknown>).colorPalette}`,
-              `Typography: ${(candidate as Record<string, unknown>).typography}`,
-            ].join("\n"),
-          }
-        : candidate;
+      const normalizedCandidate = normalizeBrandingProviderCandidate(candidate);
       return validator(candidate) ?? validator(normalizedCandidate);
     })
     : null;

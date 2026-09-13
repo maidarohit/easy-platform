@@ -4,15 +4,17 @@ import test from "node:test";
 import {
   BrandingExecutionError,
   executeBrandingService,
+  validateBrandingWebhookOutput,
 } from "../../app/lib/branding-execution.ts";
 import {
   createTrustedModuleExecutionContext,
   getModuleAdapter,
 } from "../../app/lib/easy-mode-execution-contracts.ts";
-import { executeNextEasyModeTask } from "../../app/lib/easy-mode-executor.ts";
+import { executeEasyModeRun, executeNextEasyModeTask } from "../../app/lib/easy-mode-executor.ts";
 import {
   EasyModeAttemptError,
 } from "../../app/lib/easy-mode-task-attempts.ts";
+import { sanitizeBrandingOutput } from "../../app/lib/branding-insight-safety.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const ids = {
@@ -51,6 +53,55 @@ const brandingOutputWithUnsafeMarketingSuggestions = {
   ...productionBrandingOutput,
   marketingSuggestions: "Email hello@example.com or call +91 90000 00000.",
 };
+const canvasNestBrandingInput = {
+  companyName: "CanvasNest",
+  industry: "Art marketplace",
+  targetAudience: "People looking for meaningful original artwork",
+  brandStyle: "Curated, professional, warm and approachable",
+  brandDescription: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+};
+const canvasNestStructuredPayload = {
+  output: {
+    brandName: "CanvasNest",
+    tagline: "Where Original Art Finds Home",
+    story: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+    mission: "Make independent art easier to discover and purchase.",
+    vision: "Build a trusted destination for discovering independent artwork.",
+    brandVoice: "Curated, professional, warm and approachable.",
+    colorPalette: ["#111111", "#F5F1E8", "#A66A4A", "#D4B483"],
+    typography: {
+      heading: "Playfair Display",
+      body: "Inter",
+    },
+    logoConcept: "A refined canvas-frame inspired wordmark.",
+    marketingSuggestions: [
+      "Feature independent artist stories.",
+      "Create curated artwork collections.",
+      "Use educational content to help first-time art buyers.",
+    ],
+  },
+};
+const canvasNestNormalizedOutput = {
+  brandName: "CanvasNest",
+  tagline: "Where Original Art Finds Home",
+  story: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+  mission: "Make independent art easier to discover and purchase.",
+  vision: "Build a trusted destination for discovering independent artwork.",
+  brandVoice: "Curated, professional, warm and approachable.",
+  colorPalette: "#111111, #F5F1E8, #A66A4A, #D4B483",
+  typography: "Heading: Playfair Display\nBody: Inter",
+  logoConcept: "A refined canvas-frame inspired wordmark.",
+  marketingSuggestions: [
+    "Feature independent artist stories.",
+    "Create curated artwork collections.",
+    "Use educational content to help first-time art buyers.",
+  ].join("\n"),
+  brandStyleGuide: [
+    "Brand voice: Curated, professional, warm and approachable.",
+    "Color palette: #111111, #F5F1E8, #A66A4A, #D4B483",
+    "Typography: Heading: Playfair Display\nBody: Inter",
+  ].join("\n"),
+};
 const progress = { runStatus: "In progress", tasks: [{ label: "Brand identity", status: "Waiting" }] };
 
 function claim(moduleId) {
@@ -59,6 +110,60 @@ function claim(moduleId) {
     attemptNumber: 1, moduleId, executionKey: "execution-key", leaseToken: ids.lease,
     leaseExpiresAt: new Date(Date.now() + 60_000),
   };
+}
+
+function describeBrandingValidationFailure(payload) {
+  const wrapped = payload && typeof payload === "object" && !Array.isArray(payload) && Object.hasOwn(payload, "output")
+    ? payload.output
+    : payload;
+  if (!wrapped || typeof wrapped !== "object" || Array.isArray(wrapped)) {
+    return `Branding validation failed: expected an object after wrapper extraction but received ${Array.isArray(wrapped) ? "array" : typeof wrapped}.`;
+  }
+  const candidate = wrapped;
+  const checks = [
+    ["brandName", typeof candidate.brandName === "string", typeof candidate.brandName],
+    ["tagline", typeof candidate.tagline === "string", typeof candidate.tagline],
+    ["story", typeof candidate.story === "string", typeof candidate.story],
+    ["mission", typeof candidate.mission === "string", typeof candidate.mission],
+    ["vision", typeof candidate.vision === "string", typeof candidate.vision],
+    ["brandVoice", typeof candidate.brandVoice === "string", typeof candidate.brandVoice],
+    [
+      "colorPalette",
+      typeof candidate.colorPalette === "string" || (Array.isArray(candidate.colorPalette) && candidate.colorPalette.every((item) => typeof item === "string")),
+      Array.isArray(candidate.colorPalette) ? "array" : typeof candidate.colorPalette,
+    ],
+    [
+      "typography",
+      typeof candidate.typography === "string" || (
+        candidate.typography &&
+        typeof candidate.typography === "object" &&
+        !Array.isArray(candidate.typography) &&
+        typeof candidate.typography.heading === "string" &&
+        typeof candidate.typography.body === "string"
+      ),
+      Array.isArray(candidate.typography) ? "array" : typeof candidate.typography,
+    ],
+    ["logoConcept", typeof candidate.logoConcept === "string", typeof candidate.logoConcept],
+    [
+      "marketingSuggestions",
+      typeof candidate.marketingSuggestions === "string" || (
+        Array.isArray(candidate.marketingSuggestions) &&
+        candidate.marketingSuggestions.every((item) => typeof item === "string")
+      ),
+      Array.isArray(candidate.marketingSuggestions) ? "array" : typeof candidate.marketingSuggestions,
+    ],
+  ];
+  const failed = checks.find(([, ok]) => !ok);
+  if (failed) {
+    return `Branding validation failed at field ${failed[0]}: received ${failed[2]}.`;
+  }
+  return "Branding validation failed after field-shape checks passed.";
+}
+
+function expectValidBrandingWebhookOutput(input, payload) {
+  const validated = validateBrandingWebhookOutput(input, payload);
+  assert.ok(validated, describeBrandingValidationFailure(payload));
+  return validated;
 }
 
 function dependencies(moduleId = "branding") {
@@ -265,6 +370,25 @@ test("shared branding service accepts the successful single-item n8n response", 
   assert.equal(result.providerExecutionId, "branding-execution-123");
 });
 
+test("shared branding service accepts the CanvasNest structured payload, sanitizes it, and keeps the final contract valid", async () => {
+  const result = await executeBrandingService({
+    context,
+    input: canvasNestBrandingInput,
+    fetcher: async () => new Response(JSON.stringify(canvasNestStructuredPayload), {
+      status: 200,
+      headers: { "x-easy-n8n-execution-id": "branding-execution-444" },
+    }),
+    webhookConfig: { url: "https://example.invalid/branding", headers: {} },
+  });
+
+  const validated = expectValidBrandingWebhookOutput(canvasNestBrandingInput, canvasNestStructuredPayload);
+  assert.deepEqual(validated, canvasNestNormalizedOutput);
+  assert.deepEqual(result.output, canvasNestNormalizedOutput);
+  assert.deepEqual(sanitizeBrandingOutput(result.output, canvasNestBrandingInput), canvasNestNormalizedOutput);
+  assert.deepEqual(result.output, getModuleAdapter("branding").validateOutput(result.output));
+  assert.equal(result.providerExecutionId, "branding-execution-444");
+});
+
 test("shared branding service restores sanitized-empty required fields with deterministic safe fallback copy", async () => {
   const result = await executeBrandingService({
     context,
@@ -310,6 +434,148 @@ test("successful n8n envelope persists, finalizes usage, records execution, and 
   assert.equal(fixture.received.markRunning.providerExecutionId, "branding-execution-123");
   assert.ok(fixture.events.indexOf("persistBranding") < fixture.events.indexOf("completeUsage"));
   assert.ok(fixture.events.indexOf("completeUsage") < fixture.events.indexOf("completeAttempt"));
+});
+
+test("CanvasNest Branding completes once on the normal Easy Mode path and the same run advances to Website without regenerating Understanding", async () => {
+  const websiteTaskId = "77777777-7777-4777-8777-777777777777";
+  const websiteAttemptId = "88888888-8888-4888-8888-888888888888";
+  const websiteLeaseToken = "99999999-9999-4999-8999-999999999999";
+  const websiteContext = createTrustedModuleExecutionContext({
+    userId: "firebase-user",
+    projectId: "project-1",
+    runId: ids.run,
+    taskId: websiteTaskId,
+  });
+  const claims = [
+    claim("branding"),
+    {
+      context: websiteContext,
+      runId: ids.run,
+      taskId: websiteTaskId,
+      attemptId: websiteAttemptId,
+      attemptNumber: 1,
+      moduleId: "website",
+      executionKey: "website-execution-key",
+      leaseToken: websiteLeaseToken,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    },
+  ];
+  const calls = {
+    persistBranding: 0,
+    persistText: 0,
+    completeAttempt: 0,
+    executeBranding: 0,
+    executeWebsite: 0,
+    aiManagerLoads: 0,
+    aiManagerStarts: 0,
+  };
+  const completedAttempts = [];
+  const websiteOutput = {
+    websiteOverview: "A curated marketplace for original artwork.",
+    websiteGoal: "Help customers discover and buy original art.",
+    recommendedPages: "Home, Collections, Artists, About, Contact",
+    siteStructure: "Feature art discovery, artist stories, and direct enquiry paths.",
+    websiteFeatures: "Curated collections, artist profiles, and artwork education.",
+    designRecommendations: "Use warm editorial layouts and clear purchase guidance.",
+    colourScheme: "Neutral base with warm accent tones.",
+    typography: "Editorial serif headlines with clean sans-serif body copy.",
+    recommendedTechStack: "Use a reliable content-managed storefront stack.",
+    seoRecommendations: "Publish artist pages and collection landing pages.",
+  };
+  const progressState = () => ({
+    runStatus: claims.length === 0 && calls.executeWebsite === 1 ? "Completed" : "In progress",
+    tasks: [],
+  });
+
+  const dependencies = {
+    enabled: () => true,
+    claim: async () => claims.shift() ?? null,
+    loadBrandingInput: async () => canvasNestBrandingInput,
+    executeBranding: async (options) => {
+      calls.executeBranding += 1;
+      return executeBrandingService({
+        ...options,
+        fetcher: async () => new Response(JSON.stringify(canvasNestStructuredPayload), {
+          status: 200,
+          headers: { "x-easy-n8n-execution-id": "branding-execution-444" },
+        }),
+        webhookConfig: { url: "https://example.invalid/branding", headers: {} },
+      });
+    },
+    loadLogoInput: async () => assert.fail("logo should not execute"),
+    executeLogo: async () => assert.fail("logo should not execute"),
+    loadContentInput: async () => assert.fail("content should not execute"),
+    executeContent: async () => assert.fail("content should not execute"),
+    loadAiManagerInput: async () => { calls.aiManagerLoads += 1; throw new Error("ai-manager should not execute"); },
+    startAiManagerJob: async () => { calls.aiManagerStarts += 1; throw new Error("ai-manager should not execute"); },
+    loadTextInput: async (_context, module) => {
+      if (module !== "website") throw new Error(`unexpected text module ${module}`);
+      return {
+        companyName: "CanvasNest",
+        industry: "Art marketplace",
+        targetAudience: "Collectors",
+        brandStyle: "Curated",
+        brandDescription: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+        primaryLanguage: "English",
+      };
+    },
+    executeText: async (options) => {
+      if (options.module !== "website") throw new Error(`unexpected executeText module ${options.module}`);
+      calls.executeWebsite += 1;
+      return { dispatchMode: "sync", output: websiteOutput };
+    },
+    startUsage: async () => ids.usage,
+    bindUsage: async () => {},
+    markDispatching: async () => {},
+    markRunning: async () => {},
+    completeAttempt: async (input) => {
+      calls.completeAttempt += 1;
+      completedAttempts.push(input.attemptId);
+    },
+    failBeforeDispatch: async () => assert.fail("unexpected pre-dispatch failure"),
+    failUncertain: async () => assert.fail("unexpected uncertain failure"),
+    prepareRetry: async () => assert.fail("retry should not be needed"),
+    reconcileUncertain: async () => assert.fail("reconcile should not be needed"),
+    completeUsage: async () => {},
+    failUsage: async () => assert.fail("usage should not fail"),
+    loadBrandingContext: async () => ({ project: { name: "CanvasNest", industry: "Art marketplace" } }),
+    persistBranding: async (_context, output) => {
+      calls.persistBranding += 1;
+      assert.deepEqual(output, canvasNestNormalizedOutput);
+      return { id: ids.output };
+    },
+    persistLogo: async () => assert.fail("logo should not persist"),
+    persistContent: async () => assert.fail("content should not persist"),
+    persistText: async (_context, module, output) => {
+      calls.persistText += 1;
+      assert.equal(module, "website");
+      assert.deepEqual(output, websiteOutput);
+      return { id: websiteAttemptId };
+    },
+    persistContext: async () => assert.fail("branding-context should not persist"),
+    progress: async () => progressState(),
+  };
+
+  const first = await executeEasyModeRun({ runId: ids.run, userId: "firebase-user" }, dependencies);
+  assert.equal(first.state, "in_progress");
+  assert.equal(calls.executeBranding, 1);
+  assert.equal(calls.persistBranding, 1);
+  assert.equal(calls.executeWebsite, 0);
+  assert.equal(calls.completeAttempt, 1);
+  assert.equal(calls.aiManagerLoads, 0);
+  assert.equal(calls.aiManagerStarts, 0);
+  assert.deepEqual(completedAttempts, [ids.attempt]);
+
+  const second = await executeEasyModeRun({ runId: ids.run, userId: "firebase-user" }, dependencies);
+  assert.equal(second.state, "completed");
+  assert.equal(calls.executeBranding, 1);
+  assert.equal(calls.persistBranding, 1);
+  assert.equal(calls.executeWebsite, 1);
+  assert.equal(calls.persistText, 1);
+  assert.equal(calls.completeAttempt, 2);
+  assert.equal(calls.aiManagerLoads, 0);
+  assert.equal(calls.aiManagerStarts, 0);
+  assert.deepEqual(completedAttempts, [ids.attempt, websiteAttemptId]);
 });
 
 test("route, persistence, UI, and AI Manager race contracts remain controlled", async () => {
