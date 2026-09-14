@@ -4,7 +4,7 @@ import test from "node:test";
 import { createTrustedModuleExecutionContext } from "../../app/lib/easy-mode-execution-contracts.ts";
 import { executeEasyModeRun } from "../../app/lib/easy-mode-executor.ts";
 import { BrandingExecutionError } from "../../app/lib/branding-execution.ts";
-import { executeTextSpecialistService } from "../../app/lib/text-specialist-execution.ts";
+import { executeTextSpecialistService, buildCanonicalTextSpecialistInput } from "../../app/lib/text-specialist-execution.ts";
 import { MalformedJsonBodyError, readOptionalLimitedJson } from "../../app/lib/request-body.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -254,6 +254,111 @@ test("confirmed empty-response shared specialist failure retries once and then s
   assert.equal(failUncertain, 0);
   assert.equal(failUsage, 2);
   assert.equal(claims.length, 0);
+});
+
+test("Website canonical input includes primaryLanguage, validates, and reaches usage binding instead of failing before dispatch", async () => {
+  const claim = {
+    ...localClaim(0),
+    moduleId: "website",
+    executionKey: "website-1",
+  };
+  const ownedContext = {
+    project: {
+      id: "project-1",
+      userId: "firebase-user",
+      name: "CanvasNest",
+      companyName: "CanvasNest",
+      industry: "Art marketplace",
+      targetAudience: "Collectors",
+      goal: "Grow sales",
+      location: "Bengaluru",
+      businessStage: "growth",
+      originalBrief: "A curated marketplace for original artwork.",
+      brandStyle: "Curated",
+      brandDescription: "CanvasNest connects independent artists with people looking for meaningful original artwork.",
+      result: null,
+      primaryLanguage: "en",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    },
+    memory: null,
+    businessDna: null,
+  };
+  const input = buildCanonicalTextSpecialistInput(ownedContext, "website");
+  assert.ok(input);
+  assert.equal(input.primaryLanguage, "en");
+
+  let startUsageCalls = 0;
+  let bindUsageCalls = 0;
+  let failBeforeDispatchCalls = 0;
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claim,
+    loadTextInput: async () => input,
+    startUsage: async () => { startUsageCalls += 1; return "usage-1"; },
+    bindUsage: async () => { bindUsageCalls += 1; },
+    markDispatching: async () => {},
+    executeText: async () => ({
+      dispatchMode: "sync",
+      output: {
+        websiteOverview: "A curated marketplace for original artwork.",
+        websiteGoal: "Help customers discover and buy original art.",
+        recommendedPages: "Home, Collections, Artists, About, Contact",
+        siteStructure: "Feature art discovery, artist stories, and direct enquiry paths.",
+        websiteFeatures: "Curated collections, artist profiles, and artwork education.",
+        designRecommendations: "Use warm editorial layouts and clear purchase guidance.",
+        colourScheme: "Neutral base with warm accent tones.",
+        typography: "Editorial serif headlines with clean sans-serif body copy.",
+        recommendedTechStack: "Use a reliable content-managed storefront stack.",
+        seoRecommendations: "Publish artist pages and collection landing pages.",
+      },
+    }),
+    markRunning: async () => {},
+    persistText: async () => ({ id: "website-output-1" }),
+    completeUsage: async () => {},
+    completeAttempt: async () => {},
+    failUsage: async () => assert.fail("usage should not fail"),
+    failBeforeDispatch: async () => { failBeforeDispatchCalls += 1; },
+    failUncertain: async () => assert.fail("website should not become uncertain"),
+    prepareRetry: async () => assert.fail("website should not retry"),
+    progress: async () => ({ runStatus: "Completed", tasks: [] }),
+  });
+
+  assert.equal(result.state, "completed");
+  assert.equal(startUsageCalls, 1);
+  assert.equal(bindUsageCalls, 1);
+  assert.equal(failBeforeDispatchCalls, 0);
+});
+
+test("deterministic shared-specialist pre-dispatch failure does not auto-requeue a second attempt", async () => {
+  const claim = {
+    ...localClaim(0),
+    moduleId: "website",
+    executionKey: "website-1",
+  };
+  let retries = 0;
+  let failBeforeDispatch = 0;
+  let startUsageCalls = 0;
+
+  const result = await executeEasyModeRun({ runId, userId: "firebase-user" }, {
+    enabled: () => true,
+    claim: async () => claim,
+    loadTextInput: async () => { throw new Error("deterministic invalid website input"); },
+    startUsage: async () => { startUsageCalls += 1; return "usage-1"; },
+    bindUsage: async () => assert.fail("bindUsage must not run"),
+    markDispatching: async () => assert.fail("markDispatching must not run"),
+    executeText: async () => assert.fail("provider must not run"),
+    failUsage: async () => assert.fail("usage must not fail because it never started"),
+    failBeforeDispatch: async () => { failBeforeDispatch += 1; },
+    failUncertain: async () => assert.fail("deterministic failure must not be uncertain"),
+    prepareRetry: async () => { retries += 1; return { taskId: claim.taskId, retryReady: true }; },
+    progress: async () => ({ runStatus: "Needs attention", tasks: [] }),
+  });
+
+  assert.equal(result.state, "needs_attention");
+  assert.equal(failBeforeDispatch, 1);
+  assert.equal(retries, 0);
+  assert.equal(startUsageCalls, 0);
 });
 
 test("schema-validation failures after receiving an actual payload are not auto-retried as empty responses", async () => {

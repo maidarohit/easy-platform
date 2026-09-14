@@ -36,12 +36,11 @@ export function getTextSpecialistConfig(module: TextSpecialistModule) {
   return CONFIG[module];
 }
 
-export async function loadCanonicalTextSpecialistInput(
-  context: TrustedModuleExecutionContext,
+export function buildCanonicalTextSpecialistInput(
+  ownedContext: Awaited<ReturnType<typeof loadOwnedProjectContext>>,
   module: TextSpecialistModule,
-): Promise<ModuleExecutionInput> {
-  const ownedContext = await loadOwnedProjectContext(context);
-  if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
+): ModuleExecutionInput | null {
+  if (!ownedContext) return null;
   const { project, memory } = ownedContext;
   const dna = confirmedDnaExecutionContext(ownedContext);
   const companyName = dna?.companyName || memory?.businessName?.trim() || project.companyName?.trim() || project.name.trim();
@@ -62,10 +61,28 @@ export async function loadCanonicalTextSpecialistInput(
       monthlyRevenue: "Not provided", marketingBudget: "Not provided",
       businessGoal: dna?.businessGoal || project.goal?.trim() || "Improve business performance",
     };
+  } else if (module === "website") {
+    candidate = {
+      companyName,
+      industry,
+      targetAudience,
+      brandStyle,
+      brandDescription,
+      primaryLanguage: project.primaryLanguage,
+    };
   } else {
     candidate = { companyName, industry, targetAudience, brandStyle, brandDescription };
   }
-  const input = getModuleAdapter(module)?.validateInput(candidate);
+  return getModuleAdapter(module)?.validateInput(candidate) ?? null;
+}
+
+export async function loadCanonicalTextSpecialistInput(
+  context: TrustedModuleExecutionContext,
+  module: TextSpecialistModule,
+): Promise<ModuleExecutionInput> {
+  const ownedContext = await loadOwnedProjectContext(context);
+  const input = buildCanonicalTextSpecialistInput(ownedContext, module);
+  if (!ownedContext) throw new SpecialistExecutionError("before_dispatch", 404);
   if (!input) throw new SpecialistExecutionError("before_dispatch", 400);
   return input;
 }

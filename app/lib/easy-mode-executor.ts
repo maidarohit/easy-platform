@@ -989,7 +989,7 @@ async function executeAdditionalSpecialistTask(
       message: `${config.label} needs attention.`,
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
       ...(hasSavedResponse ? { savedResponseAvailable: true } : {}),
-      ...(hasSavedResponse || canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
+      ...(hasSavedResponse || canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId })
         ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId }
         : {}),
       ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
