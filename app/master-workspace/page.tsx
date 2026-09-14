@@ -347,7 +347,9 @@ const savePrimaryLanguage = async () => {
                           title={`${item.label}: ${item.status}`}
                         >
                           <span>{item.label}</span>
-                          <span aria-hidden="true">{compactStatusToken(item.status)}</span>
+                          {item.label === "Social"
+                            ? <span>{item.status}</span>
+                            : <span aria-hidden="true">{compactStatusToken(item.status)}</span>}
                         </div>
                       ))}
                     </div>
