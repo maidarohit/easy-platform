@@ -20,6 +20,7 @@ test("owner-scoped workspace API authenticates and blocks cross-tenant project a
   assert.match(route, /eq\(projects\.id, projectId\), eq\(projects\.userId, userId\)/);
   assert.match(route, /eq\(projectOutputs\.userId, userId\)/);
   assert.match(route, /eq\(easyModeRuns\.userId, userId\)/);
+  assert.match(route, /eq\(socialConnections\.userId, userId\)/);
   assert.match(route, /status: 404/);
 });
 

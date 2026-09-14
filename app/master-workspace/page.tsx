@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import Sidebar from "../dashboard/components/Sidebar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
+import { buildLaunchCenterView } from "@/app/lib/master-workspace-launch-center";
 import ProductTutorial from "@/app/components/ProductTutorial";
 import WorkspaceGuide from "@/app/components/WorkspaceGuide";
 
 type WorkspaceData = {
   project: { id: string; name: string; companyName?: string | null; industry?: string | null; goal?: string | null; businessDescription?: string | null };
+  socialConnections: Array<{ provider: string; status: "setup_required" | "connected" | "needs_attention" }>;
   sections: Array<{
     module: string;
     state: "Ready" | "Not generated" | "In progress" | "Failed" | "Needs attention";
@@ -190,6 +192,14 @@ const savePrimaryLanguage = async () => {
     .filter((module) => Boolean(module.number)) ?? [];
   const displayedProject = workspace?.project ?? project;
   const businessName = displayedProject?.companyName?.trim() || displayedProject?.name?.trim() || "";
+  const launchCenter = workspace
+    ? buildLaunchCenterView({
+        projectId,
+        sections: workspace.sections,
+        publication,
+        socialConnections: workspace.socialConnections,
+      })
+    : null;
 
   if (loading || workspaceLoading) {
     return (
@@ -266,6 +276,75 @@ const savePrimaryLanguage = async () => {
             <div className="mb-6 rounded-[22px] border border-red-200 bg-red-50 p-5 text-sm text-red-700">
               {error || workspaceError}
             </div>
+          )}
+
+          {launchCenter && (
+            <section className="relative mb-8 overflow-hidden rounded-[32px] border border-[#D9D4C7] bg-[linear-gradient(135deg,#FCFBF7_0%,#F2F6EE_52%,#EDF6F4_100%)] p-6 shadow-[0_24px_70px_rgba(36,55,48,0.08)] md:p-8">
+              <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#D8B36A] via-[#2F8F78] to-[#7BC8D8]" />
+              <div className="grid gap-5 xl:grid-cols-[1.4fr,0.95fr]">
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="rounded-full border border-[#D7C694] bg-white/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Launch Center</span>
+                    <span className="rounded-full border border-[#C8DDD7] bg-white/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2E7563]">Autopilot Workspace</span>
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-semibold tracking-[-0.04em] text-[#103C32] md:text-5xl">{launchCenter.headline}</h2>
+                    <p className="mt-3 max-w-3xl text-base leading-7 text-[#66756F]">{launchCenter.description}</p>
+                  </div>
+
+                  <article className="rounded-[28px] border border-[#D8DCCF] bg-white/85 p-5 shadow-[0_12px_30px_rgba(36,55,48,0.05)] md:p-6">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Website preview</p>
+                        <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">Your website is ready to review</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-[#C8DDD7] bg-[#F3FBF8] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2E7563]">{launchCenter.websiteWorkspaceStatus}</span>
+                        <span className="rounded-full border border-[#E6DDC9] bg-[#FFF9EE] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8A713F]">{launchCenter.websitePublicationStatus}</span>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-sm leading-7 text-[#66756F]">{launchCenter.websiteSummary}</p>
+                    {(launchCenter.websiteGoal || launchCenter.websitePages) && (
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Website goal</p>
+                          <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter.websiteGoal || "Not provided yet"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Suggested pages</p>
+                          <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter.websitePages || "Not provided yet"}</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <Link href={launchCenter.primaryActions.previewWebsite} className="inline-flex min-h-12 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103C32]">Preview Website</Link>
+                      <Link href={launchCenter.primaryActions.publishOrEditWebsite} className="inline-flex min-h-12 items-center rounded-full bg-[#103C32] px-5 text-sm font-semibold text-white">Publish / Edit Website</Link>
+                      <Link href={launchCenter.primaryActions.continueSetup} className="inline-flex min-h-12 items-center rounded-full border border-[#D7C694] bg-[#FFF7E7] px-5 text-sm font-semibold text-[#7A5C20]">Continue Setup with Buzypeezy</Link>
+                    </div>
+                  </article>
+                </div>
+
+                <div className="grid gap-5">
+                  <article className="rounded-[28px] border border-[#D8DCCF] bg-white/85 p-5 shadow-[0_12px_30px_rgba(36,55,48,0.05)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Autopilot status</p>
+                    <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">What is already prepared</h3>
+                    <div className="mt-5 space-y-3">
+                      {launchCenter.autopilot.map((item) => <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-[#ECE7DE] bg-[#FAF8F1] px-4 py-3">
+                        <span className="text-sm font-medium text-[#344039]">{item.label}</span>
+                        <span className="rounded-full border border-[#D8DCCF] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#103C32]">{item.status}</span>
+                      </div>)}
+                    </div>
+                  </article>
+
+                  <article className="rounded-[28px] border border-[#D8DCCF] bg-white/85 p-5 shadow-[0_12px_30px_rgba(36,55,48,0.05)]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Recommended next step</p>
+                    <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">{launchCenter.nextStep.title}</h3>
+                    <p className="mt-3 text-sm leading-7 text-[#66756F]">{launchCenter.nextStep.description}</p>
+                    <Link href={launchCenter.nextStep.href} className="mt-5 inline-flex min-h-12 items-center rounded-full bg-[#103C32] px-5 text-sm font-semibold text-white">Open Next Step</Link>
+                  </article>
+                </div>
+              </div>
+            </section>
           )}
 
           {/* PROJECT COMMAND CARD */}

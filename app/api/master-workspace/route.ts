@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/app/db";
-import { easyModeRuns, easyModeTasks, projectBusinessDna, projectOutputs, projects } from "@/app/db/schema";
+import { easyModeRuns, easyModeTasks, projectBusinessDna, projectOutputs, projects, socialConnections } from "@/app/db/schema";
 import type { BusinessDnaContent } from "@/app/lib/business-dna";
 import { projectBusinessDnaToProjectMemory } from "@/app/lib/business-dna";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
@@ -129,9 +129,17 @@ export async function GET(request: Request) {
     const customerTasks = await customerTaskViews(latestRun.id, tasks);
     for (const task of customerTasks) taskStatuses.set(task.moduleId, task);
   }
+  const connections = await db.select({
+    provider: socialConnections.provider,
+    status: socialConnections.status,
+  }).from(socialConnections).where(and(
+    eq(socialConnections.projectId, projectId),
+    eq(socialConnections.userId, userId),
+  ));
 
   return Response.json({
     project: workspaceProjectPresentation(project, dnaRow?.dna ?? null),
+    socialConnections: connections,
     sections: WORKSPACE_MODULES.map((module) => {
       const task = taskStatuses.get(module);
       const failedState = task?.customerState === "Failed" || task?.customerState === "Needs attention";
