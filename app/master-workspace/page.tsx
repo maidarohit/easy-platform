@@ -43,6 +43,27 @@ const MODULE_DETAILS: Readonly<Record<string, { number: string; title: string; d
 
 const fieldLabel = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 
+function compactStatusSymbol(status: string) {
+  if (status === "Ready" || status === "Connected") return "✓";
+  if (status === "In progress") return "…";
+  if (status === "Failed" || status === "Needs attention") return "!";
+  return "○";
+}
+
+function compactStatusClassName(status: string) {
+  if (status === "Ready" || status === "Connected") return "border-[#CFE3D5] bg-[#F2FAF5] text-[#1E6B47]";
+  if (status === "In progress") return "border-[#E7D9B4] bg-[#FFF9EC] text-[#8A713F]";
+  if (status === "Failed" || status === "Needs attention") return "border-[#E7CBC3] bg-[#FFF4F0] text-[#9A4E3E]";
+  return "border-[#D8DCCF] bg-white text-[#66756F]";
+}
+
+function compactStatusToken(status: string) {
+  if (compactStatusSymbol(status) === "!") return "!";
+  if (status === "Ready" || status === "Connected") return "OK";
+  if (status === "In progress") return "...";
+  return "o";
+}
+
 function MasterWorkspaceContent() {
   const router = useRouter();
   const {
@@ -296,7 +317,9 @@ const savePrimaryLanguage = async () => {
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Website preview</p>
-                        <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">Your website is ready to review</h3>
+                        <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">
+                          {launchCenter.websiteWorkspaceStatus === "Ready" ? "Your website is ready" : "Your website workspace"}
+                        </h3>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="rounded-full border border-[#C8DDD7] bg-[#F3FBF8] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2E7563]">{launchCenter.websiteWorkspaceStatus}</span>
@@ -304,18 +327,6 @@ const savePrimaryLanguage = async () => {
                       </div>
                     </div>
                     <p className="mt-4 text-sm leading-7 text-[#66756F]">{launchCenter.websiteSummary}</p>
-                    {(launchCenter.websiteGoal || launchCenter.websitePages) && (
-                      <div className="mt-5 grid gap-3 md:grid-cols-2">
-                        <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Website goal</p>
-                          <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter.websiteGoal || "Not provided yet"}</p>
-                        </div>
-                        <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
-                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Suggested pages</p>
-                          <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter.websitePages || "Not provided yet"}</p>
-                        </div>
-                      </div>
-                    )}
                     <div className="mt-6 flex flex-wrap gap-3">
                       <Link href={launchCenter.primaryActions.previewWebsite} className="inline-flex min-h-12 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103C32]">Preview Website</Link>
                       <Link href={launchCenter.primaryActions.publishOrEditWebsite} className="inline-flex min-h-12 items-center rounded-full bg-[#103C32] px-5 text-sm font-semibold text-white">Publish / Edit Website</Link>
@@ -328,11 +339,17 @@ const savePrimaryLanguage = async () => {
                   <article className="rounded-[28px] border border-[#D8DCCF] bg-white/85 p-5 shadow-[0_12px_30px_rgba(36,55,48,0.05)]">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">Autopilot status</p>
                     <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">What is already prepared</h3>
-                    <div className="mt-5 space-y-3">
-                      {launchCenter.autopilot.map((item) => <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl border border-[#ECE7DE] bg-[#FAF8F1] px-4 py-3">
-                        <span className="text-sm font-medium text-[#344039]">{item.label}</span>
-                        <span className="rounded-full border border-[#D8DCCF] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#103C32]">{item.status}</span>
-                      </div>)}
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      {launchCenter.autopilot.map((item) => (
+                        <div
+                          key={item.label}
+                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${compactStatusClassName(item.status)}`}
+                          title={`${item.label}: ${item.status}`}
+                        >
+                          <span>{item.label}</span>
+                          <span aria-hidden="true">{compactStatusToken(item.status)}</span>
+                        </div>
+                      ))}
                     </div>
                   </article>
 
@@ -347,12 +364,36 @@ const savePrimaryLanguage = async () => {
             </section>
           )}
 
-          {/* PROJECT COMMAND CARD */}
-          <section className="relative mb-8 overflow-hidden rounded-[30px] border border-[#ded9cc] bg-white/75 p-6 shadow-[0_20px_60px_rgba(55,75,66,0.07)] md:p-8">
-            <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#ff6e7f] via-[#ffb7af] to-[#30d9ec]" />
+          <details className="mb-8 rounded-[30px] border border-[#DED9CC] bg-white/72 p-5 shadow-[0_20px_60px_rgba(55,75,66,0.06)] md:p-6">
+            <summary className="cursor-pointer list-none text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103C32] focus-visible:ring-offset-2">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#8A713F]">Business details</p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[#103C32]">View business details</h2>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-[#66756F]">Open the saved planning notes, language settings, and business details behind this workspace.</p>
+                </div>
+                <span className="inline-flex min-h-11 items-center rounded-full border border-[#D8DCCF] bg-white px-4 text-sm font-semibold text-[#103C32]">
+                  Open details
+                </span>
+              </div>
+            </summary>
 
-            <div className="flex flex-col justify-between gap-8 xl:flex-row">
-              <div className="min-w-0 xl:w-[30%] xl:min-w-[280px] xl:flex-none">
+            <div className="mt-6 border-t border-[#E8E2D5] pt-6">
+              {(launchCenter?.websiteGoal || launchCenter?.websitePages) && (
+                <div className="mb-5 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Website goal</p>
+                    <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter?.websiteGoal || "Not provided yet"}</p>
+                  </div>
+                  <div className="rounded-2xl border border-[#E8E2D5] bg-[#FAF8F1] p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B8B72]">Suggested pages</p>
+                    <p className="mt-2 text-sm leading-6 text-[#344039]">{launchCenter?.websitePages || "Not provided yet"}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col justify-between gap-8 xl:flex-row">
+                <div className="min-w-0 xl:w-[30%] xl:min-w-[280px] xl:flex-none">
                 <div className="mb-3 flex items-center gap-3">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#f5c7c4] bg-[#fff1ee] text-xl">
                     ✦
@@ -461,9 +502,10 @@ const savePrimaryLanguage = async () => {
                     {workspace?.sections.some((section) => section.module === "ai-manager" && section.state === "Ready") ? "Saved" : "Not generated"}
                   </p>
                 </div>
+                </div>
               </div>
             </div>
-          </section>
+          </details>
 
           {/* ADVANCED TOOLS */}
           <details id="advanced-tools" className="scroll-mt-6 rounded-[28px] border border-[#ded9cc] bg-white/55 p-5 md:p-7">

@@ -4,6 +4,7 @@ export type LaunchCenterSection = Readonly<{
   module: string;
   state: LaunchCenterSectionState;
   output: Record<string, unknown> | null;
+  reviewState?: "Approved" | "Needs review" | null;
 }>;
 
 export type LaunchCenterPublication = Readonly<{
@@ -49,6 +50,10 @@ function sectionStatus(sections: readonly LaunchCenterSection[], module: string)
   return sections.find((section) => section.module === module)?.state ?? "Not generated";
 }
 
+function sectionReviewState(sections: readonly LaunchCenterSection[], module: string) {
+  return sections.find((section) => section.module === module)?.reviewState ?? null;
+}
+
 function sectionOutput(sections: readonly LaunchCenterSection[], module: string) {
   return sections.find((section) => section.module === module)?.output ?? null;
 }
@@ -74,18 +79,27 @@ export function deriveLaunchCenterNextStep(input: Readonly<{
 }>): LaunchCenterNextStep {
   const previewHref = `/business-preview?projectId=${encodeURIComponent(input.projectId)}`;
   const socialHref = `/social?projectId=${encodeURIComponent(input.projectId)}`;
-  const seoHref = `/seo-ai?projectId=${encodeURIComponent(input.projectId)}`;
+  const storeHref = `/store?projectId=${encodeURIComponent(input.projectId)}`;
+  const automationHref = `/dashboard/automation?projectId=${encodeURIComponent(input.projectId)}`;
   const advancedHref = `/master-workspace?projectId=${encodeURIComponent(input.projectId)}#advanced-tools`;
   const websiteStatus = sectionStatus(input.sections, "website");
+  const websiteReviewState = sectionReviewState(input.sections, "website");
   const marketingStatus = sectionStatus(input.sections, "marketing");
   const seoStatus = sectionStatus(input.sections, "seo");
   const salesStatus = sectionStatus(input.sections, "sales");
   const socialStatus = deriveLaunchCenterSocialStatus(input.socialConnections);
 
-  if (websiteStatus === "Ready" && input.publication.status !== "active") {
+  if (websiteStatus === "Ready" && websiteReviewState !== "Approved") {
     return {
       title: "Preview your website",
-      description: "See the website Buzypeezy prepared before you publish or share it.",
+      description: "Review the saved website before you publish or make changes.",
+      href: previewHref,
+    };
+  }
+  if (websiteStatus === "Ready" && input.publication.status !== "active") {
+    return {
+      title: "Publish your website",
+      description: "Your approved website is ready to go live when you are.",
       href: previewHref,
     };
   }
@@ -96,14 +110,14 @@ export function deriveLaunchCenterNextStep(input: Readonly<{
       href: socialHref,
     };
   }
-  if (seoStatus === "Ready") {
+  if (input.publication.status === "active" && marketingStatus === "Ready" && seoStatus === "Ready" && salesStatus === "Ready") {
     return {
-      title: "Review SEO",
-      description: "Open your saved SEO plan and review the search foundations prepared for this business.",
-      href: seoHref,
+      title: "Add products/services",
+      description: "Complete the offers your customers will see when they land on your business.",
+      href: storeHref,
     };
   }
-  if (marketingStatus !== "Ready" || salesStatus !== "Ready") {
+  if (websiteStatus !== "Ready" || marketingStatus !== "Ready" || seoStatus !== "Ready" || salesStatus !== "Ready") {
     return {
       title: "Continue Setup with Buzypeezy",
       description: "Open your saved workspace areas and keep shaping the parts that are not ready yet.",
@@ -111,9 +125,9 @@ export function deriveLaunchCenterNextStep(input: Readonly<{
     };
   }
   return {
-    title: "Publish your website",
-    description: "Your business workspace is ready. Review the website preview and publish when you are happy with it.",
-    href: previewHref,
+    title: "Configure automation",
+    description: "Turn your saved business setup into repeatable workflows and follow-ups.",
+    href: automationHref,
   };
 }
 
@@ -154,16 +168,20 @@ export function buildLaunchCenterView(input: Readonly<{
     primaryActions: {
       previewWebsite: previewHref,
       publishOrEditWebsite: previewHref,
-      continueSetup: nextStep.href,
+      continueSetup: advancedHref(input.projectId),
     },
     autopilot: [
-      { label: "Brand ready", status: brandStatus },
-      { label: "Website ready", status: websiteStatus },
-      { label: "SEO foundation", status: seoStatus },
+      { label: "Brand", status: brandStatus },
+      { label: "Website", status: websiteStatus },
+      { label: "SEO", status: seoStatus },
       { label: "Marketing", status: marketingStatus },
       { label: "Sales", status: salesStatus },
-      { label: "Social connections", status: socialStatus },
+      { label: "Social", status: socialStatus },
     ],
     nextStep,
   };
+}
+
+function advancedHref(projectId: string) {
+  return `/master-workspace?projectId=${encodeURIComponent(projectId)}#advanced-tools`;
 }
