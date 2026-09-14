@@ -522,6 +522,9 @@ export const easyModeRuns = pgTable(
     goalId: varchar("goal_id", { length: 64 }).notNull(),
     status: varchar("status", { length: 32 }).$type<EasyModeRunStatus>().notNull().default("queued"),
     idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+    executionLeaseToken: uuid("execution_lease_token"),
+    executionLeaseExpiresAt: timestamp("execution_lease_expires_at", { withTimezone: true }),
+    executionLeaseAcquiredAt: timestamp("execution_lease_acquired_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -529,7 +532,12 @@ export const easyModeRuns = pgTable(
   },
   (table) => [
     uniqueIndex("easy_mode_runs_owner_project_idempotency_unique").on(table.userId, table.projectId, table.idempotencyKey),
+    uniqueIndex("easy_mode_runs_one_active_per_project_unique")
+      .on(table.projectId)
+      .where(sql`${table.status} in ('queued','running')`),
     index("easy_mode_runs_owner_project_idx").on(table.userId, table.projectId),
+    index("easy_mode_runs_dispatch_queue_idx")
+      .on(table.status, table.createdAt),
     check("easy_mode_runs_goal_id_check", sql`${table.goalId} in ('build_everything','build_website','get_customers','build_brand','create_content','improve_business')`),
     check("easy_mode_runs_status_check", sql`${table.status} in ('queued','running','partially_completed','completed','failed','cancelled')`),
   ],

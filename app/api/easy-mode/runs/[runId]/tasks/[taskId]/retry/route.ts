@@ -1,3 +1,4 @@
+import { scheduleEasyModeRunDispatcher, kickEasyModeRunDispatcher } from "@/app/lib/easy-mode-run-dispatcher";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTaskAttempts, easyModeTasks, projects } from "@/app/db/schema";
@@ -8,7 +9,6 @@ import {
   prepareUncertainEasyModeTaskRetry,
   reconcileUncertainEasyModeAttempt,
 } from "@/app/lib/easy-mode-task-attempts";
-import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
 import { replaySavedEasyModeProviderResponse } from "@/app/lib/easy-mode-provider-recovery";
 import { validateEasyModeRunId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readOptionalLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
@@ -72,7 +72,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const replay = await replaySavedEasyModeProviderResponse({ attemptId: attempt.id, userId });
   if (replay.state === "completed" || replay.state === "ignored") {
-    const result = await executeEasyModeRun({ runId, userId });
+    const dispatch = await kickEasyModeRunDispatcher({ requestedRunId: runId, userId });
+    const result = dispatch.requestedExecution ?? { state: "in_progress" as const, message: "This business build is ready to continue." };
+    scheduleEasyModeRunDispatcher({ requestedRunId: runId, userId });
     return Response.json({ ...result, recovery: "saved_response_replay" }, {
       status: result.state === "needs_attention" ? 422 : 200,
       headers: { "Cache-Control": "no-store" },
@@ -106,7 +108,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
     throw error;
   }
-  const result = await executeEasyModeRun({ runId, userId });
+  const dispatch = await kickEasyModeRunDispatcher({ requestedRunId: runId, userId });
+  const result = dispatch.requestedExecution ?? { state: "in_progress" as const, message: "This business build is queued and will start soon." };
+  scheduleEasyModeRunDispatcher({ requestedRunId: runId, userId });
   const status = result.state === "needs_attention" ? 422 : 200;
   return Response.json({ ...result, recovery: attempt.status === "failed_uncertain" ? "explicit_uncertain" : "safe_retry" }, {
     status,

@@ -27,6 +27,7 @@ import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVE_ATTEMPT_STATUSES = ["claimed", "dispatching", "running"] as const;
+export const EASY_MODE_ACTIVE_ATTEMPT_STATUSES = ACTIVE_ATTEMPT_STATUSES;
 const SAFE_ERROR_CODES = new Set([
   "TASK_FAILED",
   "OUTPUT_INVALID",
@@ -38,6 +39,7 @@ const SAFE_ERROR_CODES = new Set([
 const MIN_LEASE_MS = 30_000;
 const MAX_LEASE_MS = 15 * 60_000;
 const DEFAULT_LEASE_MS = 5 * 60_000;
+export const EASY_MODE_RUN_LEASE_MS = 15 * 60_000;
 const RETRYABLE_UNCERTAIN_SAFE_ERROR_CODES = new Set(["DELIVERY_UNCERTAIN", "TASK_FAILED"]);
 
 export type EasyModeAttemptFailureStatus = "failed_before_dispatch" | "failed_uncertain";
@@ -107,6 +109,33 @@ function leaseDuration(value: number | undefined) {
     throw new EasyModeAttemptError("INVALID_REQUEST");
   }
   return value;
+}
+
+export function buildEasyModeRunExecutionLease(now = new Date()) {
+  return Object.freeze({
+    executionLeaseToken: randomUUID(),
+    executionLeaseAcquiredAt: now,
+    executionLeaseExpiresAt: new Date(now.getTime() + EASY_MODE_RUN_LEASE_MS),
+  });
+}
+
+export function clearEasyModeRunExecutionLease() {
+  return Object.freeze({
+    executionLeaseToken: null,
+    executionLeaseAcquiredAt: null,
+    executionLeaseExpiresAt: null,
+  });
+}
+
+export function buildEasyModeRunStatusLeaseUpdate(status: EasyModeRunStatus, now = new Date()) {
+  return status === "running"
+    ? { status, completedAt: null, failedAt: null, ...buildEasyModeRunExecutionLease(now) }
+    : {
+        status,
+        completedAt: status === "completed" ? now : null,
+        failedAt: status === "failed" || status === "partially_completed" ? now : null,
+        ...clearEasyModeRunExecutionLease(),
+      };
 }
 
 function safeErrorCode(value: unknown): string {
@@ -229,6 +258,8 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
     )).limit(1);
     if (!ownedProject) throw new EasyModeAttemptError("RUN_NOT_FOUND");
     if (["completed", "failed", "cancelled"].includes(run.status)) return null;
+    const now = new Date();
+    const runLeaseActive = Boolean(run.executionLeaseExpiresAt && run.executionLeaseExpiresAt.getTime() > now.getTime());
 
     const plan = resolveEasyModePlan(run.goalId);
     if (!plan) throw new EasyModeAttemptError("PLAN_MISMATCH");
@@ -260,7 +291,6 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
         eq(projectOutputs.module, activeTask.moduleId),
         gte(projectOutputs.createdAt, activeAttempt.startedAt),
       )).limit(1);
-      const now = new Date();
       const recoverable = isRecoverablePreDispatchClaim({
         attemptStatus: activeAttempt.status,
         providerExecutionId: activeAttempt.providerExecutionId,
@@ -310,6 +340,8 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
       activeTask.startedAt = null;
     }
 
+    if (!runLeaseActive) return null;
+
     const task = tasks.find((candidate) => candidate.status === "queued");
     if (!task) return null;
     if (input.allowedModuleIds && !input.allowedModuleIds.includes(task.moduleId as EasyModePlannedModuleId)) {
@@ -337,7 +369,6 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
     }).returning({ id: easyModeTaskAttempts.id });
     if (!attempt) throw new EasyModeAttemptError("ACTIVE_ATTEMPT");
 
-    const now = new Date();
     const [claimedTask] = await transaction.update(easyModeTasks).set({
       status: "running",
       attemptCount: attemptNumber,
@@ -349,10 +380,8 @@ export async function claimNextEasyModeTask(input: ClaimInput): Promise<ClaimedE
     if (!claimedTask) throw new EasyModeAttemptError("ACTIVE_ATTEMPT");
 
     await transaction.update(easyModeRuns).set({
-      status: "running",
+      ...buildEasyModeRunStatusLeaseUpdate("running", now),
       startedAt: run.startedAt ?? now,
-      completedAt: null,
-      failedAt: null,
     }).where(eq(easyModeRuns.id, run.id));
 
     return Object.freeze({
@@ -452,12 +481,8 @@ async function refreshRunStatus(
   }).from(easyModeTasks)
     .where(eq(easyModeTasks.runId, runId));
   const status = derivePersistedEasyModeRunStatus(tasks);
-  const now = new Date();
-  await transaction.update(easyModeRuns).set({
-    status,
-    completedAt: status === "completed" ? now : null,
-    failedAt: status === "failed" || status === "partially_completed" ? now : null,
-  }).where(eq(easyModeRuns.id, runId));
+  await transaction.update(easyModeRuns).set(buildEasyModeRunStatusLeaseUpdate(status, new Date()))
+    .where(eq(easyModeRuns.id, runId));
   return status;
 }
 
@@ -741,7 +766,10 @@ async function prepareFailedTaskRetry(input: Readonly<{ attemptId: string; userI
     if (!task) throw new EasyModeAttemptError("RETRY_NOT_ALLOWED");
 
     const [run] = await transaction.update(easyModeRuns).set({
-      status: "running", completedAt: null, failedAt: null,
+      status: "queued",
+      ...clearEasyModeRunExecutionLease(),
+      completedAt: null,
+      failedAt: null,
     }).where(and(
       eq(easyModeRuns.id, snapshot.runId),
       eq(easyModeRuns.userId, input.userId),

@@ -224,7 +224,7 @@ test("shared specialist callback route and sync logic retain auth, idempotency, 
   assert.match(route, /readLimitedJson\(request, MAX_CALLBACK_BODY_BYTES\)/);
   assert.match(route, /syncEasyModeSpecialistCallback/);
   assert.match(route, /const continuation = result\.continuation/);
-  assert.match(route, /executeEasyModeRun\(continuation\)/);
+  assert.match(route, /scheduleEasyModeRunDispatcher/);
   assert.match(callbackLib, /attempt\.status === "completed" && task\.status === "completed" && task\.projectOutputId/);
   assert.match(callbackLib, /attempt\.status === "failed_uncertain"/);
   assert.match(callbackLib, /latestAttempt\?\.id === attempt\.id/);

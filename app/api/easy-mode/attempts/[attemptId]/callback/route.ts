@@ -1,5 +1,4 @@
-import { after } from "next/server";
-import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
+import { scheduleEasyModeRunDispatcher } from "@/app/lib/easy-mode-run-dispatcher";
 import {
   SpecialistCallbackError,
   specialistCallbackSecret,
@@ -44,15 +43,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   try {
     const result = await syncEasyModeSpecialistCallback(attemptId, body);
     const continuation = result.continuation;
-    if (continuation) {
-      after(async () => {
-        try {
-          await executeEasyModeRun(continuation);
-        } catch (error) {
-          console.error("Easy Mode continuation failed after specialist callback:", error);
-        }
-      });
-    }
+    scheduleEasyModeRunDispatcher(continuation ? { requestedRunId: continuation.runId, userId: continuation.userId } : {});
     return Response.json({
       attemptId,
       module: body.module,

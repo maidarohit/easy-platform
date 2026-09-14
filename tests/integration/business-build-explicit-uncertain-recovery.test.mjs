@@ -156,7 +156,7 @@ test("uncertain recovery route reconciles first and only then prepares the named
   const recovery = route.slice(route.indexOf('if (attempt.status === "failed_uncertain")'));
   assert.ok(recovery.indexOf("reconcileUncertainEasyModeAttempt") < recovery.indexOf("prepareUncertainEasyModeTaskRetry"));
   assert.match(route, /ownedTask\.projectOutputId !== null/);
-  assert.match(route, /executeEasyModeRun\(\{ runId, userId \}\)/);
+  assert.match(route, /kickEasyModeRunDispatcher/);
 });
 
 test("uncertain retry preparation fails closed and preserves completed tasks", async () => {

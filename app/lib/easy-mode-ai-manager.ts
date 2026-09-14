@@ -4,7 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/app/db";
 import { aiManagerJobs, easyModeRuns, easyModeTaskAttempts, easyModeTasks, projectMemory, projectOutputs } from "@/app/db/schema";
 import { getModuleAdapter, type ModuleExecutionInput, type TrustedModuleExecutionContext } from "@/app/lib/easy-mode-execution-contracts";
-import { derivePersistedEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
+import { buildEasyModeRunStatusLeaseUpdate, derivePersistedEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { SpecialistExecutionError } from "@/app/lib/specialist-execution";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
@@ -136,11 +136,8 @@ export async function syncEasyModeAiManagerTask(jobId: string) {
       projectOutputId: easyModeTasks.projectOutputId,
     }).from(easyModeTasks).where(eq(easyModeTasks.runId, attempt.runId));
     const runStatus = derivePersistedEasyModeRunStatus(statuses);
-    await transaction.update(easyModeRuns).set({
-      status: runStatus,
-      completedAt: runStatus === "completed" ? now : null,
-      failedAt: runStatus === "failed" || runStatus === "partially_completed" ? now : null,
-    }).where(and(eq(easyModeRuns.id, attempt.runId), eq(easyModeRuns.userId, job.userId)));
+    await transaction.update(easyModeRuns).set(buildEasyModeRunStatusLeaseUpdate(runStatus, now))
+      .where(and(eq(easyModeRuns.id, attempt.runId), eq(easyModeRuns.userId, job.userId)));
     return job.status === "completed" ? { runId: attempt.runId, userId: job.userId } : null;
   });
 }

@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, like, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { db } from "@/app/db";
 import { easyModeRuns, easyModeTasks, projectBusinessDna, projects } from "@/app/db/schema";
 import { customerTaskViews } from "@/app/lib/easy-mode-customer-status";
 import { easyModeQuotaError, preflightEasyModePlanQuota } from "@/app/lib/easy-mode-quota-preflight";
 import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
+import { scheduleEasyModeRunDispatcher } from "@/app/lib/easy-mode-run-dispatcher";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { validateEasyModeProjectId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
@@ -66,11 +67,17 @@ async function createBusinessBuildRun(input: { userId: string; projectId: string
   const plan = resolveEasyModePlan(BUILD_GOAL);
   if (!plan) return null;
   return db.transaction(async (transaction) => {
+    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`easy-mode-project-build:${input.projectId}`}))`);
     if (input.freePreviewBuild) {
       await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`free-preview-build:${input.userId}`}))`);
       const [prior] = await transaction.select({ total: sql<number>`count(*)` }).from(easyModeRuns).where(and(eq(easyModeRuns.userId, input.userId), eq(easyModeRuns.goalId, BUILD_GOAL)));
       if (Number(prior?.total ?? 0) > 0) return null;
     }
+    const [active] = await transaction.select({ id: easyModeRuns.id }).from(easyModeRuns).where(and(
+      eq(easyModeRuns.projectId, input.projectId),
+      inArray(easyModeRuns.status, ["queued", "running"]),
+    )).limit(1);
+    if (active) return null;
     const [run] = await transaction.insert(easyModeRuns).values({
       userId: input.userId, projectId: input.projectId, goalId: BUILD_GOAL,
       status: "queued", idempotencyKey: input.idempotencyKey,
@@ -147,6 +154,7 @@ export async function handleBusinessBuildPost(request: Request, dependencies: Bu
   if (!run) return "freePreviewBuild" in allowance && allowance.freePreviewBuild === true
     ? Response.json({ error: "The free preview build has already been used.", code: "PAID_SUBSCRIPTION_REQUIRED" }, { status: 403 })
     : Response.json({ error: "Unable to prepare your business build." }, { status: 500 });
+  scheduleEasyModeRunDispatcher({ requestedRunId: run.id, userId });
   return Response.json(await dependencies.responseForRun(run), { status: created ? 201 : 200 });
 }
 

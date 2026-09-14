@@ -22,6 +22,7 @@ import {
   type EasyModeFailureCategory,
   type EasyModeValidationStage,
 } from "@/app/lib/easy-mode-recovery-state";
+import { buildEasyModeRunStatusLeaseUpdate } from "@/app/lib/easy-mode-task-attempts";
 import {
   persistBrandingOutputAndMemoryInTransaction,
   persistContentOutputAndMemoryInTransaction,
@@ -504,12 +505,8 @@ async function refreshRunStatus(transaction: Parameters<Parameters<typeof db.tra
     projectOutputId: easyModeTasks.projectOutputId,
   }).from(easyModeTasks).where(eq(easyModeTasks.runId, runId));
   const status = derivePersistedEasyModeRunStatus(tasks);
-  const now = new Date();
-  await transaction.update(easyModeRuns).set({
-    status,
-    completedAt: status === "completed" ? now : null,
-    failedAt: status === "failed" || status === "partially_completed" ? now : null,
-  }).where(eq(easyModeRuns.id, runId));
+  await transaction.update(easyModeRuns).set(buildEasyModeRunStatusLeaseUpdate(status, new Date()))
+    .where(eq(easyModeRuns.id, runId));
   return status;
 }
 

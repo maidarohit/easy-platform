@@ -405,7 +405,7 @@ test("async callback infrastructure keeps one durable specialist callback route 
   assert.match(executor, /provider-backed task dispatched asynchronously/);
   assert.match(route, /syncEasyModeSpecialistCallback/);
   assert.match(route, /const continuation = result\.continuation/);
-  assert.match(route, /executeEasyModeRun\(continuation\)/);
+  assert.match(route, /scheduleEasyModeRunDispatcher/);
 });
 
 test("six completed outputs stay untouched and polling resumes through the guarded runner", async () => {

@@ -368,8 +368,8 @@ test("AI Manager completion resumes the automatic runner and the UI does not off
   const route = await source("app/api/easy-mode/runs/[runId]/execute-next/route.ts");
   const page = await source("app/easy-mode/page.tsx");
   assert.match(callback, /syncEasyModeAiManagerTask\(jobId\)/);
-  assert.match(callback, /executeEasyModeRun\(continuation\)/);
-  assert.match(route, /executeEasyModeRun/);
+  assert.match(callback, /scheduleEasyModeRunDispatcher/);
+  assert.match(route, /kickEasyModeRunDispatcher/);
   assert.match(page, /runView\.run\.status !== "running"/);
   assert.match(page, /Building your business\.\.\./);
   assert.match(page, /Open Business Workspace/);

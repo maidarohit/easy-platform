@@ -5,7 +5,7 @@ import type { AiManagerOutput, AiManagerStrategy } from "@/app/lib/ai/types";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { syncEasyModeAiManagerTask } from "@/app/lib/easy-mode-ai-manager";
 import { getModuleAdapter } from "@/app/lib/easy-mode-execution-contracts";
-import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
+import { scheduleEasyModeRunDispatcher } from "@/app/lib/easy-mode-run-dispatcher";
 import {
   SpecialistCallbackError,
   syncEasyModeSpecialistCallback,
@@ -19,7 +19,6 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import { and, eq, inArray } from "drizzle-orm";
-import { after } from "next/server";
 
 const strategyKeys: Array<keyof AiManagerStrategy> = [
   "overview",
@@ -268,15 +267,7 @@ export async function POST(request: Request, { params }: JobRouteContext) {
     try {
       const result = await syncEasyModeSpecialistCallback(jobId, body.body);
       const continuation = result.continuation;
-      if (continuation) {
-        after(async () => {
-          try {
-            await executeEasyModeRun(continuation);
-          } catch (error) {
-            console.error("Easy Mode continuation failed after branding callback via jobs route:", error);
-          }
-        });
-      }
+      scheduleEasyModeRunDispatcher(continuation ? { requestedRunId: continuation.runId, userId: continuation.userId } : {});
       return Response.json({
         attemptId: jobId,
         module: body.body.module,
@@ -302,7 +293,7 @@ export async function POST(request: Request, { params }: JobRouteContext) {
 
   if (job.status === "completed" || job.status === "failed") {
     const continuation = await syncEasyModeAiManagerTask(jobId);
-    if (job.status === "completed" && continuation) await executeEasyModeRun(continuation);
+    scheduleEasyModeRunDispatcher(continuation ? { requestedRunId: continuation.runId, userId: continuation.userId } : {});
     return Response.json({ jobId, status: job.status });
   }
 
@@ -358,15 +349,9 @@ export async function POST(request: Request, { params }: JobRouteContext) {
   );
   const continuation = await syncEasyModeAiManagerTask(jobId);
 
-if (nextStatus === "completed" && continuation) {
-  after(async () => {
-    try {
-      await executeEasyModeRun(continuation);
-    } catch (error) {
-      console.error("Easy Mode continuation failed after AI Manager callback:", error);
-    }
-  });
-}
+  scheduleEasyModeRunDispatcher(nextStatus === "completed" && continuation
+    ? { requestedRunId: continuation.runId, userId: continuation.userId }
+    : {});
 
-return Response.json({ jobId, status: nextStatus });
+  return Response.json({ jobId, status: nextStatus });
 }

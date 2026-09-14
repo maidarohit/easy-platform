@@ -1,8 +1,8 @@
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import {
-  executeEasyModeRun,
   isEasyModeExecutionEnabled,
 } from "@/app/lib/easy-mode-executor";
+import { kickEasyModeRunDispatcher, scheduleEasyModeRunDispatcher } from "@/app/lib/easy-mode-run-dispatcher";
 import {
   MalformedJsonBodyError,
   readLimitedJson,
@@ -48,7 +48,25 @@ export async function POST(request: Request, { params }: RouteContext) {
     }
   }
 
-  const result = await executeEasyModeRun({ runId: (await params).runId, userId });
+  const runId = (await params).runId;
+  const dispatch = await kickEasyModeRunDispatcher({ requestedRunId: runId, userId });
+  const result = dispatch.requestedExecution ?? {
+    state: dispatch.requestedRunState === "completed"
+      ? "completed"
+      : dispatch.requestedRunState === "failed"
+        ? "needs_attention"
+        : dispatch.requestedRunState === "not_found"
+          ? "not_found"
+          : "in_progress",
+    message: dispatch.requestedRunState === "queued"
+      ? "This business build is queued and will start soon."
+      : dispatch.requestedRunState === "completed"
+        ? "This business build is complete."
+        : dispatch.requestedRunState === "failed"
+          ? "This business build needs attention before it can continue."
+          : "This business build is already in progress or has no waiting steps.",
+  };
+  if (result.state !== "not_found") scheduleEasyModeRunDispatcher({ requestedRunId: runId, userId });
   const status = result.state === "not_found" ? 404 :
     result.state === "not_available" ? 409 :
       result.state === "subscription_required" ? 403 :

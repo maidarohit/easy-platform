@@ -12,8 +12,11 @@ import {
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
 import { buildAttemptRecoveryState } from "@/app/lib/easy-mode-recovery-state";
-import { derivePersistedEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
-import { saveEasyModeAttemptRecoveryState } from "@/app/lib/easy-mode-task-attempts";
+import {
+  buildEasyModeRunStatusLeaseUpdate,
+  derivePersistedEasyModeRunStatus,
+  saveEasyModeAttemptRecoveryState,
+} from "@/app/lib/easy-mode-task-attempts";
 import {
   persistBrandingOutputAndMemoryInTransaction,
   persistContentOutputAndMemoryInTransaction,
@@ -283,12 +286,8 @@ async function refreshRunStatus(transaction: DbTransaction, runId: string) {
     projectOutputId: easyModeTasks.projectOutputId,
   }).from(easyModeTasks).where(eq(easyModeTasks.runId, runId));
   const status = derivePersistedEasyModeRunStatus(tasks);
-  const now = new Date();
-  await transaction.update(easyModeRuns).set({
-    status,
-    completedAt: status === "completed" ? now : null,
-    failedAt: status === "failed" || status === "partially_completed" ? now : null,
-  }).where(eq(easyModeRuns.id, runId));
+  await transaction.update(easyModeRuns).set(buildEasyModeRunStatusLeaseUpdate(status, new Date()))
+    .where(eq(easyModeRuns.id, runId));
   return status;
 }
 
