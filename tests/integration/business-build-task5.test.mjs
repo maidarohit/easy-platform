@@ -119,16 +119,22 @@ test("6 entitlement rejection remains authoritative and creates no run", async (
   assert.equal(mock.creates(), 0);
 });
 
-test("7 UI exposes one build action, friendly phases, and the real workspace", async () => {
-  const [onboarding, progress] = await Promise.all([
+test("7 UI exposes one build action, premium three-step progress, and the real workspace", async () => {
+  const [onboarding, progress, stages] = await Promise.all([
     readFile("app/onboarding/page.tsx", "utf8"), readFile("app/business-build/page.tsx", "utf8"),
+    readFile("app/lib/easy-mode-customer-progress-stages.ts", "utf8"),
   ]);
   assert.match(onboarding, /Build My Business/);
   assert.match(onboarding, /buildStartInFlight\.current/);
   assert.match(onboarding, /disabled=\{isStartingBuild\}/);
   assert.match(onboarding, /Starting your build/);
   assert.doesNotMatch(onboarding, /coming in Task 5/);
-  for (const label of ["Understanding your direction", "Creating your brand", "Building your online presence", "Preparing your marketing", "Setting up growth foundations", "Finalizing your business workspace"]) assert.match(progress, new RegExp(label));
+  for (const label of ["Understanding your business", "Building your online presence", "Preparing your business workspace", "Understanding", "Building", "Ready"]) {
+    assert.match(`${progress}\n${stages}`, new RegExp(label));
+  }
+  for (const label of ["Understanding your direction", "Creating your brand", "Preparing your marketing", "Setting up growth foundations", "Finalizing your business workspace"]) {
+    assert.doesNotMatch(progress, new RegExp(label));
+  }
   assert.match(progress, /\/master-workspace\?projectId=/);
   assert.match(progress, /Retry failed phase/);
   assert.doesNotMatch(progress, /Retry final phase/);

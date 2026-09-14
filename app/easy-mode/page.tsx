@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
+import { findEasyModeAttentionStage, mapEasyModeTasksToCustomerStages } from "@/app/lib/easy-mode-customer-progress-stages";
 import { EASY_MODE_GOALS, mapExistingGoal, type EasyModeGoalId } from "@/app/lib/easy-mode-goal-options";
 import ProductTutorial from "@/app/components/ProductTutorial";
 
@@ -46,6 +47,8 @@ function EasyModeContent() {
   const [executionMessage, setExecutionMessage] = useState("");
   const [error, setError] = useState(projectId ? "" : "Open a business project to continue.");
   const idempotencyKey = useRef("");
+  const customerStages = runView ? mapEasyModeTasksToCustomerStages(runView.tasks) : [];
+  const attentionStage = findEasyModeAttentionStage(customerStages);
 
   useEffect(() => {
     if (!projectId) {
@@ -182,7 +185,7 @@ function EasyModeContent() {
     }
   }
 
-  if (loading) return <main className="flex min-h-screen items-center justify-center bg-[#F7F4EC] text-[#606A64]">Opening your business…</main>;
+  if (loading) return <main className="flex min-h-screen items-center justify-center bg-[#F7F4EC] text-[#606A64]">Opening your business...</main>;
 
   return (
     <main className="min-h-screen bg-[#F7F4EC] px-5 py-8 text-[#1B211E] sm:px-8 sm:py-12">
@@ -221,7 +224,7 @@ function EasyModeContent() {
                   </div>
                 </fieldset>
 
-                <button type="button" onClick={handlePreflight} disabled={submitting || executing || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Building your business…" : <>Build My Business <span className="ml-2 rounded-full border border-white/30 px-2 py-0.5 text-[10px] uppercase tracking-wide">Business Plan</span></>}</button>
+                <button type="button" onClick={handlePreflight} disabled={submitting || executing || !industry.trim()} className="mt-8 min-h-14 rounded-[14px] bg-[#173D32] px-7 font-semibold text-white shadow-[0_12px_30px_rgba(23,61,50,0.16)] disabled:cursor-not-allowed disabled:opacity-50">{submitting ? "Building your business..." : <>Build My Business <span className="ml-2 rounded-full border border-white/30 px-2 py-0.5 text-[10px] uppercase tracking-wide">Business Plan</span></>}</button>
 
                 {ready && runView && (
                   <div className="mt-6 rounded-[18px] border border-[#A8B8A7] bg-[#EDF0E8] p-5">
@@ -229,17 +232,47 @@ function EasyModeContent() {
                       <>
                         <p className="font-semibold text-[#173D32]">Your business workspace is ready.</p>
                         <p className="mt-2 text-sm leading-6 text-[#606A64]">Everything required for this build has been completed.</p>
+                        <div className="mt-5 grid gap-3 md:grid-cols-3">
+                          {customerStages.map((stage, index) => <div key={stage.id} className="rounded-[18px] border border-[#D8DCCF] bg-[#FCFBF7] p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Step {index + 1}</span>
+                              <span className="rounded-full bg-[#E7ECE4] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#173D32]">{stage.badge}</span>
+                            </div>
+                            <p className="mt-4 text-lg font-semibold text-[#173D32]">{stage.title}</p>
+                            <p className="mt-3 text-sm font-medium text-[#344039]">{stage.status}</p>
+                          </div>)}
+                        </div>
                         <Link href={`/master-workspace?projectId=${encodeURIComponent(projectId)}`} className="mt-5 inline-flex min-h-12 items-center rounded-[14px] bg-[#173D32] px-6 text-sm font-semibold text-white">Open Business Workspace</Link>
                       </>
-                    ) : runView.tasks.some((task) => task.status === "failed") ? (
+                    ) : attentionStage ? (
                       <>
                         <p className="font-semibold text-[#173D32]">We could not complete your business build.</p>
-                        <p className="mt-2 text-sm leading-6 text-[#606A64]">Please contact support. Your completed work is saved safely.</p>
+                        <p className="mt-2 text-sm leading-6 text-[#606A64]">{attentionStage.title} needs attention. {attentionStage.message || "Please contact support. Your completed work is saved safely."}</p>
+                        <div className="mt-5 grid gap-3 md:grid-cols-3">
+                          {customerStages.map((stage, index) => <div key={stage.id} className={`rounded-[18px] border p-4 ${stage.status === "Failed" || stage.status === "Needs attention" ? "border-amber-300 bg-amber-50" : "border-[#D8DCCF] bg-[#FCFBF7]"}`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Step {index + 1}</span>
+                              <span className="rounded-full bg-[#E7ECE4] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#173D32]">{stage.badge}</span>
+                            </div>
+                            <p className="mt-4 text-lg font-semibold text-[#173D32]">{stage.title}</p>
+                            <p className="mt-3 text-sm font-medium text-[#344039]">{stage.status}</p>
+                          </div>)}
+                        </div>
                       </>
                     ) : (
                       <>
                         <p className="font-semibold text-[#173D32]">Building your business...</p>
-                        <p className="mt-2 text-sm leading-6 text-[#606A64]">{runView.progress.completed} of {runView.progress.total} parts complete. You do not need to do anything.</p>
+                        <p className="mt-2 text-sm leading-6 text-[#606A64]">Your three-step business build is moving forward. You do not need to do anything.</p>
+                        <div className="mt-5 grid gap-3 md:grid-cols-3">
+                          {customerStages.map((stage, index) => <div key={stage.id} className={`rounded-[18px] border p-4 ${stage.status === "Completed" ? "border-[#A8B8A7] bg-[#FCFBF7]" : stage.status === "In progress" ? "border-[#173D32] bg-[#F6F8F2]" : "border-[#D8DCCF] bg-[#FCFBF7]"}`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8A713F]">Step {index + 1}</span>
+                              <span className="rounded-full bg-[#E7ECE4] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#173D32]">{stage.badge}</span>
+                            </div>
+                            <p className="mt-4 text-lg font-semibold text-[#173D32]">{stage.title}</p>
+                            <p className="mt-3 text-sm font-medium text-[#344039]">{stage.status}</p>
+                          </div>)}
+                        </div>
                         {executionMessage && <p className="mt-3 text-sm font-medium text-[#344039]">{executionMessage}</p>}
                       </>
                     )}
