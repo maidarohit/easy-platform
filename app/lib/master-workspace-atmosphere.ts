@@ -1,3 +1,5 @@
+import { isUsableBusinessUploadedSrc } from "@/app/lib/business-site-visuals";
+
 export type WorkspaceAtmosphereCategory =
   | "home-interiors"
   | "food-hospitality"
@@ -17,6 +19,7 @@ export type WorkspaceAtmosphereInput = Readonly<{
   businessDescription?: string | null;
   brandStyle?: string | null;
   brandingOutput?: Record<string, unknown> | null;
+  websiteOutput?: Record<string, unknown> | null;
   dayKey: string;
   sceneOffset?: number;
   reducedMotion?: boolean;
@@ -36,7 +39,13 @@ export type WorkspaceAtmosphereModel = Readonly<{
   category: WorkspaceAtmosphereCategory;
   scene: WorkspaceAtmosphereScene;
   accentColors: readonly string[];
+  image: WorkspaceAtmosphereImage | null;
   motionMode: "ambient" | "static";
+}>;
+
+export type WorkspaceAtmosphereImage = Readonly<{
+  src: string;
+  source: "uploaded" | "curated";
 }>;
 
 const SCENES: Readonly<Record<WorkspaceAtmosphereCategory, readonly WorkspaceAtmosphereScene[]>> = {
@@ -344,6 +353,19 @@ const CATEGORY_KEYWORDS: ReadonlyArray<readonly [WorkspaceAtmosphereCategory, re
   ["professional-services", ["consult", "consulting", "agency", "legal", "finance", "account", "insurance", "b2b", "advisory"]],
 ];
 
+const CURATED_CATEGORY_IMAGES: Readonly<Record<WorkspaceAtmosphereCategory, readonly WorkspaceAtmosphereImage[]>> = {
+  "home-interiors": [],
+  "food-hospitality": [],
+  "beauty-wellness": [],
+  "professional-services": [],
+  "fashion-retail": [],
+  "technology-startup": [],
+  automotive: [],
+  fitness: [],
+  education: [],
+  "general-business": [],
+};
+
 function normalizedText(parts: ReadonlyArray<string | null | undefined>) {
   return parts
     .map((part) => typeof part === "string" ? part.trim().toLowerCase() : "")
@@ -367,6 +389,31 @@ function hashString(input: string) {
 function uniqueHexColors(source: string) {
   const matches = source.match(/#[0-9a-f]{6}\b/gi) ?? [];
   return [...new Set(matches.map((match) => match.toUpperCase()))];
+}
+
+function collectUploadedWorkspaceImages(value: unknown, found: Set<string>, results: string[]) {
+  if (results.length >= 12 || value === null || value === undefined) return;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || found.has(trimmed)) return;
+    if (trimmed.startsWith("/uploads/")) {
+      found.add(trimmed);
+      results.push(trimmed);
+      return;
+    }
+    if (isUsableBusinessUploadedSrc(trimmed) && !trimmed.startsWith("/business-visuals/")) {
+      found.add(trimmed);
+      results.push(trimmed);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectUploadedWorkspaceImages(item, found, results);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const entry of Object.values(value as Record<string, unknown>)) collectUploadedWorkspaceImages(entry, found, results);
+  }
 }
 
 function brandingText(output: Record<string, unknown> | null | undefined) {
@@ -400,6 +447,31 @@ export function extractWorkspaceBrandColors(
   return uniqueHexColors(brandingText(brandingOutput)).slice(0, 3);
 }
 
+export function selectWorkspaceAtmosphereImage(input: Readonly<{
+  projectId: string;
+  category: WorkspaceAtmosphereCategory;
+  dayKey: string;
+  sceneOffset?: number;
+  websiteOutput?: Record<string, unknown> | null;
+  brandingOutput?: Record<string, unknown> | null;
+}>): WorkspaceAtmosphereImage | null {
+  const uploaded: string[] = [];
+  const found = new Set<string>();
+  collectUploadedWorkspaceImages(input.websiteOutput, found, uploaded);
+  collectUploadedWorkspaceImages(input.brandingOutput, found, uploaded);
+  if (uploaded.length > 0) {
+    const index = (hashString(`${input.projectId}:${input.dayKey}:${input.category}:uploaded`) + (input.sceneOffset ?? 0)) % uploaded.length;
+    return {
+      src: uploaded[index],
+      source: "uploaded",
+    };
+  }
+  const curated = CURATED_CATEGORY_IMAGES[input.category];
+  if (curated.length === 0) return null;
+  const index = (hashString(`${input.projectId}:${input.dayKey}:${input.category}:curated`) + (input.sceneOffset ?? 0)) % curated.length;
+  return curated[index] ?? null;
+}
+
 export function selectWorkspaceAtmosphereScene(input: Readonly<{
   projectId: string;
   category: WorkspaceAtmosphereCategory;
@@ -423,6 +495,14 @@ export function buildWorkspaceAtmosphere(input: WorkspaceAtmosphereInput): Works
       sceneOffset: input.sceneOffset,
     }),
     accentColors: extractWorkspaceBrandColors(input.brandingOutput),
+    image: selectWorkspaceAtmosphereImage({
+      projectId: input.projectId,
+      category,
+      dayKey: input.dayKey,
+      sceneOffset: input.sceneOffset,
+      websiteOutput: input.websiteOutput,
+      brandingOutput: input.brandingOutput,
+    }),
     motionMode: input.reducedMotion ? "static" : "ambient",
   };
 }

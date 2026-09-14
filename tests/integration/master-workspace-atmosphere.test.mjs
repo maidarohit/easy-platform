@@ -5,6 +5,7 @@ import {
   buildWorkspaceAtmosphere,
   extractWorkspaceBrandColors,
   resolveWorkspaceAtmosphereCategory,
+  selectWorkspaceAtmosphereImage,
   selectWorkspaceAtmosphereScene,
 } from "../../app/lib/master-workspace-atmosphere.ts";
 import { buildLaunchCenterView } from "../../app/lib/master-workspace-launch-center.ts";
@@ -70,6 +71,35 @@ test("workspace atmosphere uses static mode when reduced motion is requested", (
   assert.equal(model.category, "fitness");
 });
 
+test("workspace atmosphere prefers saved uploaded business imagery before curated fallback", () => {
+  const image = selectWorkspaceAtmosphereImage({
+    projectId: "project-uploads",
+    category: "home-interiors",
+    dayKey: "2026-09-15",
+    websiteOutput: {
+      heroImage: "/uploads/hero.webp",
+      secondaryImage: "/uploads/studio.jpg",
+      nested: { gallery: ["https://firebasestorage.googleapis.com/v0/b/example/o/photo-one"] },
+    },
+  });
+
+  assert.ok(image);
+  assert.equal(image?.source, "uploaded");
+  assert.match(image?.src || "", /^(?:\/uploads\/|https:\/\/firebasestorage\.googleapis\.com\/)/);
+});
+
+test("workspace atmosphere keeps the gradient-only fallback when no uploaded or local category image exists", () => {
+  const image = selectWorkspaceAtmosphereImage({
+    projectId: "project-no-images",
+    category: "general-business",
+    dayKey: "2026-09-15",
+    websiteOutput: { siteDocument: { pages: [] } },
+    brandingOutput: { note: "No media here." },
+  });
+
+  assert.equal(image, null);
+});
+
 test("workspace atmosphere can draw subtle color influence from saved branding output", () => {
   assert.deepEqual(
     extractWorkspaceBrandColors({
@@ -85,8 +115,10 @@ test("workspace page lazy-loads the atmosphere layer and keeps existing launch c
     source("app/master-workspace/WorkspaceAtmosphere.tsx"),
   ]);
   assert.match(page, /dynamic\(\(\) => import\("\.\/WorkspaceAtmosphere"\)/);
-  assert.match(atmosphere, /Dynamic atmosphere/);
-  assert.match(atmosphere, /Change scene/);
+  assert.match(atmosphere, /Workspace appearance/);
+  assert.match(atmosphere, /Atmosphere \{enabled \? "On" : "Off"\}/);
+  assert.match(atmosphere, /Scene/);
+  assert.match(atmosphere, /loading="lazy"/);
   assert.match(page, /Launch Center/);
   assert.match(page, /id="advanced-tools"/);
   assert.match(page, /Manage Automation/);

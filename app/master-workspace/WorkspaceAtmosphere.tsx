@@ -11,6 +11,7 @@ type WorkspaceAtmosphereProps = Readonly<{
   businessDescription?: string | null;
   brandStyle?: string | null;
   brandingOutput?: Record<string, unknown> | null;
+  websiteOutput?: Record<string, unknown> | null;
 }>;
 
 function todayKey() {
@@ -51,6 +52,7 @@ export default function WorkspaceAtmosphere(props: WorkspaceAtmosphereProps) {
     businessDescription: props.businessDescription,
     brandStyle: props.brandStyle,
     brandingOutput: props.brandingOutput,
+    websiteOutput: props.websiteOutput,
     dayKey: todayKey(),
     sceneOffset,
     reducedMotion,
@@ -94,6 +96,17 @@ export default function WorkspaceAtmosphere(props: WorkspaceAtmosphereProps) {
         <div className="absolute inset-0 bg-[#F7F3E9]" />
         {enabled && (
           <div className={atmosphereClassName} data-motion={atmosphere.motionMode}>
+            {atmosphere.image && (
+              <div className={styles.imageShell}>
+                <img
+                  src={atmosphere.image.src}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className={styles.image}
+                />
+              </div>
+            )}
             <div
               className={washClassName}
               style={{ backgroundImage: atmosphere.scene.background }}
@@ -127,36 +140,40 @@ export default function WorkspaceAtmosphere(props: WorkspaceAtmosphereProps) {
         )}
       </div>
 
-      <div className="pointer-events-auto fixed bottom-5 right-5 z-30 max-w-[18rem] md:bottom-6 md:right-6">
-        <div className="rounded-[22px] border border-white/70 bg-white/76 p-3 shadow-[0_18px_45px_rgba(36,55,48,0.08)] backdrop-blur-xl">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#8A713F]">
+      <div className="pointer-events-auto fixed bottom-4 right-4 z-30 max-w-[14rem] md:bottom-5 md:right-5">
+        <div className="rounded-[18px] border border-white/70 bg-white/72 p-2.5 shadow-[0_16px_36px_rgba(36,55,48,0.08)] backdrop-blur-xl">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-[#8A713F]">
             Workspace appearance
           </p>
-          <p className="mt-2 text-sm font-semibold text-[#103C32]">
+          <p className="mt-1.5 text-xs font-semibold text-[#103C32]">
             {enabled ? atmosphere.scene.label : "Dynamic atmosphere off"}
           </p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             <button
               type="button"
               onClick={() => setAtmosphereEnabled(!enabled)}
-              className={`rounded-full border px-3 py-2 text-xs font-semibold ${
+              className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold ${
                 enabled
                   ? "border-[#2F8F78] bg-[#EFF8F4] text-[#1D6B57]"
                   : "border-[#D8DCCF] bg-white text-[#66756F]"
               }`}
             >
-              Dynamic atmosphere {enabled ? "On" : "Off"}
+              Atmosphere {enabled ? "On" : "Off"}
             </button>
             <button
               type="button"
               onClick={rotateScene}
-              className="rounded-full border border-[#D7C694] bg-[#FFF7E7] px-3 py-2 text-xs font-semibold text-[#7A5C20]"
+              className="rounded-full border border-[#D7C694] bg-[#FFF7E7] px-2.5 py-1.5 text-[11px] font-semibold text-[#7A5C20]"
             >
-              Change scene
+              Scene
             </button>
           </div>
-          <p className="mt-3 text-xs leading-5 text-[#66756F]">
-            {reducedMotion ? "Static mode is on to respect reduced motion." : `${atmosphere.category.replace(/-/g, " ")} atmosphere`}
+          <p className="mt-2 text-[11px] leading-4 text-[#66756F]">
+            {reducedMotion
+              ? "Static mode is on."
+              : atmosphere.image
+                ? `${atmosphere.image.source === "uploaded" ? "Your photo" : "Scene photo"} with ${atmosphere.category.replace(/-/g, " ")} atmosphere`
+                : `${atmosphere.category.replace(/-/g, " ")} atmosphere`}
           </p>
         </div>
       </div>

@@ -220,6 +220,7 @@ const savePrimaryLanguage = async () => {
   const displayedProject = workspace?.project ?? project;
   const businessName = displayedProject?.companyName?.trim() || displayedProject?.name?.trim() || "";
   const brandingOutput = workspace?.sections.find((section) => section.module === "branding")?.output ?? null;
+  const websiteOutput = workspace?.sections.find((section) => section.module === "website")?.output ?? null;
   const launchCenter = workspace
     ? buildLaunchCenterView({
         projectId,
@@ -258,6 +259,7 @@ const savePrimaryLanguage = async () => {
           businessDescription={displayedProject?.businessDescription || project?.businessDescription || null}
           brandStyle={project?.brandStyle || null}
           brandingOutput={brandingOutput}
+          websiteOutput={websiteOutput}
         />
         <div className="relative z-10 mx-auto max-w-[1500px]">
 
