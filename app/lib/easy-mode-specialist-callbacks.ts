@@ -11,7 +11,9 @@ import {
   type EasyModeModuleId,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
+import { buildAttemptRecoveryState } from "@/app/lib/easy-mode-recovery-state";
 import { derivePersistedEasyModeRunStatus } from "@/app/lib/easy-mode-task-attempts";
+import { saveEasyModeAttemptRecoveryState } from "@/app/lib/easy-mode-task-attempts";
 import {
   persistBrandingOutputAndMemoryInTransaction,
   persistContentOutputAndMemoryInTransaction,
@@ -348,6 +350,41 @@ export async function syncEasyModeSpecialistCallback(
   if (body.status === "completed") {
     validatedOutput = await validateCallbackOutput(context, evidence.module, body.outputPayload);
     if (!validatedOutput) throw new SpecialistCallbackError("Invalid callback body.", 400);
+    await saveEasyModeAttemptRecoveryState({
+      attemptId: evidence.attemptId,
+      userId: evidence.userId,
+      recoveryState: buildAttemptRecoveryState({
+        projectId: evidence.projectId,
+        runId: evidence.runId,
+        taskId: evidence.taskId,
+        attemptId: evidence.attemptId,
+        module: evidence.module,
+        providerStatus: null,
+        rawProviderResponse: body.outputPayload,
+        normalizedResponse: validatedOutput as Record<string, unknown>,
+        usage: body.usageComponents?.length ? { version: 1, components: [...body.usageComponents] } : null,
+        validationStage: "final_contract",
+      }),
+    });
+  } else {
+    await saveEasyModeAttemptRecoveryState({
+      attemptId: evidence.attemptId,
+      userId: evidence.userId,
+      recoveryState: buildAttemptRecoveryState({
+        projectId: evidence.projectId,
+        runId: evidence.runId,
+        taskId: evidence.taskId,
+        attemptId: evidence.attemptId,
+        module: evidence.module,
+        providerStatus: null,
+        rawProviderResponse: null,
+        normalizedResponse: null,
+        usage: null,
+        failureCategory: "unknown",
+        failurePoint: "uncertain",
+        validationStage: "provider_response",
+      }),
+    });
   }
 
   const result = await db.transaction(async (transaction) => {

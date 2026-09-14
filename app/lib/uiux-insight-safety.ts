@@ -39,7 +39,7 @@ function primaryOffer(context: UiuxBusinessContext) {
   return context.business.services[0]?.trim() || "the verified offer";
 }
 
-function repairRequiredUiuxFields(
+export function repairRequiredUiuxFields(
   value: NormalizedModuleOutput,
   context: UiuxBusinessContext,
 ): NormalizedModuleOutput {

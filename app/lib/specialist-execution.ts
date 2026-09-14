@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import type { EasyModeValidationStage } from "@/app/lib/easy-mode-recovery-state";
 import { parseAiUsageMetadata } from "@/app/lib/ai-usage-metadata";
 import { isEasyModeModuleId, type EasyModeModuleId, type NormalizedModuleOutput } from "@/app/lib/easy-mode-execution-contracts";
 import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
@@ -21,6 +22,9 @@ export class SpecialistExecutionError extends Error {
   readonly httpStatus: number;
   readonly failureCategory: ProviderFailureCategory | null;
   readonly upstreamStatus: number | null;
+  readonly validationStage: EasyModeValidationStage | null;
+  readonly rawProviderResponse: string | null;
+  readonly parsedProviderResponse: unknown;
 
   constructor(
     failurePoint: "before_dispatch" | "uncertain",
@@ -28,6 +32,9 @@ export class SpecialistExecutionError extends Error {
     details: Readonly<{
       failureCategory?: ProviderFailureCategory | null;
       upstreamStatus?: number | null;
+      validationStage?: EasyModeValidationStage | null;
+      rawProviderResponse?: string | null;
+      parsedProviderResponse?: unknown;
     }> = {},
   ) {
     super(failurePoint === "before_dispatch" ? "PROVIDER_UNAVAILABLE" : "DELIVERY_UNCERTAIN");
@@ -36,6 +43,9 @@ export class SpecialistExecutionError extends Error {
     this.httpStatus = httpStatus;
     this.failureCategory = details.failureCategory ?? null;
     this.upstreamStatus = details.upstreamStatus ?? null;
+    this.validationStage = details.validationStage ?? null;
+    this.rawProviderResponse = details.rawProviderResponse ?? null;
+    this.parsedProviderResponse = details.parsedProviderResponse;
   }
 }
 
@@ -44,6 +54,9 @@ export type SyncSpecialistExecutionResult = Readonly<{
   output: NormalizedModuleOutput;
   usageComponents?: readonly AiUsageComponent[];
   providerExecutionId?: string;
+  providerStatus: number;
+  rawProviderResponse: string;
+  parsedProviderResponse: unknown;
 }>;
 
 export type AsyncSpecialistExecutionResult = Readonly<{
@@ -105,29 +118,41 @@ function parseJsonString(value: unknown) {
   return current;
 }
 
+export function unwrapSingleWebhookCandidate(value: unknown): unknown | null {
+  const candidates: unknown[] = [];
+  const visit = (candidate: unknown, depth: number) => {
+    if (depth > 8) return;
+    const parsed = parseJsonString(candidate);
+    if (parsed === null) return;
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 1) visit(parsed[0], depth + 1);
+      return;
+    }
+    if (!parsed || typeof parsed !== "object") return;
+    let wrapped = false;
+    for (const [key, nested] of Object.entries(parsed)) {
+      if (WEBHOOK_WRAPPER_KEYS.includes(key as (typeof WEBHOOK_WRAPPER_KEYS)[number])) {
+        wrapped = true;
+        visit(nested, depth + 1);
+      }
+    }
+    if (!wrapped) candidates.push(parsed);
+  };
+  visit(value, 0);
+  const unique = [...new Map(candidates.map((candidate) => [JSON.stringify(candidate), candidate])).values()];
+  return unique.length === 1 ? unique[0] ?? null : null;
+}
+
 export function validateWrappedWebhookOutput<T extends NormalizedModuleOutput>(
   value: unknown,
   validate: (candidate: unknown) => T | null,
 ): T | null {
   const found = new Map<string, T>();
-  const visit = (candidate: unknown, depth: number) => {
-    if (depth > 8) return;
-    candidate = parseJsonString(candidate);
-    if (candidate === null) return;
+  const candidate = unwrapSingleWebhookCandidate(value);
+  if (candidate !== null) {
     const output = validate(candidate);
     if (output) found.set(JSON.stringify(output), output);
-    if (Array.isArray(candidate)) {
-      if (candidate.length === 1) visit(candidate[0], depth + 1);
-      return;
-    }
-    if (!candidate || typeof candidate !== "object") return;
-    for (const [key, nested] of Object.entries(candidate)) {
-      if (WEBHOOK_WRAPPER_KEYS.includes(key as (typeof WEBHOOK_WRAPPER_KEYS)[number])) {
-        visit(nested, depth + 1);
-      }
-    }
-  };
-  visit(value, 0);
+  }
   return found.size === 1 ? found.values().next().value ?? null : null;
 }
 
@@ -251,7 +276,12 @@ export async function executeValidatedJsonWebhook(options: Readonly<{
     throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "fetch_network_error" });
   }
   if (!raw.trim()) {
-    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "empty_response" });
+    throw new SpecialistExecutionError("uncertain", 502, {
+      failureCategory: "empty_response",
+      validationStage: "provider_response",
+      rawProviderResponse: raw,
+      parsedProviderResponse: null,
+    });
   }
   if (Buffer.byteLength(raw, "utf8") > MAX_RESPONSE_BYTES) {
     throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "oversized_response" });
@@ -260,11 +290,22 @@ export async function executeValidatedJsonWebhook(options: Readonly<{
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "invalid_json" });
+    throw new SpecialistExecutionError("uncertain", 502, {
+      failureCategory: "invalid_json",
+      validationStage: "unwrap",
+      rawProviderResponse: raw,
+      parsedProviderResponse: null,
+    });
   }
   if (response.status === 202) {
     if (!options.asyncDispatch) {
-      throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "schema_validation_failure" });
+      throw new SpecialistExecutionError("uncertain", 502, {
+        failureCategory: "schema_validation_failure",
+        validationStage: "initial_contract",
+        upstreamStatus: response.status,
+        rawProviderResponse: raw,
+        parsedProviderResponse: parsed,
+      });
     }
     const acknowledgement = validateSpecialistAsyncAcknowledgement(parsed, {
       module: options.asyncDispatch.module,
@@ -272,7 +313,13 @@ export async function executeValidatedJsonWebhook(options: Readonly<{
       executionKey: options.asyncDispatch.executionKey,
     });
     if (!acknowledgement) {
-      throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "schema_validation_failure" });
+      throw new SpecialistExecutionError("uncertain", 502, {
+        failureCategory: "schema_validation_failure",
+        validationStage: "initial_contract",
+        upstreamStatus: response.status,
+        rawProviderResponse: raw,
+        parsedProviderResponse: parsed,
+      });
     }
     const executionId = acknowledgement.providerExecutionId ?? parseN8nExecutionId(response.headers);
     return Object.freeze({
@@ -282,13 +329,22 @@ export async function executeValidatedJsonWebhook(options: Readonly<{
   }
   const output = options.validateResponse(parsed);
   if (!output) {
-    throw new SpecialistExecutionError("uncertain", 502, { failureCategory: "schema_validation_failure" });
+    throw new SpecialistExecutionError("uncertain", 502, {
+      failureCategory: "schema_validation_failure",
+      validationStage: "final_contract",
+      upstreamStatus: response.status,
+      rawProviderResponse: raw,
+      parsedProviderResponse: parsed,
+    });
   }
   const usage = parseAiUsageMetadata(response.headers);
   const executionId = parseN8nExecutionId(response.headers);
   return Object.freeze({
     dispatchMode: "sync",
     output,
+    providerStatus: response.status,
+    rawProviderResponse: raw,
+    parsedProviderResponse: parsed,
     ...(usage ? { usageComponents: usage.components } : {}),
     ...(executionId ? { providerExecutionId: executionId } : {}),
   });

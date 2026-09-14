@@ -297,8 +297,8 @@ test("schema-validation failures after receiving an actual payload are not auto-
 
   assert.equal(result.state, "needs_attention");
   assert.equal(retries, 0);
-  assert.equal(failBeforeDispatch, 0);
-  assert.equal(failUncertain, 1);
+  assert.equal(failBeforeDispatch, 1);
+  assert.equal(failUncertain, 0);
   assert.equal(failUsage, 1);
 });
 

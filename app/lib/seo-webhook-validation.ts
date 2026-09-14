@@ -39,13 +39,13 @@ function safeSeoField(value: unknown, normalizedValue: unknown, fallback: string
   return text || fallback;
 }
 
-function recognizedSeoRecord(value: unknown) {
+export function recognizedSeoRecord(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   return Object.keys(record).every((key) => SEO_ALLOWED_FIELDS.has(key)) ? record : null;
 }
 
-function nonEmptySeoSignalCount(value: Record<string, unknown>) {
+export function nonEmptySeoSignalCount(value: Record<string, unknown>) {
   return [
     "seoAudit",
     "keywords",
@@ -61,7 +61,7 @@ function nonEmptySeoSignalCount(value: Record<string, unknown>) {
   ].reduce((count, key) => count + (typeof value[key] === "string" && value[key].trim() ? 1 : 0), 0);
 }
 
-function buildCanonicalSeoOutput(value: Record<string, unknown>, approvedFacts: unknown) {
+export function buildCanonicalSeoOutput(value: Record<string, unknown>, approvedFacts: unknown) {
   const normalized = normalizeSeoOpportunities(value, approvedFacts);
   const candidate = {
     seoAudit: safeSeoField(

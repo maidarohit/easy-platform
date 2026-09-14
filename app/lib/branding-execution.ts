@@ -5,6 +5,7 @@ import {
   type ModuleExecutionInput,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
+import type { EasyModeValidationStage } from "@/app/lib/easy-mode-recovery-state";
 import { getN8nWebhookConfig } from "@/app/lib/n8n-webhooks";
 import { confirmedDnaExecutionContext, loadOwnedProjectContext } from "@/app/lib/easy-mode-project-context";
 import { sanitizeBrandingOutput } from "@/app/lib/branding-insight-safety";
@@ -44,6 +45,9 @@ export class BrandingExecutionError extends Error {
   readonly httpStatus: number;
   readonly failureCategory: ProviderFailureCategory | null;
   readonly upstreamStatus: number | null;
+  readonly validationStage: EasyModeValidationStage | null;
+  readonly rawProviderResponse: string | null;
+  readonly parsedProviderResponse: unknown;
 
   constructor(
     code: BrandingSafeErrorCode,
@@ -52,6 +56,9 @@ export class BrandingExecutionError extends Error {
     details: Readonly<{
       failureCategory?: ProviderFailureCategory | null;
       upstreamStatus?: number | null;
+      validationStage?: EasyModeValidationStage | null;
+      rawProviderResponse?: string | null;
+      parsedProviderResponse?: unknown;
     }> = {},
   ) {
     super(code);
@@ -61,6 +68,9 @@ export class BrandingExecutionError extends Error {
     this.httpStatus = httpStatus;
     this.failureCategory = details.failureCategory ?? null;
     this.upstreamStatus = details.upstreamStatus ?? null;
+    this.validationStage = details.validationStage ?? null;
+    this.rawProviderResponse = details.rawProviderResponse ?? null;
+    this.parsedProviderResponse = details.parsedProviderResponse;
   }
 }
 
@@ -152,7 +162,7 @@ function normalizeBrandingProviderField(field: BrandingField, value: unknown): u
   return value;
 }
 
-function normalizeBrandingProviderCandidate(candidate: unknown): unknown {
+export function normalizeBrandingProviderCandidate(candidate: unknown): unknown {
   if (!isRecord(candidate)) return candidate;
 
   const normalized: Record<string, unknown> = { ...candidate };
@@ -202,7 +212,7 @@ function buildSafeBrandingFallbacks(input: ModuleExecutionInput): BrandingOutput
   });
 }
 
-function finalizeSanitizedBrandingOutput(
+export function finalizeSanitizedBrandingOutput(
   input: ModuleExecutionInput,
   value: Record<string, string>,
 ): BrandingOutput | null {
@@ -279,6 +289,9 @@ export async function executeBrandingService(options: BrandingExecutionOptions):
         {
           failureCategory: error.failureCategory ?? null,
           upstreamStatus: error.upstreamStatus ?? null,
+          validationStage: error.validationStage ?? null,
+          rawProviderResponse: error.rawProviderResponse ?? null,
+          parsedProviderResponse: error.parsedProviderResponse,
         },
       );
     }

@@ -73,6 +73,11 @@ const MAX_OUTPUT_BYTES = 180_000;
 const UNSAFE_TEXT = /<\s*\/?\s*[a-z][^>]*>|javascript\s*:|on[a-z]+\s*=|\u0000/i;
 
 type StringRules = Readonly<Record<string, number>>;
+type OutputFieldSpec = Readonly<{
+  required: readonly string[];
+  optional?: readonly string[];
+  nested?: Readonly<Record<string, OutputFieldSpec>>;
+}>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value) &&
@@ -198,6 +203,58 @@ const OUTPUT_RULES = {
   },
 } as const satisfies Record<string, StringRules>;
 
+const OUTPUT_FIELD_SPECS: Readonly<Record<Exclude<EasyModeModuleId, "branding-context" | "ai-manager"> | "ai-manager" | "branding-context", OutputFieldSpec>> = Object.freeze({
+  branding: Object.freeze({ required: Object.keys(OUTPUT_RULES.branding) }),
+  website: Object.freeze({
+    required: Object.keys(OUTPUT_RULES.website),
+    optional: ["websiteEdits"],
+    nested: {
+      websiteEdits: Object.freeze({
+        required: [
+          "companyName",
+          "heroHeadline",
+          "heroDescription",
+          "aboutText",
+          "servicesText",
+          "phone",
+          "email",
+          "address",
+          "whatsapp",
+          "primaryCtaLabel",
+          "primaryCtaLink",
+          "template",
+        ],
+      }),
+    },
+  }),
+  marketing: Object.freeze({ required: Object.keys(OUTPUT_RULES.marketing) }),
+  seo: Object.freeze({
+    required: Object.keys(OUTPUT_RULES.seo),
+    optional: [
+      "colourScheme",
+      "designRecommendations",
+      "keywordResearch",
+      "recommendedPages",
+      "seoContentPlan",
+      "seoScore",
+      "seoStrategy",
+      "siteStructure",
+      "typography",
+      "websiteFeatures",
+    ],
+  }),
+  uiux: Object.freeze({ required: Object.keys(OUTPUT_RULES.uiux), optional: ["colourScheme", "designRecommendations"] }),
+  sales: Object.freeze({ required: Object.keys(OUTPUT_RULES.sales) }),
+  analytics: Object.freeze({ required: Object.keys(OUTPUT_RULES.analytics) }),
+  logo: Object.freeze({ required: Object.keys(OUTPUT_RULES.logo) }),
+  content: Object.freeze({ required: ["content"] }),
+  "ai-manager": Object.freeze({ required: Object.keys(OUTPUT_RULES["ai-manager"]) }),
+  "branding-context": Object.freeze({
+    required: ["businessName", "industry"],
+    optional: ["businessDescription", "targetAudience", "brandStyle", "brandVoice", "brandColors", "typography"],
+  }),
+});
+
 export const validateBrandingOutput = (value: unknown) => validateStringObject(value, OUTPUT_RULES.branding);
 
 export function validateWebsiteOutput(value: unknown): Readonly<Record<string, string | Readonly<Record<string, string>>>> | null {
@@ -314,7 +371,7 @@ export type ModuleAdapter = Readonly<{
 const ADAPTERS: Readonly<Record<EasyModePlannedModuleId, ModuleAdapter>> = Object.freeze({
   "ai-manager": adapter("ai-manager", "aiManagerRuns", inputValidator({ companyName: 500, businessDescription: 4_000, industry: 500, businessGoal: 4_000 }), validateAiManagerOutput),
   branding: adapter("branding", "standardAiTasks", inputValidator(BRAND_PROFILE_INPUT), validateBrandingOutput),
-  website: adapter("website", "standardAiTasks", inputValidator(BRAND_PROFILE_INPUT), validateWebsiteOutput),
+  website: adapter("website", "standardAiTasks",inputValidator({ ...BRAND_PROFILE_INPUT, primaryLanguage: 10 }), validateWebsiteOutput),
   marketing: adapter("marketing", "standardAiTasks", inputValidator(BRAND_PROFILE_INPUT), validateMarketingOutput),
   seo: adapter("seo", "standardAiTasks", inputValidator(BRAND_PROFILE_INPUT), validateSeoOutput),
   uiux: adapter("uiux", "standardAiTasks", inputValidator(BRAND_PROFILE_INPUT), validateUiuxOutput),
@@ -341,6 +398,30 @@ function adapter(
 
 export function getModuleAdapter(value: unknown): ModuleAdapter | null {
   return isEasyModePlannedModuleId(value) ? ADAPTERS[value] : null;
+}
+
+function firstFieldFailure(
+  value: unknown,
+  spec: OutputFieldSpec,
+  path = "",
+): string | null {
+  if (!isRecord(value)) return path || null;
+  for (const key of spec.required) {
+    if (!Object.hasOwn(value, key)) return `${path}${key}`;
+    const nestedSpec = spec.nested?.[key];
+    if (nestedSpec) {
+      const nestedFailure = firstFieldFailure(value[key], nestedSpec, `${path}${key}.`);
+      if (nestedFailure) return nestedFailure;
+      continue;
+    }
+    if (typeof value[key] !== "string" || !safeString(value[key])) return `${path}${key}`;
+  }
+  return null;
+}
+
+export function detectModuleOutputFailureField(moduleId: EasyModeModuleId, value: unknown): string | null {
+  const spec = OUTPUT_FIELD_SPECS[moduleId];
+  return spec ? firstFieldFailure(value, spec) : null;
 }
 
 const BRANDING_CONTEXT_FIELDS = {

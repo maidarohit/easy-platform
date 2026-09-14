@@ -19,6 +19,10 @@ import {
   type EasyModePlannedModuleId,
   type TrustedModuleExecutionContext,
 } from "@/app/lib/easy-mode-execution-contracts";
+import {
+  parseAttemptRecoveryState,
+  type EasyModeAttemptRecoveryState,
+} from "@/app/lib/easy-mode-recovery-state";
 import { resolveEasyModePlan } from "@/app/lib/easy-mode-plans";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -87,6 +91,7 @@ type ClaimInput = Readonly<{
 }>;
 type LeasedAttemptInput = Readonly<{ attemptId: string; userId: string; leaseToken: string }>;
 type FailureInput = LeasedAttemptInput & Readonly<{ safeErrorCode: string; projectOutputId?: string }>;
+type AttemptRecoveryStateInput = Readonly<{ attemptId: string; userId: string; recoveryState: EasyModeAttemptRecoveryState }>;
 
 export function validateLeaseToken(value: unknown): string | null {
   return typeof value === "string" && UUID_PATTERN.test(value) ? value.toLowerCase() : null;
@@ -588,6 +593,55 @@ export async function reconcileUncertainEasyModeAttempt(input: Readonly<{ attemp
     }
     await refreshRunStatus(transaction, evidence.runId);
     return Object.freeze({ state: "completed" as const, projectOutputId: evidence.projectOutputId });
+  });
+}
+
+export async function saveEasyModeAttemptRecoveryState(input: AttemptRecoveryStateInput) {
+  const attemptId = validateUuid(input.attemptId);
+  if (!attemptId || !input.userId || input.userId.length > 128) throw new EasyModeAttemptError("INVALID_REQUEST");
+  await db.update(easyModeTaskAttempts).set({
+    recoveryState: input.recoveryState,
+  }).where(and(
+    eq(easyModeTaskAttempts.id, attemptId),
+    eq(easyModeTaskAttempts.userId, input.userId),
+  ));
+}
+
+export async function loadOwnedEasyModeAttemptRecoveryState(input: Readonly<{ attemptId: string; userId: string }>) {
+  const attemptId = validateUuid(input.attemptId);
+  if (!attemptId || !input.userId || input.userId.length > 128) throw new EasyModeAttemptError("INVALID_REQUEST");
+  const [attempt] = await db.select({
+    id: easyModeTaskAttempts.id,
+    taskId: easyModeTaskAttempts.taskId,
+    runId: easyModeTaskAttempts.runId,
+    projectId: easyModeTaskAttempts.projectId,
+    userId: easyModeTaskAttempts.userId,
+    attemptNumber: easyModeTaskAttempts.attemptNumber,
+    status: easyModeTaskAttempts.status,
+    safeErrorCode: easyModeTaskAttempts.safeErrorCode,
+    usageId: easyModeTaskAttempts.usageId,
+    providerExecutionId: easyModeTaskAttempts.providerExecutionId,
+    startedAt: easyModeTaskAttempts.startedAt,
+    finishedAt: easyModeTaskAttempts.finishedAt,
+    recoveryState: easyModeTaskAttempts.recoveryState,
+    moduleId: easyModeTasks.moduleId,
+    taskStatus: easyModeTasks.status,
+    taskProjectOutputId: easyModeTasks.projectOutputId,
+    runStatus: easyModeRuns.status,
+  }).from(easyModeTaskAttempts)
+    .innerJoin(easyModeTasks, eq(easyModeTasks.id, easyModeTaskAttempts.taskId))
+    .innerJoin(easyModeRuns, eq(easyModeRuns.id, easyModeTaskAttempts.runId))
+    .innerJoin(projects, eq(projects.id, easyModeTaskAttempts.projectId))
+    .where(and(
+      eq(easyModeTaskAttempts.id, attemptId),
+      eq(easyModeTaskAttempts.userId, input.userId),
+      eq(easyModeRuns.userId, input.userId),
+      eq(projects.userId, input.userId),
+    )).limit(1);
+  if (!attempt) return null;
+  return Object.freeze({
+    ...attempt,
+    recoveryState: parseAttemptRecoveryState(attempt.recoveryState),
   });
 }
 

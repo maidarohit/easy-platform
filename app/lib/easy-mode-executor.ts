@@ -60,12 +60,19 @@ import {
   EasyModeAttemptError,
   failEasyModeAttemptBeforeDispatch,
   failEasyModeAttemptUncertain,
+  loadOwnedEasyModeAttemptRecoveryState,
   markEasyModeAttemptDispatching,
   markEasyModeAttemptRunning,
   prepareEasyModeTaskRetry,
   reconcileUncertainEasyModeAttempt,
+  saveEasyModeAttemptRecoveryState,
   type ClaimedEasyModeTask,
 } from "@/app/lib/easy-mode-task-attempts";
+import {
+  buildAttemptRecoveryFromExecution,
+  replaySavedEasyModeProviderResponse,
+} from "@/app/lib/easy-mode-provider-recovery";
+import type { EasyModeValidationStage } from "@/app/lib/easy-mode-recovery-state";
 import {
   buildSpecialistCallbackUrl,
 } from "@/app/lib/easy-mode-specialist-callbacks";
@@ -86,6 +93,7 @@ const AUTO_RETRY_NO_OUTPUT_MODULES = new Set(["branding", "website", "marketing"
 const CONFIRMED_NO_OUTPUT_FAILURE_CATEGORIES = new Set<ProviderFailureCategory>([
   "empty_response",
   "invalid_json",
+  "upstream_non_2xx",
 ]);
 
 export type CustomerTaskStatus = "Waiting" | "In progress" | "Completed" | "Needs attention";
@@ -104,6 +112,7 @@ type InternalExecuteResult = ExecuteNextResult & Readonly<{
   retryableAttemptId?: string;
   retryableTaskId?: string;
   uncertainAttemptId?: string;
+  savedResponseAvailable?: boolean;
 }>;
 
 type ExecuteInput = Readonly<{ runId: string; userId: string }>;
@@ -139,6 +148,9 @@ type ExecutorDependencies = Readonly<{
   persistText: typeof persistTextSpecialistOutputAndMemory;
   persistContext: typeof persistBrandingContextOutput;
   progress: typeof getEasyModeCustomerProgress;
+  saveRecoveryState: typeof saveEasyModeAttemptRecoveryState;
+  loadRecoveryAttempt: typeof loadOwnedEasyModeAttemptRecoveryState;
+  replaySavedResponse: typeof replaySavedEasyModeProviderResponse;
 }>;
 
 export function isEasyModeExecutionEnabled(): boolean {
@@ -176,6 +188,9 @@ const defaultDependencies: ExecutorDependencies = {
   persistText: persistTextSpecialistOutputAndMemory,
   persistContext: persistBrandingContextOutput,
   progress: getEasyModeCustomerProgress,
+  saveRecoveryState: saveEasyModeAttemptRecoveryState,
+  loadRecoveryAttempt: loadOwnedEasyModeAttemptRecoveryState,
+  replaySavedResponse: replaySavedEasyModeProviderResponse,
 };
 
 const leaseInput = (claim: ClaimedEasyModeTask) => ({
@@ -259,12 +274,18 @@ function providerFailureDetails(error: unknown): Readonly<{
   failureCategory: ProviderFailureCategory | null;
   failurePoint: "before_dispatch" | "uncertain" | null;
   upstreamStatus: number | null;
+  validationStage: EasyModeValidationStage | null;
+  rawProviderResponse: unknown;
+  normalizedProviderResponse: unknown;
 }> {
   if (error instanceof SpecialistExecutionError || error instanceof BrandingExecutionError) {
     return {
       failureCategory: error.failureCategory ?? null,
       failurePoint: error.failurePoint ?? null,
       upstreamStatus: error.upstreamStatus ?? null,
+      validationStage: error.validationStage ?? null,
+      rawProviderResponse: error.rawProviderResponse ?? null,
+      normalizedProviderResponse: error.parsedProviderResponse,
     };
   }
   if (error && typeof error === "object" && !Array.isArray(error)) {
@@ -278,9 +299,23 @@ function providerFailureDetails(error: unknown): Readonly<{
     const upstreamStatus = typeof (error as { upstreamStatus?: unknown }).upstreamStatus === "number"
       ? (error as { upstreamStatus: number }).upstreamStatus
       : null;
-    return { failureCategory, failurePoint, upstreamStatus };
+    return {
+      failureCategory,
+      failurePoint,
+      upstreamStatus,
+      validationStage: null,
+      rawProviderResponse: null,
+      normalizedProviderResponse: null,
+    };
   }
-  return { failureCategory: null, failurePoint: null, upstreamStatus: null };
+  return {
+    failureCategory: null,
+    failurePoint: null,
+    upstreamStatus: null,
+    validationStage: null,
+    rawProviderResponse: null,
+    normalizedProviderResponse: null,
+  };
 }
 
 function isConfirmedNoOutputProviderFailure(input: Readonly<{
@@ -300,7 +335,61 @@ function canAutoRetryConfirmedNoOutputFailure(input: Readonly<{
   error: unknown;
   persistedOutputId: string | null;
 }>): boolean {
+  const details = providerFailureDetails(input.error);
+  if (details.failureCategory === "upstream_non_2xx" && (details.upstreamStatus ?? 0) < 500) return false;
   return input.claim.attemptNumber < 2 && isConfirmedNoOutputProviderFailure(input);
+}
+
+async function tryReplaySavedResponse(
+  dependencies: ExecutorDependencies,
+  attemptId: string,
+  userId: string,
+) {
+  try {
+    return await dependencies.replaySavedResponse({ attemptId, userId });
+  } catch {
+    return null;
+  }
+}
+
+async function saveExecutionRecoveryState(
+  dependencies: ExecutorDependencies,
+  claim: ClaimedEasyModeTask,
+  module: string,
+  input: Readonly<{
+    providerStatus?: number | null;
+    rawProviderResponse?: unknown;
+    normalizedResponse?: Record<string, unknown> | null;
+    usageComponents?: readonly { provider: string; model: string; inputTokens: number; outputTokens: number }[] | null;
+    failureCategory?: string | null;
+    failurePoint?: "before_dispatch" | "uncertain" | null;
+    validationStage?: EasyModeValidationStage | null;
+    failedField?: string | null;
+  }>,
+) {
+  try {
+    await dependencies.saveRecoveryState({
+      attemptId: claim.attemptId,
+      userId: claim.context.userId,
+      recoveryState: buildAttemptRecoveryFromExecution({
+        projectId: claim.context.projectId,
+        runId: claim.runId,
+        taskId: claim.taskId,
+        attemptId: claim.attemptId,
+        module,
+        providerStatus: input.providerStatus ?? null,
+        rawProviderResponse: input.rawProviderResponse,
+        normalizedResponse: input.normalizedResponse ?? null,
+        usageComponents: input.usageComponents ?? null,
+        failureCategory: input.failureCategory ?? null,
+        failurePoint: input.failurePoint ?? null,
+        validationStage: input.validationStage ?? null,
+        failedField: input.failedField ?? null,
+      }),
+    });
+  } catch {
+    // Diagnostics must never prevent the normal recovery path from continuing.
+  }
 }
 
 export async function executeNextEasyModeTask(
@@ -406,6 +495,19 @@ export async function executeEasyModeRun(
   const dependencies = { ...defaultDependencies, ...overrides };
   const result = await executeNextEasyModeTask(input, dependencies);
   if (result.state === "needs_attention" && result.retryableAttemptId) {
+    const replayed = await tryReplaySavedResponse(dependencies, result.retryableAttemptId, input.userId);
+    if (replayed?.state === "completed" || replayed?.state === "ignored") {
+      const progress = await safeProgress(dependencies, input.runId, input.userId);
+      return progress?.runStatus === "Completed"
+        ? { state: "completed", message: "This business build is complete.", progress }
+        : { state: "in_progress", message: "This business build is ready to continue.", progress };
+    }
+    if (replayed?.state === "failed_closed" && !replayed.canAutoRetry) {
+      return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+    }
+    if (result.savedResponseAvailable && !replayed) {
+      return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+    }
     try {
       await dependencies.prepareRetry({ attemptId: result.retryableAttemptId, userId: input.userId });
       const progress = await safeProgress(dependencies, input.runId, input.userId);
@@ -417,6 +519,16 @@ export async function executeEasyModeRun(
     }
   }
   if (result.state === "needs_attention" && result.uncertainAttemptId) {
+    const replayed = await tryReplaySavedResponse(dependencies, result.uncertainAttemptId, input.userId);
+    if (replayed?.state === "completed" || replayed?.state === "ignored") {
+      const progress = await safeProgress(dependencies, input.runId, input.userId);
+      return progress?.runStatus === "Completed"
+        ? { state: "completed", message: "This business build is complete.", progress }
+        : { state: "in_progress", message: "This business build is ready to continue.", progress };
+    }
+    if (replayed?.state === "failed_closed") {
+      return { state: "needs_attention", message: "We could not complete your business build. Please contact support.", progress: result.progress };
+    }
     try {
       const reconciliation = await dependencies.reconcileUncertain({
         attemptId: result.uncertainAttemptId,
@@ -540,6 +652,10 @@ async function executeBrandingTask(
   let providerStarted = false;
   let providerCompleted = false;
   let persistedOutputId: string | null = null;
+  let latestProviderStatus: number | null = null;
+  let latestRawProviderResponse: unknown = null;
+  let latestNormalizedResponse: Record<string, unknown> | null = null;
+  let latestUsageComponents: readonly { provider: string; model: string; inputTokens: number; outputTokens: number }[] | null = null;
 
   const finalizeFailedUsageOnce = async () => {
     if (!usageId || usageFinalized) return;
@@ -571,6 +687,19 @@ async function executeBrandingTask(
           input: brandingInput,
         });
     providerCompleted = true;
+    if (result.dispatchMode === "sync") {
+      latestProviderStatus = result.providerStatus;
+      latestRawProviderResponse = result.rawProviderResponse;
+      latestNormalizedResponse = result.output as Record<string, unknown>;
+      latestUsageComponents = result.usageComponents ?? null;
+      await saveExecutionRecoveryState(dependencies, claim, "branding", {
+        providerStatus: result.providerStatus,
+        rawProviderResponse: result.rawProviderResponse,
+        normalizedResponse: result.output as Record<string, unknown>,
+        usageComponents: result.usageComponents ?? null,
+        validationStage: "final_contract",
+      });
+    }
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
@@ -604,6 +733,27 @@ async function executeBrandingTask(
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
     };
   } catch (error) {
+    const details = providerFailureDetails(error);
+    if (providerStarted && (details.rawProviderResponse || details.normalizedProviderResponse)) {
+      await saveExecutionRecoveryState(dependencies, claim, "branding", {
+        providerStatus: details.upstreamStatus,
+        rawProviderResponse: details.rawProviderResponse,
+        normalizedResponse: null,
+        failureCategory: details.failureCategory,
+        failurePoint: details.failurePoint,
+        validationStage: details.validationStage,
+      });
+    } else if (providerCompleted && persistedOutputId === null) {
+      await saveExecutionRecoveryState(dependencies, claim, "branding", {
+        providerStatus: latestProviderStatus,
+        rawProviderResponse: latestRawProviderResponse,
+        normalizedResponse: latestNormalizedResponse,
+        usageComponents: latestUsageComponents,
+        failureCategory: "persistence_failure",
+        failurePoint: "before_dispatch",
+        validationStage: "persistence",
+      });
+    }
     try {
       await finalizeFailedUsageOnce();
     } catch {
@@ -623,12 +773,17 @@ async function executeBrandingTask(
       error,
       persistedOutputId,
     });
+    const hasSavedResponse = Boolean(details.rawProviderResponse) || Boolean(details.normalizedProviderResponse) ||
+      latestNormalizedResponse !== null;
     const uncertain = providerStarted &&
-      providerFailureDetails(error).failurePoint !== "before_dispatch" &&
+      !hasSavedResponse &&
+      details.failurePoint !== "before_dispatch" &&
       !confirmedNoOutputFailure;
     try {
       if (confirmedNoOutputFailure) {
         await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+      } else if (hasSavedResponse) {
+        await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "OUTPUT_INVALID" });
       } else if (uncertain) {
         await dependencies.failUncertain({
           ...lease,
@@ -645,7 +800,8 @@ async function executeBrandingTask(
       state: "needs_attention",
       message: "Brand identity needs attention.",
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
-      ...(canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
+      ...(hasSavedResponse ? { savedResponseAvailable: true } : {}),
+      ...(hasSavedResponse || canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
         ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId }
         : {}),
       ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),
@@ -678,6 +834,10 @@ async function executeAdditionalSpecialistTask(
   let providerStarted = false;
   let providerCompleted = false;
   let persistedOutputId: string | null = null;
+  let latestProviderStatus: number | null = null;
+  let latestRawProviderResponse: unknown = null;
+  let latestNormalizedResponse: Record<string, unknown> | null = null;
+  let latestUsageComponents: readonly { provider: string; model: string; inputTokens: number; outputTokens: number }[] | null = null;
   const failUsageOnce = async () => {
     if (!usageId || usageFinalized) return;
     usageFinalized = true;
@@ -707,6 +867,19 @@ async function executeAdditionalSpecialistTask(
           input: moduleInput,
         });
     providerCompleted = true;
+    if (result.dispatchMode === "sync") {
+      latestProviderStatus = result.providerStatus;
+      latestRawProviderResponse = result.rawProviderResponse;
+      latestNormalizedResponse = result.output as Record<string, unknown>;
+      latestUsageComponents = result.usageComponents ?? null;
+      await saveExecutionRecoveryState(dependencies, claim, config.module, {
+        providerStatus: result.providerStatus,
+        rawProviderResponse: result.rawProviderResponse,
+        normalizedResponse: result.output as Record<string, unknown>,
+        usageComponents: result.usageComponents ?? null,
+        validationStage: "final_contract",
+      });
+    }
     await dependencies.markRunning({
       ...lease,
       ...(result.providerExecutionId ? { providerExecutionId: result.providerExecutionId } : {}),
@@ -748,6 +921,27 @@ async function executeAdditionalSpecialistTask(
         progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
       };
     }
+    const details = providerFailureDetails(error);
+    if (providerStarted && (details.rawProviderResponse || details.normalizedProviderResponse)) {
+      await saveExecutionRecoveryState(dependencies, claim, config.module, {
+        providerStatus: details.upstreamStatus,
+        rawProviderResponse: details.rawProviderResponse,
+        normalizedResponse: null,
+        failureCategory: details.failureCategory,
+        failurePoint: details.failurePoint,
+        validationStage: details.validationStage,
+      });
+    } else if (providerCompleted && persistedOutputId === null) {
+      await saveExecutionRecoveryState(dependencies, claim, config.module, {
+        providerStatus: latestProviderStatus,
+        rawProviderResponse: latestRawProviderResponse,
+        normalizedResponse: latestNormalizedResponse,
+        usageComponents: latestUsageComponents,
+        failureCategory: "persistence_failure",
+        failurePoint: "before_dispatch",
+        validationStage: "persistence",
+      });
+    }
     try {
       await failUsageOnce();
     } catch {
@@ -767,12 +961,17 @@ async function executeAdditionalSpecialistTask(
       error,
       persistedOutputId,
     });
+    const hasSavedResponse = Boolean(details.rawProviderResponse) || Boolean(details.normalizedProviderResponse) ||
+      latestNormalizedResponse !== null;
     const uncertain = providerStarted &&
-      providerFailureDetails(error).failurePoint !== "before_dispatch" &&
+      !hasSavedResponse &&
+      details.failurePoint !== "before_dispatch" &&
       !confirmedNoOutputFailure;
     try {
       if (confirmedNoOutputFailure) {
         await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "PROVIDER_UNAVAILABLE" });
+      } else if (hasSavedResponse) {
+        await dependencies.failBeforeDispatch({ ...lease, safeErrorCode: "OUTPUT_INVALID" });
       } else if (uncertain) {
         await dependencies.failUncertain({
           ...lease,
@@ -789,7 +988,8 @@ async function executeAdditionalSpecialistTask(
       state: "needs_attention",
       message: `${config.label} needs attention.`,
       progress: await safeProgress(dependencies, claim.runId, claim.context.userId),
-      ...(canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
+      ...(hasSavedResponse ? { savedResponseAvailable: true } : {}),
+      ...(hasSavedResponse || canAutoRetryConfirmedNoOutputFailure({ claim, error, persistedOutputId }) || (!usageId && !uncertain)
         ? { retryableAttemptId: claim.attemptId, retryableTaskId: claim.taskId }
         : {}),
       ...(uncertain ? { uncertainAttemptId: claim.attemptId } : {}),

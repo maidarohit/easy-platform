@@ -9,6 +9,7 @@ import {
   reconcileUncertainEasyModeAttempt,
 } from "@/app/lib/easy-mode-task-attempts";
 import { executeEasyModeRun } from "@/app/lib/easy-mode-executor";
+import { replaySavedEasyModeProviderResponse } from "@/app/lib/easy-mode-provider-recovery";
 import { validateEasyModeRunId } from "@/app/lib/easy-mode-run-validation";
 import { MalformedJsonBodyError, readOptionalLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
 
@@ -67,6 +68,21 @@ export async function POST(request: Request, { params }: RouteContext) {
   )).orderBy(desc(easyModeTaskAttempts.attemptNumber)).limit(1);
   if (!attempt) {
     return Response.json({ error: "This step cannot be retried safely." }, { status: 409 });
+  }
+
+  const replay = await replaySavedEasyModeProviderResponse({ attemptId: attempt.id, userId });
+  if (replay.state === "completed" || replay.state === "ignored") {
+    const result = await executeEasyModeRun({ runId, userId });
+    return Response.json({ ...result, recovery: "saved_response_replay" }, {
+      status: result.state === "needs_attention" ? 422 : 200,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  if (replay.state === "failed_closed") {
+    return Response.json({ error: "This saved provider response could not be recovered safely." }, {
+      status: 422,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   try {

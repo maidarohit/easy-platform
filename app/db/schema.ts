@@ -17,6 +17,7 @@ import type { BusinessDnaContent } from "@/app/lib/business-dna";
 import type { PreviewOverrides } from "@/app/lib/business-preview-edits";
 import type { PublishedBusinessSnapshot } from "@/app/lib/business-publication";
 import type { PublicContactSettings } from "@/app/lib/public-contact";
+import type { EasyModeAttemptRecoveryState } from "@/app/lib/easy-mode-recovery-state";
 import type { SupportedLanguageCode } from "@/app/lib/supported-languages";
 
 export const users = pgTable("users", {
@@ -578,6 +579,7 @@ export const easyModeTaskAttempts = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     safeErrorCode: varchar("safe_error_code", { length: 64 }),
+    recoveryState: jsonb("recovery_state").$type<EasyModeAttemptRecoveryState>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
