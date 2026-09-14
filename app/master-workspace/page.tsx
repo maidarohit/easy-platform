@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Sidebar from "../dashboard/components/Sidebar";
@@ -9,6 +10,11 @@ import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import { buildLaunchCenterView } from "@/app/lib/master-workspace-launch-center";
 import ProductTutorial from "@/app/components/ProductTutorial";
 import WorkspaceGuide from "@/app/components/WorkspaceGuide";
+
+const WorkspaceAtmosphere = dynamic(() => import("./WorkspaceAtmosphere"), {
+  ssr: false,
+  loading: () => null,
+});
 
 type WorkspaceData = {
   project: { id: string; name: string; companyName?: string | null; industry?: string | null; goal?: string | null; businessDescription?: string | null };
@@ -213,6 +219,7 @@ const savePrimaryLanguage = async () => {
     .filter((module) => Boolean(module.number)) ?? [];
   const displayedProject = workspace?.project ?? project;
   const businessName = displayedProject?.companyName?.trim() || displayedProject?.name?.trim() || "";
+  const brandingOutput = workspace?.sections.find((section) => section.module === "branding")?.output ?? null;
   const launchCenter = workspace
     ? buildLaunchCenterView({
         projectId,
@@ -240,11 +247,19 @@ const savePrimaryLanguage = async () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#f7f3e9] text-[#103c32]">
+    <div className="flex min-h-screen overflow-hidden bg-[#f7f3e9] text-[#103c32]">
       <Sidebar projectId={projectId} />
 
-      <main className="min-w-0 flex-1 px-6 py-8 lg:px-10 xl:px-14">
-        <div className="mx-auto max-w-[1500px]">
+      <main className="relative min-w-0 flex-1 px-6 py-8 lg:px-10 xl:px-14">
+        <WorkspaceAtmosphere
+          projectId={projectId}
+          businessName={businessName}
+          industry={displayedProject?.industry || project?.industry || null}
+          businessDescription={displayedProject?.businessDescription || project?.businessDescription || null}
+          brandStyle={project?.brandStyle || null}
+          brandingOutput={brandingOutput}
+        />
+        <div className="relative z-10 mx-auto max-w-[1500px]">
 
           {/* HEADER */}
           <section className="mb-8">

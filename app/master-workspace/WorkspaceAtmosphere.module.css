@@ -1,0 +1,75 @@
+.atmosphere {
+  isolation: isolate;
+}
+
+.wash {
+  animation: workspace-atmosphere-pan 28s ease-in-out infinite alternate;
+  will-change: transform, filter;
+}
+
+.orb {
+  animation: workspace-atmosphere-float 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.orbRight {
+  animation-duration: 30s;
+}
+
+.orbBottom {
+  animation-duration: 34s;
+}
+
+.mist {
+  animation: workspace-atmosphere-mist 22s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+
+.atmosphere[data-motion="static"] .wash,
+.atmosphere[data-motion="static"] .orb,
+.atmosphere[data-motion="static"] .mist {
+  animation: none;
+}
+
+@keyframes workspace-atmosphere-pan {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+    filter: saturate(1);
+  }
+
+  100% {
+    transform: scale(1.04) translate3d(0, -1.5%, 0);
+    filter: saturate(1.04);
+  }
+}
+
+@keyframes workspace-atmosphere-float {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(0, -18px, 0);
+  }
+}
+
+@keyframes workspace-atmosphere-mist {
+  0% {
+    opacity: 0.92;
+    transform: translate3d(0, 0, 0);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wash,
+  .orb,
+  .mist {
+    transition: none;
+    animation: none;
+  }
+}
