@@ -132,6 +132,33 @@ test("structured marketing fields keep semantic headings without campaign fragme
   assert.deepEqual(preview.marketing?.campaignCards, []);
 });
 
+test("customer-facing preview CTAs fall back when saved outputs contain internal guidance", () => {
+  const preview = buildBusinessPreview({
+    project: { id: "project-cta", name: "Northline Studio", companyName: null, industry: "Interior design", goal: null, businessDescription: null },
+    outputs: new Map([
+      ["website", output("website", {
+        websiteOverview: "A calm studio site.",
+        recommendedPages: "Home; Services; About; Contact",
+        websiteFeatures: "Project gallery and contact form.",
+        websiteEdits: {
+          heroHeadline: "Thoughtful spaces for everyday living",
+          heroDescription: "A measured interior design practice.",
+          primaryCtaLabel: "Goal: Increase enquiries",
+        },
+      })],
+      ["sales", output("sales", {
+        leadGenerationStrategy: "Use approved channels and verified context.",
+        salesFunnel: "Enquiry to discovery call to proposal.",
+        outreachStrategy: "Use only the verified enquiries, orders, and paid revenue shown in the connected business context.",
+      })],
+    ]),
+  });
+
+  assert.equal(preview.website?.primaryCta, "Contact us");
+  assert.equal(preview.journey?.primaryCta, "Ready to get started?");
+  assert.doesNotMatch(preview.journey?.primaryCta ?? "", /verified enquiries|paid revenue|connected business context/i);
+});
+
 test("preview route reads validated saved outputs and approval only timestamps those outputs", async () => {
   const route = await source("app/api/business-preview/route.ts");
   assert.match(route, /verifyFirebaseIdToken\(request\)/);

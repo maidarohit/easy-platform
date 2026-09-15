@@ -1,4 +1,4 @@
-import type { BusinessPreview } from "@/app/lib/business-preview";
+import { publicPreviewCta, type BusinessPreview } from "@/app/lib/business-preview";
 import { isUsableBusinessUploadedSrc } from "@/app/lib/business-site-visuals";
 
 export const PREVIEW_EDIT_RULES = {
@@ -150,7 +150,16 @@ export function applyPreviewOverrides(preview: BusinessPreview, overrides: Previ
     if (!Object.hasOwn(PREVIEW_EDIT_RULES, field) || typeof value !== "string") continue;
     const [section, key] = field.split(".") as ["brand" | "website" | "marketing" | "search" | "journey", string];
     const target = next[section] as Record<string, unknown> | null;
-    if (target && typeof target[key] === "string") target[key] = value;
+    if (!target || typeof target[key] !== "string") continue;
+    if (field === "website.primaryCta") {
+      target[key] = publicPreviewCta(value, next.business.name, "Contact us");
+      continue;
+    }
+    if (field === "journey.primaryCta") {
+      target[key] = publicPreviewCta(value, next.business.name, "Ready to get started?");
+      continue;
+    }
+    target[key] = value;
   }
   return next;
 }

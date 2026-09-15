@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildBusinessPreview } from "../../app/lib/business-preview.ts";
 import {
-  applyPreviewOverrides, PREVIEW_EDIT_RULES, validatePreviewOverrides,
+  applyPreviewOverrides, mergePreservedHeroImage, PREVIEW_EDIT_RULES, validatePreviewOverrides,
 } from "../../app/lib/business-preview-edits.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -53,6 +53,7 @@ test("edit persistence is owner scoped, exact-keyed, revisioned, and never updat
   assert.match(route, /eq\(projectOutputs\.userId, userId\)/);
   assert.match(route, /Object\.keys\(body\)\.some/);
   assert.match(route, /validatePreviewOverrides/);
+  assert.match(route, /mergePreservedOwnerImages/);
   assert.match(route, /insert\(projectPreviewCustomizations\)/);
   assert.match(route, /revisionCount: sql/);
   assert.match(route, /approvedAt: null/);
@@ -73,7 +74,8 @@ test("Edit mode is live and Save, Cancel, Reset remain manual and provider free"
   assert.match(page, /\/api\/business-preview\/edits/);
   assert.match(page, /useSearchParams\(\)\.get\("projectId"\)/);
   assert.doesNotMatch(page, /\/onboarding|router\.push|router\.replace|window\.location|Build My Business/i);
-  assert.match(page, /Images can be added later/);
+  assert.match(page, /Upload main photo/);
+  assert.match(page, /Upload second photo/);
   assert.match(page, /\["desktop", "tablet", "mobile"\]/);
   for (const label of ["Brand", "Website", "Marketing", "Search", "Customer Journey"]) assert.match(page, new RegExp(`\\b${label}\\b`));
   assert.doesNotMatch(page, /OpenAI|n8n|provider|Rewrite with AI|regenerate/i);
@@ -107,4 +109,52 @@ test("migration creates a separate project-owned customization model", async () 
   assert.match(migration, /"overrides" jsonb/);
   assert.match(migration, /ON DELETE cascade/);
   assert.doesNotMatch(migration, /project_outputs|project_business_dna|DROP|DELETE FROM/i);
+});
+
+const HERO = "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/business%2Fu%2Fp%2Fhero?alt=media&token=abc";
+const SECONDARY = "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/business%2Fu%2Fp%2Fsecondary?alt=media&token=def";
+
+test("preview overrides keep usable owner image URLs and ignore them as text fields", () => {
+  const original = originalPreview();
+  const checked = validatePreviewOverrides({
+    "brand.tagline": "Growth made practical",
+    heroImage: HERO,
+    secondaryImage: SECONDARY,
+  }, original);
+  assert.equal(checked.valid, true);
+  if (!checked.valid) return;
+  const edited = applyPreviewOverrides(original, checked.overrides);
+  assert.equal(edited.website?.heroImage, HERO);
+  assert.equal(edited.website?.secondaryImage, SECONDARY);
+  assert.equal(edited.brand?.tagline, "Growth made practical");
+  assert.equal(validatePreviewOverrides({ heroImage: "javascript:alert(1)" }, original).valid, false);
+  assert.equal(validatePreviewOverrides({ secondaryImage: "http://example.com/photo.jpg" }, original).valid, false);
+});
+
+test("saving text edits preserves previously stored heroImage and secondaryImage", () => {
+  const original = originalPreview();
+  const checked = validatePreviewOverrides({ "brand.tagline": "Kept text" }, original);
+  assert.equal(checked.valid, true);
+  if (!checked.valid) return;
+  const merged = mergePreservedHeroImage(checked.overrides, {
+    heroImage: HERO,
+    secondaryImage: SECONDARY,
+    "website.heroHeadline": "Old",
+  });
+  assert.equal(merged.heroImage, HERO);
+  assert.equal(merged.secondaryImage, SECONDARY);
+  assert.equal(merged["brand.tagline"], "Kept text");
+  assert.equal(Object.hasOwn(merged, "website.heroHeadline"), false);
+});
+
+test("unsafe CTA overrides fall back instead of rendering internal guidance", () => {
+  const original = originalPreview();
+  const edited = applyPreviewOverrides(original, {
+    "website.primaryCta": "Strategy: Increase conversions",
+    "journey.primaryCta": "Use only the verified enquiries, orders, and paid revenue shown in the connected business context.",
+  });
+  assert.equal(edited.website?.primaryCta, "Contact us");
+  assert.equal(edited.journey?.primaryCta, "Ready to get started?");
+  assert.equal(original.website?.primaryCta, "Book now");
+  assert.equal(original.journey?.primaryCta, "Book a consultation");
 });

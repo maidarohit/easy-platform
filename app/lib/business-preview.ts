@@ -1,3 +1,6 @@
+import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
+import { concisePublicCopy } from "@/app/lib/public-website-presentation";
+
 export const BUSINESS_PREVIEW_MODULES = [
   "ai-manager", "branding", "website", "marketing", "seo", "uiux", "sales",
 ] as const;
@@ -23,6 +26,9 @@ function text(value: unknown) {
 
 const BUSINESS_NAME_PLACEHOLDER = /\[(?:brand|company|business)\s+name\]/gi;
 const BRACKET_PLACEHOLDER = /\[[^\]\r\n]{1,80}\]/g;
+const INTERNAL_CTA_LABEL = /(?:^|\n)\s*(?:primary|objective|strategy|recommendation|proposed recommendation|goal|kpi|funnel|priority)\s*:/i;
+const INTERNAL_CTA_GUIDANCE = /\b(?:internal strategy|implementation notes?|planning notes?|recommendation metadata|system instruction|prompt|business owner|connected business context|verified enquiries?|paid revenue|sales kpis?|target customer profile|outreach strategy)\b/i;
+const CONDITIONAL_CTA_GUIDANCE = /\b(?:describe|mention|claim|include|add|write|showcase|highlight|use|track|confirm|review|present|treat|consider|recommend|suggest|validate)\b[^.!?\n]{0,160}\b(?:only when|if verified|when verified|when approved|if approved|with the business owner|from the connected business context|shown in the connected business context)\b/i;
 
 export function resolveCustomerText(value: unknown, businessName: string) {
   const source = text(value);
@@ -41,6 +47,19 @@ function excerpt(value: unknown, businessName: string, maximum = 420) {
 function nested(output: Output | undefined, key: string) {
   const value = output?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? value as Output : undefined;
+}
+
+export function publicPreviewCta(value: unknown, businessName: string, fallback: string | null = null) {
+  const candidate = resolveCustomerText(value, businessName);
+  if (!candidate) return fallback;
+  const compact = candidate.replace(/\s+/g, " ").trim();
+  const concise = concisePublicCopy(compact, 80)?.replace(/[.!?]+$/g, "").trim() ?? null;
+  if (!concise || concise.length > 80) return fallback;
+  if (INTERNAL_CTA_LABEL.test(compact) || INTERNAL_CTA_GUIDANCE.test(compact) ||
+      CONDITIONAL_CTA_GUIDANCE.test(compact) || hasUnsupportedPublicClaim(compact)) {
+    return fallback;
+  }
+  return concise;
 }
 
 export function extractBrandColours(value: unknown) {
@@ -131,7 +150,7 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
     website: website ? {
       heroHeadline: displayText(websiteEdits?.heroHeadline) || displayText(branding?.tagline),
       supportingText: displayExcerpt(websiteEdits?.heroDescription || website.websiteOverview, 650),
-      primaryCta: displayText(websiteEdits?.primaryCtaLabel),
+      primaryCta: publicPreviewCta(websiteEdits?.primaryCtaLabel, businessName, "Contact us"),
       services: displayText(websiteEdits?.servicesText || website.recommendedPages),
       serviceCards: parsePreviewCards(displayText(websiteEdits?.servicesText || website.recommendedPages)),
       trust: displayExcerpt(branding?.marketingSuggestions, 650),
@@ -171,7 +190,7 @@ export function buildBusinessPreview(source: BusinessPreviewSource) {
     journey: sales || uiux ? {
       leadAction: displayExcerpt(sales?.leadGenerationStrategy, 750),
       enquiryPath: displayExcerpt(sales?.salesFunnel || uiux?.userFlow, 900),
-      primaryCta: displayExcerpt(sales?.outreachStrategy, 500),
+      primaryCta: publicPreviewCta(sales?.outreachStrategy, businessName, "Ready to get started?"),
       customerJourney: displayExcerpt(uiux?.userFlow || sales?.actionPlan, 900),
       audience: displayExcerpt(sales?.targetCustomerProfile || uiux?.userPersonas, 750),
     } : null,
