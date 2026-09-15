@@ -91,8 +91,9 @@ function HeroBlock({ block, media, accent, accentText, basePath, fallbackHeadlin
   </div>{media.hero && <WebsiteMediaVisual media={media.hero} className="aspect-[4/3] min-h-72 rounded-[2rem] shadow-xl" />}</div></section>;
 }
 
-function ContentBlock({ block, fallbackDescription, pagePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "content" }> }) {
-  const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body) || (pagePath === "/" ? fallbackDescription : "");
+function ContentBlock({ block, fallbackHeadline, fallbackDescription, pagePath }: BlockProps & { block: Extract<WebsiteBlock, { type: "content" }> }) {
+  const heading = safeWebsiteBlockText(block.heading, 200) || (pagePath === "/" ? `About ${fallbackHeadline}` : "");
+  const body = safeWebsiteBlockText(block.body) || (pagePath === "/" ? fallbackDescription : "");
   if (!body) return null;
   return <Section muted><div data-block-type="content" className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[.7fr_1.3fr] lg:gap-14">{heading && <Heading>{heading}</Heading>}<p className="max-w-3xl whitespace-pre-wrap text-lg leading-8 text-[var(--site-section-muted)]">{body}</p></div></Section>;
 }
@@ -105,11 +106,18 @@ function ServicesBlock({
   accentText,
   basePath,
   pagePath,
+  fallbackHeadline,
+  fallbackDescription,
 }: BlockProps & {
   block: Extract<WebsiteBlock, { type: "services" }>;
 }) {
   const heading = safeWebsiteBlockText(block.heading, 200);
+  const displayHeading = heading || (services.length > 0 ? `What ${fallbackHeadline} offers` : "");
   const introduction = safeWebsiteBlockText(block.introduction);
+  const serviceSummary = services.slice(0, 3).map((service) => service.title).join(services.length === 2 ? " and " : ", ");
+  const displayIntroduction = introduction && /\b(?:home|pricing|book now|how it works|contact form|enquiry form|quote form|booking|page|pages|gallery|checkout|faq|about|contact)\b/i.test(introduction)
+    ? (serviceSummary ? `Explore ${serviceSummary}.` : fallbackDescription)
+    : introduction;
 
   if (
     !heading &&
@@ -123,11 +131,11 @@ function ServicesBlock({
   return (
     <Section>
       <div data-block-type="services" className="mx-auto max-w-7xl">
-        {heading && <Heading>{heading}</Heading>}
+        {displayHeading && <Heading>{displayHeading}</Heading>}
 
-        {introduction && (
+        {displayIntroduction && (
           <p className="mt-5 max-w-3xl text-lg leading-8 text-[var(--site-page-muted)]">
-            {introduction}
+            {displayIntroduction}
           </p>
         )}
 
@@ -186,11 +194,11 @@ function ServicesBlock({
             }}
           >
             <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: resolveWebsiteSurfaceForeground(accent).muted }}>
-              Why choose us
+              Why choose {fallbackHeadline}
             </p>
 
             <h3 className="mt-3 text-3xl font-bold tracking-tight">
-              A coordinated approach to your project
+              What to expect from {fallbackHeadline}
             </h3>
 
             <div className="mt-8 grid gap-5 md:grid-cols-3">
@@ -203,7 +211,7 @@ function ServicesBlock({
 
                   <p className="mt-2 text-sm leading-6" style={{ color: resolveWebsiteSurfaceForeground(accent).muted }}>
                     {service.body ||
-                      `Discuss ${service.title.toLowerCase()} around your confirmed requirements.`}
+                      `Ask about ${service.title.toLowerCase()} from ${fallbackHeadline}.`}
                   </p>
                 </div>
               ))}
@@ -255,10 +263,12 @@ function FaqBlock({ block, services, contact }: BlockProps & { block: Extract<We
   return <Section><div data-block-type="faq" className="mx-auto max-w-4xl">{heading && <Heading>{heading}</Heading>}<div className="mt-8 space-y-4">{items.map((item) => <details key={item.id} className="rounded-xl border border-[var(--site-border)] p-5"><summary className="cursor-pointer font-semibold">{item.question}</summary><p className="mt-3 leading-7 text-[var(--site-page-muted)]">{item.answer}</p></details>)}</div></div></Section>;
 }
 
-function ContactBlock({ block, contact, services, accent, inquirySlug, preview }: BlockProps & { block: Extract<WebsiteBlock, { type: "contact" }> }) {
+function ContactBlock({ block, contact, services, accent, inquirySlug, preview, fallbackHeadline }: BlockProps & { block: Extract<WebsiteBlock, { type: "contact" }> }) {
   const heading = safeWebsiteBlockText(block.heading, 200), body = safeWebsiteBlockText(block.body);
   const methods = publicContactMethods(contact);
-  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-card-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{heading && <Heading>{heading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--site-card-muted)]">{body || "Tell us what you are looking for and we can discuss the right next step."}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm text-[var(--site-card-muted)]">Enquiries are welcome for {services.slice(0, 4).map((item) => item.title).join(", ")}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
+  const serviceSummary = services.slice(0, 4).map((item) => item.title).join(", ");
+  const displayHeading = heading || (services[0] ? `Enquire about ${services[0].title}` : `Contact ${fallbackHeadline}`);
+  return <Section muted><div data-block-type="contact" id="contact" className="mx-auto grid max-w-6xl gap-8 rounded-[var(--site-card-radius)] border border-[var(--site-border)] bg-[var(--site-card)] p-8 text-[var(--site-card-text)] shadow-sm sm:p-12 lg:grid-cols-[.9fr_1.1fr]"><div>{displayHeading && <Heading>{displayHeading}</Heading>}<p className="mt-5 max-w-2xl text-lg leading-8 text-[var(--site-card-muted)]">{body || (serviceSummary ? `Ask about ${serviceSummary}.` : `Contact ${fallbackHeadline} to learn more.`)}</p>{(methods.length > 0 || contact.location) && <div className="mt-8 grid gap-4 sm:grid-cols-2">{methods.map((item) => <a key={item.href} href={item.href} className="rounded-2xl border border-[var(--site-border)] p-5 transition hover:shadow-md"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">{item.label}</span><span className="mt-2 block break-words font-semibold" style={{ color: accent }}>{item.value}</span></a>)}{contact.location && <div className="rounded-2xl border border-[var(--site-border)] p-5"><span className="block text-xs font-bold uppercase tracking-wider text-[var(--site-card-muted)]">Location</span><span className="mt-2 block font-semibold">{contact.location}</span></div>}</div>}{services.length > 0 && <p className="mt-8 text-sm text-[var(--site-card-muted)]">Enquiries are welcome for {serviceSummary}.</p>}</div>{(inquirySlug || preview) && <InquiryForm slug={inquirySlug || ""} services={services.map((item) => item.title)} selectedService="" primaryColor={accent} previewOnly={!inquirySlug} />}</div></Section>;
 }
 
 function CtaBlock({

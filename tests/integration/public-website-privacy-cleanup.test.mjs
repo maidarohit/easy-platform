@@ -141,3 +141,11 @@ test("legacy published-sites route exposes safe generated metadata without provi
   assert.match(page, /alternates: \{ canonical \}/); assert.match(page, /openGraph/); assert.match(page, /robots: \{ index: pageSeo\?\.index \?\? true, follow: true \}/);
   assert.doesNotMatch(page, /OpenAI|N8N_|Gemini|startAiUsage|fetch\s*\(/i);
 });
+
+test("public business route avoids generic template boilerplate in customer-facing sections", async () => {
+  const page = await readFile("app/business/[slug]/page.tsx", "utf8");
+  assert.match(page, /const servicesHeading = `What \$\{businessName\} offers`/);
+  assert.match(page, /const contactHeading = services\[0\] \? `Enquire about \$\{services\[0\]\.title\}` : `Contact \$\{businessName\}`/);
+  assert.match(page, /const contactBody = serviceSummary \? `Ask about \$\{serviceSummary\}\.` : `Contact \$\{businessName\} to learn more\.`/);
+  assert.doesNotMatch(page, /Designed around your business|Ready to turn the idea into something real|Purpose behind the work|Thoughtful work, presented with clarity and purpose|Services shaped around real needs|Tell us what you are looking for/i);
+});

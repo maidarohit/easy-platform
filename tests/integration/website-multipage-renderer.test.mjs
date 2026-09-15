@@ -52,6 +52,8 @@ test("public text safety omits instructions and unsupported claims while uploade
   assert.equal(safeWebsiteBlockText("Primary: Generate qualified leads"), "");
   assert.equal(safeWebsiteBlockText("Describe company history only when verified"), "");
   assert.equal(safeWebsiteBlockText("Award-winning team with 100 clients"), "");
+  assert.equal(safeWebsiteBlockText("Designed around your business"), "");
+  assert.equal(safeWebsiteBlockText("Tell us what you're looking for and we'll help you find the right way forward."), "");
   assert.equal(safeWebsiteBlockText("I run a small interior design business and want a website."), "");
   assert.equal(safeWebsiteBlockText("The website will act as a lead-generation tool."), "");
   assert.equal(safeWebsiteBlockText("The tone will be premium and modern."), "");
@@ -80,7 +82,8 @@ test("schema-v2 uses one polished shared presentation for preview and public rou
   assert.match(root, /<WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
   assert.match(child, /<WebsiteSiteRenderer document=\{loaded\.snapshot\.siteDocument!\}/);
   assert.match(root, /const snapshot = published\.snapshot/);
-  assert.match(root, /if \(snapshot\.siteDocument\) return <WebsiteSiteRenderer/);
+  assert.match(root, /if \(snapshot\.siteDocument\) \{/);
+  assert.match(root, /return <WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
   assert.match(root, /const publicSnapshot = publicBusinessView\(snapshot\)/);
   assert.match(child, /const snapshot = published\?\.snapshot \?\? null/);
   assert.match(renderer, /max-w-7xl/);
@@ -90,6 +93,7 @@ test("schema-v2 uses one polished shared presentation for preview and public rou
   assert.match(renderer, /savedSteps\.length > 0 \? savedSteps/);
   assert.match(renderer, /pageServices\.length > 0 \? pageServices : suppliedServices/);
   assert.match(preview, /serviceItems=\{serviceItems\}/);
+  assert.doesNotMatch(root, /Designed around your business|Ready to turn the idea into something real|Purpose behind the work|Services shaped around real needs|Tell us what you are looking for/i);
 });
 
 test("verified services and approved contact data enrich the shared schema-v2 presentation", async () => {

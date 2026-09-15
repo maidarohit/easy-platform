@@ -50,20 +50,21 @@ test("deterministic website merge applies authoritative and approved sources whi
   });
   assert.ok(result);
   assert.equal(result.changed, true);
-  assert.deepEqual(result.modules, ["Branding", "UI/UX", "SEO", "Sales", "Social/Content", "Business DNA"]);
+  assert.deepEqual(result.modules, ["Branding", "UI/UX", "SEO", "Business DNA"]);
   assert.equal(result.output.colourScheme, branding.colorPalette);
   assert.equal(result.output.typography, branding.typography);
   assert.equal(result.output.siteStructure, uiux.userFlow);
   assert.match(result.output.designRecommendations, /Warm and concise|compact mobile navigation/);
   assert.match(result.output.seoRecommendations, /Meta title: Acme Interior Design/);
   assert.match(result.output.seoRecommendations, /Meta description: Thoughtful interior design/);
-  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Book a consultation");
+  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Contact");
+  assert.equal(result.output.websiteEdits.servicesText, "Interior design");
   assert.equal(result.output.websiteEdits.template, "Luxury");
   assert.deepEqual(
     { phone: result.output.websiteEdits.phone, email: result.output.websiteEdits.email, address: result.output.websiteEdits.address, whatsapp: result.output.websiteEdits.whatsapp },
     { phone: "123", email: "owner@example.com", address: "Existing address", whatsapp: "456" },
   );
-  assert.doesNotMatch(JSON.stringify(result.output.websiteEdits), /Private strategy|Private funnel|Private script|Private pricing/);
+  assert.doesNotMatch(JSON.stringify(result.output.websiteEdits), /Private strategy|Private funnel|Private script|Private pricing|Book a consultation|Create a home that feels unmistakably yours/i);
 });
 
 test("unapproved customer-facing modules are absent unless passed through the approved boundary", () => {
@@ -182,7 +183,7 @@ test("internal strategy labels never reach public hero, headings, CTA, or public
     result.output.websiteEdits.primaryCtaLabel, result.output.websiteOverview, result.output.websiteGoal,
   ].join("\n");
   for (const label of labels) assert.doesNotMatch(publicFields, new RegExp(label, "i"));
-  assert.match(result.output.websiteEdits.heroDescription, /provides interior design services focused on your needs/i);
+  assert.match(result.output.websiteEdits.heroDescription, /offers interior design services/i);
   for (const label of labels) {
     const legacyWebsite = Object.fromEntries(Object.entries(website).filter(([field]) => field !== "websiteEdits"));
     const labelled = applyLatestWebsiteIntelligence({
@@ -226,6 +227,63 @@ test("sanitation-only changes persist and remove internal instructions and unver
   assert.doesNotMatch(visible, /Primary:|Objective:|Strategy:|Goal:|Recommendation:|KPI:|Priority:|Funnel:/i);
   assert.doesNotMatch(visible, /Describe operating history only when|small team of architects and craftsmen/i);
   assert.match(result.output.websiteEdits.aboutText, /Residential interior design and renovation services in Bengaluru/);
+});
+
+test("services mapping prefers confirmed offerings over pages, features, and booking prompts", () => {
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern" },
+    website: {
+      ...website,
+      websiteFeatures: "Home; Pricing; Book Now; How It Works; Packages",
+      recommendedPages: "Home; Pricing; Contact",
+      websiteEdits: {
+        ...website.websiteEdits,
+        servicesText: "Home; Pricing; Book Now; How It Works; Packages",
+        primaryCtaLabel: "Book now",
+      },
+    },
+    businessDna: {
+      identity: { businessName: "Acme", industry: "Interior design" },
+      offer: { services: ["Interior design", "Space planning"] },
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.output.websiteEdits.servicesText, "Interior design; Space planning");
+  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Enquire about Interior design");
+  assert.doesNotMatch(result.output.websiteEdits.servicesText, /Home|Pricing|Book Now|How It Works|Packages/i);
+});
+
+test("generic template website copy falls back to verified business understanding", () => {
+  const result = applyLatestWebsiteIntelligence({
+    project: {
+      name: "Project",
+      companyName: "Northstar",
+      industry: "Consulting",
+      brandStyle: "Modern",
+      brandDescription: "Strategy consulting for growing teams.",
+    },
+    website: {
+      ...website,
+      websiteOverview: "Designed around your business",
+      websiteEdits: {
+        ...website.websiteEdits,
+        heroDescription: "Designed around your business",
+        aboutText: "Thoughtful work, presented with clarity and purpose",
+        servicesText: "Professional brand direction; Home; Pricing",
+        primaryCtaLabel: "Ready to turn the idea into something real?",
+      },
+    },
+    businessDna: {
+      identity: { businessName: "Northstar", industry: "Consulting" },
+      offer: { services: ["Strategy consulting"] },
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.output.websiteEdits.heroDescription, "Strategy consulting for growing teams.");
+  assert.equal(result.output.websiteEdits.aboutText, "Strategy consulting for growing teams.");
+  assert.equal(result.output.websiteEdits.servicesText, "Strategy consulting");
+  assert.equal(result.output.websiteEdits.primaryCtaLabel, "Enquire about Strategy consulting");
+  assert.doesNotMatch(JSON.stringify(result.output.websiteEdits), /Designed around your business|professional brand direction|turn the idea into something real|Thoughtful work, presented with clarity and purpose|Home|Pricing/i);
 });
 
 test("legacy website draft is canonicalized on save and then applies successfully", () => {

@@ -22,7 +22,10 @@ test("internal categories are omitted while trustworthy industries remain readab
 test("service breadcrumb normalization is global and not tied to an industry", () => {
   assert.equal(publicServiceTitle("Services > Residential Interior Design"), "Residential Interior Design");
   assert.equal(publicServiceTitle("Services > Payroll Compliance"), "Payroll Compliance");
-  assert.equal(publicServiceText("Services > Brand Strategy; Services > Website Design"), "Brand Strategy;Website Design");
+  assert.equal(publicServiceTitle("Packages"), null);
+  assert.equal(publicServiceTitle("Book Now"), null);
+  assert.equal(publicServiceText("Services > Brand Strategy; Services > Website Design"), "Brand Strategy; Website Design");
+  assert.equal(publicServiceText("Home; Pricing; Book Now; How It Works; Packages"), null);
 });
 
 test("hero copy selects concise complete sentences and rejects internal planning copy", () => {
@@ -48,12 +51,14 @@ test("only explicitly saved contact methods become usable actions", () => {
 test("both public systems use shared presentation and retain active-only publication security", async () => {
   const businessPage = await source("app/business/[slug]/page.tsx");
   const publishedLoader = await source("app/lib/public-website-publication.ts");
+  const businessLoader = await source("app/lib/public-business-publication.ts");
   const preview = await source("app/dashboard/components/WebsitePreview.tsx");
   assert.match(businessPage, /showcaseGridClass\(showcaseVisuals\.length\)/);
-  assert.match(businessPage, /eq\(businessPublications\.status, "active"\)/);
+  assert.match(businessPage, /loadPublishedBusiness/);
   assert.match(businessPage, /<InquiryForm/);
   assert.match(publishedLoader, /publicWebsitePublicationView/);
   assert.match(publishedLoader, /eq\(publishedWebsites\.status, "active"\)/);
+  assert.match(businessLoader, /eq\(businessPublications\.status, "active"\)/);
   for (const template of ["Modern", "Luxury", "Corporate", "Creative", "Minimal", "Dark"]) {
     assert.match(preview, new RegExp(`case "${template}"`));
   }

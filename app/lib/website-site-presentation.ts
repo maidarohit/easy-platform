@@ -1,4 +1,5 @@
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
+import { hasGenericWebsiteTemplateCopy } from "@/app/lib/public-website-presentation";
 import { validateWebsiteSiteDocument, type WebsiteBlock, type WebsitePage, type WebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 const INTERNAL_PUBLIC_TEXT = /(?:^(?:primary|objective|strategy|goal|recommendation|proposed recommendation|kpi|priority|funnel)\s*:|^(?:i run|i want|we want|our goal is|we need|i need)\b|\bthe website (?:will|should|must|needs? to)\b|\bthe tone (?:will|should|must)\b|\b(?:describe|mention|claim|include|add|write|showcase|highlight)\b[^.!?\n]{0,160}\b(?:only when|if verified|when verified|on the website)\b|\b(?:internal strategy|implementation notes?|planning notes?|system instruction|prompt|project brief|original brief|customer brief|target audience|conversion goal|website requirements?)\b|\b(?:we started as|we began as|founded by|our founders?|our team of)\b)/i;
@@ -7,7 +8,8 @@ const HTML_OR_SCRIPT = /<\/?[a-z][^>]*>|(?:javascript|vbscript)\s*:/i;
 export function safeWebsiteBlockText(value: string, maximum = 4_000) {
   const candidate = value.replace(/\s+/g, " ").trim();
   return candidate && candidate.length <= maximum && !HTML_OR_SCRIPT.test(candidate) &&
-    !INTERNAL_PUBLIC_TEXT.test(candidate) && !hasUnsupportedPublicClaim(candidate) ? candidate : "";
+    !INTERNAL_PUBLIC_TEXT.test(candidate) && !hasGenericWebsiteTemplateCopy(candidate) &&
+    !hasUnsupportedPublicClaim(candidate) ? candidate : "";
 }
 
 export function resolveWebsiteSitePage(document: WebsiteSiteDocument, path: string, includeHidden = false): WebsitePage | null {
@@ -61,7 +63,18 @@ export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: str
     .find((block): block is Extract<WebsiteBlock, { type: "gallery" }> => block.type === "gallery" && block.visibility === "visible" && block.mediaIds.length > 0);
   const process = validated.pages.find((item) => item.type === "process" && item.visibility === "visible")?.blocks
     .find((block): block is Extract<WebsiteBlock, { type: "process" }> => block.type === "process" && block.visibility === "visible");
-  const about = page.blocks.find((block): block is Extract<WebsiteBlock, { type: "content" }> => block.type === "content" && Boolean(safeWebsiteBlockText(block.body)));
+  const about = page.blocks.find((block): block is Extract<WebsiteBlock, { type: "content" }> => block.type === "content" && block.visibility === "visible");
+  const brandLabel = safeWebsiteBlockText(validated.branding.name, 200) || "the business";
+  const serviceTitles = validated.pages
+    .filter((item) => item.type === "service" && item.visibility === "visible")
+    .map((item) => safeWebsiteBlockText(item.title, 100))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 3);
+  const serviceSummary = serviceTitles.length <= 1
+    ? (serviceTitles[0] ?? "")
+    : serviceTitles.length === 2
+      ? `${serviceTitles[0]} and ${serviceTitles[1]}`
+      : `${serviceTitles[0]}, ${serviceTitles[1]}, and ${serviceTitles[2]}`;
   const ctaLabel = safeWebsiteBlockText(validated.header.ctaLabel, 100) || "Contact";
   const contactPath = validated.pages.find((item) => item.type === "contact" && item.visibility === "visible")?.path || "/contact";
   const homeHero: WebsiteBlock = hero ? {
@@ -69,7 +82,16 @@ export function publicWebsitePageBlocks(document: WebsiteSiteDocument, path: str
     headline: /^(?:contact|get in touch|enquire|book|request)(?:\s|$)/i.test(hero.headline.trim()) ? validated.branding.name : hero.headline,
     order: 0,
   } : { id: "block-home-hero-presentation", type: "hero", order: 0, visibility: "visible", headline: validated.branding.name, description: "", ctaLabel, ctaHref: contactPath };
-  const finalCta: WebsiteBlock = { id: "block-home-final-cta", type: "cta", order: 5, visibility: "visible", heading: "Start a conversation", body: "Tell us what you are looking for and we can discuss the right next step.", label: ctaLabel, href: contactPath };
+  const finalCta: WebsiteBlock = {
+    id: "block-home-final-cta",
+    type: "cta",
+    order: 5,
+    visibility: "visible",
+    heading: serviceTitles[0] ? `Enquire about ${serviceTitles[0]}` : `Contact ${brandLabel}`,
+    body: serviceSummary ? `Ask about ${serviceSummary}.` : `Contact ${brandLabel} to learn more.`,
+    label: ctaLabel,
+    href: contactPath,
+  };
   return [
     homeHero,
     ...(services ? [{ ...services, order: 1 }] : []),
