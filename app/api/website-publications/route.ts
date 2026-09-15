@@ -20,13 +20,16 @@ import {
   RequestBodyTooLargeError,
 } from "@/app/lib/request-body";
 import {
+  buildWebsiteEditsFallback,
   buildWebsitePublicationSnapshot,
   buildMultiPageWebsitePublicationSnapshot,
+  normalizeWebsiteEdits,
   normalizeWebsiteAiOutput,
   suggestWebsiteSlug,
   validatePublicationMutationBody,
   validateWebsiteAiOutput,
   validateWebsiteEdits,
+  validateWebsiteTemplate,
 } from "@/app/lib/website-publication";
 import { validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
@@ -126,8 +129,21 @@ function snapshotFor(
   overrides?: unknown,
   serviceImageUrls?: readonly string[],
 ) {
-  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
   const storedOutput = parseStoredOutput(outputResult);
+  const storedRecord = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput)
+    ? storedOutput as Record<string, unknown>
+    : null;
+  const websiteOutput = storedLegacyWebsiteOutput(outputResult);
+  const fallbackEdits = websiteOutput
+    ? buildWebsiteEditsFallback({
+      companyName: project.companyName || project.name,
+      template,
+      websiteOutput,
+      heroHeadline: storedRecord?.heroHeadline,
+    })
+    : null;
+  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult))
+    ?? normalizeWebsiteEdits(storedWebsiteEdits(outputResult), fallbackEdits ?? {});
   const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
     ? validateWebsiteSiteDocument(storedOutput.siteDocument) : null;
   const input = {
@@ -136,7 +152,7 @@ function snapshotFor(
     websiteGoal: project.goal || project.targetAudience || "",
     websiteRequirements: project.brandDescription || project.originalBrief || "",
     template: websiteEdits?.template || template,
-    websiteOutput: storedLegacyWebsiteOutput(outputResult),
+    websiteOutput,
     ...(websiteEdits && { websiteEdits }),
     media: {
       ...(overrides && typeof overrides === "object" && !Array.isArray(overrides) ? {
@@ -150,11 +166,30 @@ function snapshotFor(
 }
 
 function savedTemplateFor(outputResult: string, fallbackTemplate: string) {
-  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(outputResult));
+  const rawEdits = storedWebsiteEdits(outputResult);
   const storedOutput = parseStoredOutput(outputResult);
+  const storedRecord = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput)
+    ? storedOutput as Record<string, unknown>
+    : null;
+  const websiteOutput = storedLegacyWebsiteOutput(outputResult);
+  const legacyTemplate = rawEdits && typeof rawEdits === "object" && !Array.isArray(rawEdits) && "template" in rawEdits
+    ? validateWebsiteTemplate(rawEdits.template)
+    : null;
+  const fallbackEdits = websiteOutput && legacyTemplate
+    ? buildWebsiteEditsFallback({
+      companyName: typeof storedRecord?.companyName === "string"
+        ? storedRecord.companyName
+        : "Business",
+      template: legacyTemplate,
+      websiteOutput,
+      heroHeadline: storedRecord?.heroHeadline,
+    })
+    : null;
+  const websiteEdits = validateWebsiteEdits(rawEdits)
+    ?? normalizeWebsiteEdits(rawEdits, fallbackEdits ?? {});
   const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
     ? validateWebsiteSiteDocument(storedOutput.siteDocument) : null;
-  return siteDocument?.theme.template || websiteEdits?.template || fallbackTemplate;
+  return siteDocument?.theme.template || websiteEdits?.template || legacyTemplate || fallbackTemplate;
 }
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

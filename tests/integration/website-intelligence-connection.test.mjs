@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { applyLatestWebsiteIntelligence, normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
 import { websiteMediaReference } from "../../app/lib/website-essential-pages.ts";
+import { buildWebsiteSiteDocumentWithTheme } from "../../app/lib/website-site-document.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const website = {
@@ -158,7 +159,19 @@ test("legacy website without saved edits safely normalizes a long website goal i
 });
 
 test("internal strategy labels never reach public hero, headings, CTA, or public sections", () => {
-  const labels = ["Primary:", "Objective:", "Strategy:", "Recommendation:", "Proposed recommendation:", "Goal:", "KPI:", "Funnel:", "Priority:"];
+  const labels = [
+    "Primary:",
+    "Primary goal:",
+    "PRIMARY   GOAL :",
+    "Objective:",
+    "Strategy:",
+    "Recommendation:",
+    "Proposed recommendation:",
+    "Goal:",
+    "KPI:",
+    "Funnel:",
+    "Priority:",
+  ];
   const result = applyLatestWebsiteIntelligence({
     project: { name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern" },
     website: {
@@ -194,6 +207,26 @@ test("internal strategy labels never reach public hero, headings, CTA, or public
     assert.ok(labelled);
     assert.doesNotMatch(labelled.output.websiteEdits.heroDescription, new RegExp(label, "i"));
   }
+});
+
+test("legitimate public goal sentences remain visible while planning labels are removed", () => {
+  const result = applyLatestWebsiteIntelligence({
+    project: { name: "Project", companyName: "Acme", industry: "Interior design", brandStyle: "Modern" },
+    website: {
+      ...website,
+      websiteOverview: "Our primary goal is to create calm, functional homes that feel personal.",
+      websiteGoal: "Primary goal: Increase enquiries from homeowners.",
+      websiteEdits: {
+        ...website.websiteEdits,
+        heroDescription: "Our primary goal is to create calm, functional homes that feel personal.",
+        aboutText: "Our goal is to make renovation decisions easier for busy families.",
+      },
+    },
+  });
+  assert.ok(result);
+  assert.equal(result.output.websiteEdits.heroDescription, "Our primary goal is to create calm, functional homes that feel personal.");
+  assert.equal(result.output.websiteEdits.aboutText, "Our goal is to make renovation decisions easier for busy families.");
+  assert.doesNotMatch(result.output.websiteGoal, /primary\s+goal\s*:/i);
 });
 
 test("sanitation-only changes persist and remove internal instructions and unverified history", () => {
@@ -355,6 +388,133 @@ test("legacy saved drafts with optional schema-v2 metadata normalize safely with
   assert.equal(saved.siteDocument.pages[0].blocks.find((block) => block.type === "gallery")?.mediaIds[0], websiteMediaReference("/uploads/project-one.jpg"));
   assert.match(saved.siteDocument.pages[0].blocks.find((block) => block.type === "services")?.serviceIds[0] ?? "", /^service-/);
   assert.equal("generatedAt" in saved.siteDocument, false);
+});
+
+test("legacy saved drafts with partial edits and optional metadata normalize safely without losing edits, pages, or media", () => {
+  const project = { name: "CanvasNest", companyName: "CanvasNest", industry: "Interior design", brandStyle: "Luxury" };
+  const saved = normalizeWebsiteDraftForPersistence({
+    project,
+    website: {
+      ...website,
+      websiteGoal: "Contact",
+      websiteEdits: {
+        companyName: "CanvasNest",
+        heroHeadline: "Thoughtful interiors for growing families",
+        heroDescription: "Design support for renovations, styling, and space planning.",
+        aboutText: "CanvasNest creates warm homes with practical design guidance.",
+        servicesText: "Interior design; Space planning; Existing services",
+        primaryCtaLabel: "Enquire about Interior design",
+        primaryCtaLink: "#contact",
+        template: "Luxury",
+        internalPlannerNote: "Primary goal: Generate qualified leads.",
+      },
+      siteDocument: {
+        schemaVersion: "2",
+        theme: {
+          template: "Luxury",
+          colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+          typography: "Cormorant Garamond",
+          internalNotes: "Ignore this",
+        },
+        branding: { name: "CanvasNest", voice: "", strategyNote: "Internal only" },
+        navigation: {
+          items: [
+            { id: "nav_home", pageId: "page_home", label: "Home", order: 0, visibility: "visible", section: "primary" },
+            { id: "nav_projects", pageId: "page_projects", label: "Projects", order: 1, visibility: "visible", section: "primary" },
+          ],
+        },
+        header: { brandLabel: "CanvasNest", ctaLabel: "Book now", ctaHref: "#contact", draftLabel: "Hero CTA" },
+        footer: { businessName: "CanvasNest", description: "Existing description", showContact: true, editorNote: "Ignore" },
+        pages: [
+          {
+            id: "page_home",
+            type: "home",
+            path: "/",
+            title: "Home",
+            order: 0,
+            visibility: "visible",
+            seo: { title: "CanvasNest", description: "Existing description", canonicalPath: "/", index: true, sectionLabel: "Home" },
+            blocks: [
+              { id: "block_home_hero", type: "hero", order: 0, visibility: "visible", headline: "Thoughtful interiors for growing families", description: "Design support for renovations, styling, and space planning.", ctaLabel: "Book a consultation", ctaHref: "#contact", strategy: "Never show" },
+              { id: "block_home_gallery", type: "gallery", order: 1, visibility: "visible", heading: "Projects", mediaIds: ["/uploads/canvasnest-home.jpg"], plannerNote: "Legacy" },
+              { id: "block_home_contact", type: "contact", order: 2, visibility: "visible", heading: "Contact", body: "" },
+            ],
+            sectionLabel: "Primary",
+          },
+          {
+            id: "page_projects",
+            type: "portfolio",
+            path: "/projects",
+            title: "Projects",
+            order: 1,
+            visibility: "visible",
+            seo: { title: "Projects", description: "", canonicalPath: "/projects", index: true },
+            blocks: [
+              { id: "block_projects_gallery", type: "gallery", order: 0, visibility: "visible", heading: "Recent work", mediaIds: ["/uploads/canvasnest-project.jpg"] },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  assert.ok(saved);
+  assert.deepEqual(
+    {
+      companyName: saved.websiteEdits.companyName,
+      heroHeadline: saved.websiteEdits.heroHeadline,
+      heroDescription: saved.websiteEdits.heroDescription,
+      aboutText: saved.websiteEdits.aboutText,
+      servicesText: saved.websiteEdits.servicesText,
+      phone: saved.websiteEdits.phone,
+      email: saved.websiteEdits.email,
+      address: saved.websiteEdits.address,
+      whatsapp: saved.websiteEdits.whatsapp,
+      primaryCtaLabel: saved.websiteEdits.primaryCtaLabel,
+      primaryCtaLink: saved.websiteEdits.primaryCtaLink,
+      template: saved.websiteEdits.template,
+    },
+    {
+      companyName: "CanvasNest",
+      heroHeadline: "Thoughtful interiors for growing families",
+      heroDescription: "Design support for renovations, styling, and space planning.",
+      aboutText: "CanvasNest creates warm homes with practical design guidance.",
+      servicesText: "Interior design; Space planning; Existing services",
+      phone: "",
+      email: "",
+      address: "",
+      whatsapp: "",
+      primaryCtaLabel: "Enquire about Interior design",
+      primaryCtaLink: "#contact",
+      template: "Luxury",
+    },
+  );
+  assert.equal(saved.siteDocument.pages.length, 2);
+  assert.equal(saved.siteDocument.pages[0].blocks.find((block) => block.type === "gallery")?.mediaIds[0], websiteMediaReference("/uploads/canvasnest-home.jpg"));
+  assert.equal(saved.siteDocument.pages[1].blocks.find((block) => block.type === "gallery")?.mediaIds[0], websiteMediaReference("/uploads/canvasnest-project.jpg"));
+});
+
+test("current-schema drafts remain unchanged after canonical save normalization", () => {
+  const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Luxury" };
+  const first = normalizeWebsiteDraftForPersistence({
+    project,
+    website: {
+      ...website,
+      websiteGoal: "Contact",
+      websiteEdits: { ...website.websiteEdits, companyName: "Acme", primaryCtaLabel: "Contact", template: "Luxury" },
+      siteDocument: buildWebsiteSiteDocumentWithTheme({
+        siteDocument: null,
+        companyName: "Acme",
+        template: "Luxury",
+        colorPalette: "Old palette",
+        typography: "Old font",
+        websiteOutput: { ...website, websiteGoal: "Contact" },
+        websiteEdits: { ...website.websiteEdits, companyName: "Acme", primaryCtaLabel: "Contact", template: "Luxury" },
+      }),
+    },
+  });
+  assert.ok(first?.siteDocument);
+  const second = normalizeWebsiteDraftForPersistence({ project, website: first });
+  assert.deepEqual(second, first);
 });
 
 test("Save Changes persistence rewrites stale saved theme fields before reload", async () => {

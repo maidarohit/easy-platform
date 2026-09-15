@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  buildWebsiteEditsFallback,
   buildWebsitePublicationSnapshot,
+  normalizeWebsiteEdits,
   normalizeWebsiteSlug,
   validatePublicationMutationBody,
   validateWebsiteAiOutput,
@@ -56,6 +58,44 @@ test("structured website edits allow safe text and reject executable content or 
   assert.equal(validateWebsiteEdits({ ...edits, primaryCtaLink: "javascript:alert(1)" }), null);
   assert.equal(validateWebsiteEdits({ ...edits, template: "Injected" }), null);
   assert.equal(validateWebsiteEdits({ ...edits, customScript: "alert(1)" }), null);
+});
+
+test("legacy website edits normalize optional metadata but still reject unsafe present fields", () => {
+  const fallback = buildWebsiteEditsFallback({
+    companyName: "Example",
+    template: "Modern",
+    websiteOutput: output,
+    heroHeadline: "Fallback headline",
+  });
+  assert.ok(fallback);
+  assert.deepEqual(normalizeWebsiteEdits({
+    companyName: "Edited Business",
+    heroHeadline: "A better headline",
+    heroDescription: "Clear hero copy",
+    aboutText: "About the company",
+    servicesText: "Our services",
+    primaryCtaLabel: "Book now",
+    primaryCtaLink: "/contact",
+    template: "Modern",
+    plannerNote: "Primary goal: Generate leads",
+  }, fallback), {
+    companyName: "Edited Business",
+    heroHeadline: "A better headline",
+    heroDescription: "Clear hero copy",
+    aboutText: "About the company",
+    servicesText: "Our services",
+    phone: "",
+    email: "",
+    address: "",
+    whatsapp: "",
+    primaryCtaLabel: "Book now",
+    primaryCtaLink: "/contact",
+    template: "Modern",
+  });
+  assert.equal(normalizeWebsiteEdits({
+    heroHeadline: "<script>alert(1)</script>",
+    template: "Modern",
+  }, fallback), null);
 });
 
 test("website slug normalization and validation are safe", () => {

@@ -51,6 +51,8 @@ test("shared header, filtered navigation, and footer render once", async () => {
 
 test("public text safety omits instructions and unsupported claims while uploaded media remains preferred", () => {
   assert.equal(safeWebsiteBlockText("Primary: Generate qualified leads"), "");
+  assert.equal(safeWebsiteBlockText("Primary goal: Generate qualified leads"), "");
+  assert.equal(safeWebsiteBlockText("  PRIMARY   GOAL : Generate qualified leads "), "");
   assert.equal(safeWebsiteBlockText("Describe company history only when verified"), "");
   assert.equal(safeWebsiteBlockText("Award-winning team with 100 clients"), "");
   assert.equal(safeWebsiteBlockText("Designed around your business"), "");
@@ -58,6 +60,8 @@ test("public text safety omits instructions and unsupported claims while uploade
   assert.equal(safeWebsiteBlockText("I run a small interior design business and want a website."), "");
   assert.equal(safeWebsiteBlockText("The website will act as a lead-generation tool."), "");
   assert.equal(safeWebsiteBlockText("The tone will be premium and modern."), "");
+  assert.equal(safeWebsiteBlockText("Our primary goal is to create calm, practical spaces for busy families."), "Our primary goal is to create calm, practical spaces for busy families.");
+  assert.equal(safeWebsiteBlockText("Helping clients reach their goal with a clear renovation plan."), "Helping clients reach their goal with a clear renovation plan.");
   const media = resolveWebsiteMedia({ uploaded: { hero: "/uploads/project.jpg", work: ["/uploads/work.jpg"] } });
   assert.equal(media.hero?.src, "/uploads/project.jpg");
   assert.equal(media.hero?.source, "uploaded");
@@ -238,13 +242,10 @@ test("legacy and current saved drafts both stay publishable through the shared p
         heroDescription: "Updated hero copy",
         aboutText: "Updated about copy",
         servicesText: "Interior design; Space planning",
-        phone: "",
-        email: "",
-        address: "",
-        whatsapp: "",
         primaryCtaLabel: "Book now",
         primaryCtaLink: "#contact",
         template: "Luxury",
+        plannerNote: "Primary goal: Generate qualified leads",
       },
       siteDocument: {
         schemaVersion: "2",
@@ -279,6 +280,20 @@ test("legacy and current saved drafts both stay publishable through the shared p
   });
   assert.equal(legacyPublication?.schemaVersion, 2);
   assert.equal(legacyPublication?.websiteOutput.colourScheme, "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF");
+  assert.deepEqual(legacyPublication?.websiteEdits, {
+    companyName: "Example Studio",
+    heroHeadline: "Distinctive spaces, clearly presented",
+    heroDescription: "Updated hero copy",
+    aboutText: "Updated about copy",
+    servicesText: "Interior design; Space planning",
+    phone: "",
+    email: "",
+    address: "",
+    whatsapp: "",
+    primaryCtaLabel: "Book now",
+    primaryCtaLink: "#contact",
+    template: "Luxury",
+  });
   assert.equal(
     legacyPublication?.schemaVersion === 2
       ? legacyPublication.siteDocument.pages[0].blocks.find((block) => block.type === "gallery")?.mediaIds[0]

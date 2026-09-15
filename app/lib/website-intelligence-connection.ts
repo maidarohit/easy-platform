@@ -6,7 +6,14 @@ import {
 } from "@/app/lib/easy-mode-execution-contracts";
 import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicIndustryLabel, publicServiceText, publicServiceTitle } from "@/app/lib/public-website-presentation";
-import { hasUnsafeWebsitePlainText, validateWebsiteAiOutput, validateWebsiteEdits, validateWebsiteTemplate } from "@/app/lib/website-publication";
+import {
+  buildWebsiteEditsFallback,
+  hasUnsafeWebsitePlainText,
+  normalizeWebsiteEdits,
+  validateWebsiteAiOutput,
+  validateWebsiteEdits,
+  validateWebsiteTemplate,
+} from "@/app/lib/website-publication";
 import { buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "@/app/lib/website-site-document";
 
 type ProjectIdentity = Readonly<{
@@ -41,7 +48,7 @@ export type WebsiteIntelligenceFailure = Readonly<{
 }>;
 
 const PRIVATE_STRATEGY = /\b(?:internal strategy|marketing strategy|sales strategy|seo strategy|lead generation strategy|sales funnel|lead scoring|campaign timeline|content calendar|implementation notes?|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
-const INTERNAL_STRATEGY_LABEL = /(?:^|\n)\s*(?:primary|objective|strategy|recommendation|proposed recommendation|goal|kpi|funnel|priority)\s*:/i;
+const INTERNAL_STRATEGY_LABEL = /(?:^|\n)\s*(?:primary(?:\s+goal|\s+objective|\s+strategy|\s+recommendation)?|proposed\s+recommendation|goal|objective|strategy|recommendation|kpi|funnel|priority)\s*:/i;
 const INTERNAL_INSTRUCTION = /\b(?:describe|mention|include|add|state|claim|write)\b.{0,100}\b(?:only when|if|unless)\b/i;
 const UNVERIFIED_HISTORY_OR_PROOF = /\b(?:we (?:started|began|were founded)|founded (?:in|by)|small team of|years? of experience|award(?:-winning|s?)|testimonials?|client counts?|guarantee[ds]?|certif(?:ied|ication)|case stud(?:y|ies))\b/i;
 const LIST_PREFIX = /^\s*(?:[-*•]+|\d{1,2}[.)])\s*/;
@@ -65,7 +72,7 @@ function record(value: unknown): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
-function normalizeExistingWebsite(value: unknown) {
+function normalizeExistingWebsite(value: unknown, project: ProjectIdentity) {
   let candidate = record(value);
   if (candidate && !candidate.websiteOverview && candidate.output) candidate = record(candidate.output);
   if (!candidate) return null;
@@ -79,7 +86,15 @@ function normalizeExistingWebsite(value: unknown) {
   }
   const website = validateWebsiteAiOutput(canonical);
   if (!website) return null;
-  const edits = candidate.websiteEdits === undefined ? null : validateWebsiteEdits(candidate.websiteEdits);
+  const fallbackEdits = buildWebsiteEditsFallback({
+    companyName: project.companyName ?? project.name,
+    template: validateWebsiteTemplate(project.brandStyle) ?? "Modern",
+    websiteOutput: website,
+    heroHeadline: candidate.heroHeadline,
+  });
+  const edits = candidate.websiteEdits === undefined
+    ? null
+    : validateWebsiteEdits(candidate.websiteEdits) ?? normalizeWebsiteEdits(candidate.websiteEdits, fallbackEdits ?? {});
   const siteDocument = candidate.siteDocument === undefined ? null : validateWebsiteSiteDocument(candidate.siteDocument);
   return {
     website,
@@ -151,7 +166,7 @@ function confirmedOfferings(dna: BusinessDnaContent | null | undefined, fallback
 }
 
 export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntelligenceSources) {
-  const normalized = normalizeExistingWebsite(sources.website);
+  const normalized = normalizeExistingWebsite(sources.website, sources.project);
   if (!normalized) return { ok: false, code: "INVALID_EXISTING_WEBSITE" } as const;
   if (normalized.hadInvalidEdits) return { ok: false, code: "INVALID_WEBSITE_EDITS" } as const;
   if (normalized.hadInvalidSiteDocument) return { ok: false, code: "INVALID_EXISTING_WEBSITE" } as const;

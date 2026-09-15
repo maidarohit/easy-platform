@@ -191,6 +191,73 @@ export function validateWebsiteEdits(value: unknown): WebsiteEdits | null {
   return { companyName, heroHeadline, heroDescription, aboutText, servicesText, phone, email, address, whatsapp, primaryCtaLabel, primaryCtaLink, template };
 }
 
+function normalizedEditText(
+  source: unknown,
+  fallback: unknown,
+  maximum: number,
+  required = true,
+): string | null {
+  if (source !== undefined) return safeString(source, maximum, required);
+  if (fallback === undefined) return required ? null : "";
+  return safeString(fallback, maximum, required);
+}
+
+function fallbackPrimaryCtaLabel(value: string) {
+  const firstLine = value.split(/\r?\n/)[0]?.trim() ?? "";
+  return firstLine.slice(0, MAX_SHORT).trim() || "Contact";
+}
+
+export function buildWebsiteEditsFallback(input: {
+  companyName: unknown;
+  template: unknown;
+  websiteOutput: WebsitePublicationSnapshot["websiteOutput"];
+  heroHeadline?: unknown;
+}): WebsiteEdits | null {
+  const template = validateWebsiteTemplate(input.template);
+  const companyName = safeString(input.companyName, MAX_SHORT);
+  if (!template || companyName === null) return null;
+  const heroHeadline = safeString(input.heroHeadline, MAX_SHORT, false) || companyName;
+  const heroDescription = input.websiteOutput.websiteOverview;
+  const aboutText = heroDescription;
+  const servicesText = input.websiteOutput.websiteFeatures;
+  const primaryCtaLabel = fallbackPrimaryCtaLabel(input.websiteOutput.websiteGoal);
+  return {
+    companyName,
+    heroHeadline,
+    heroDescription,
+    aboutText,
+    servicesText,
+    phone: "",
+    email: "",
+    address: "",
+    whatsapp: "",
+    primaryCtaLabel,
+    primaryCtaLink: "#contact",
+    template,
+  };
+}
+
+export function normalizeWebsiteEdits(value: unknown, fallback: Partial<WebsiteEdits> = {}): WebsiteEdits | null {
+  if (!isPlainObject(value)) return null;
+  const template = value.template === undefined ? validateWebsiteTemplate(fallback.template) : validateWebsiteTemplate(value.template);
+  const companyName = normalizedEditText(value.companyName, fallback.companyName, MAX_SHORT);
+  const heroHeadline = normalizedEditText(value.heroHeadline, fallback.heroHeadline, MAX_SHORT);
+  const heroDescription = normalizedEditText(value.heroDescription, fallback.heroDescription, MAX_LONG);
+  const aboutText = normalizedEditText(value.aboutText, fallback.aboutText, MAX_LONG);
+  const servicesText = normalizedEditText(value.servicesText, fallback.servicesText, MAX_LONG);
+  const phone = normalizedEditText(value.phone, fallback.phone, MAX_SHORT, false);
+  const email = normalizedEditText(value.email, fallback.email, MAX_SHORT, false);
+  const address = normalizedEditText(value.address, fallback.address, MAX_LONG, false);
+  const whatsapp = normalizedEditText(value.whatsapp, fallback.whatsapp, MAX_SHORT, false);
+  const primaryCtaLabel = normalizedEditText(value.primaryCtaLabel, fallback.primaryCtaLabel, MAX_SHORT);
+  const primaryCtaLink = normalizedEditText(value.primaryCtaLink, fallback.primaryCtaLink, MAX_SHORT);
+  if (!template || companyName === null || heroHeadline === null || heroDescription === null ||
+      aboutText === null || servicesText === null || phone === null || email === null ||
+      address === null || whatsapp === null || primaryCtaLabel === null || primaryCtaLink === null) return null;
+  if (!/^(?:https?:\/\/|mailto:|tel:|\/|#)[^\s]*$/i.test(primaryCtaLink)) return null;
+  return { companyName, heroHeadline, heroDescription, aboutText, servicesText, phone, email, address, whatsapp, primaryCtaLabel, primaryCtaLink, template };
+}
+
 export function buildWebsitePublicationSnapshot(input: {
   companyName: unknown;
   industry: unknown;
@@ -273,8 +340,21 @@ export function buildSavedWebsitePublicationSnapshot(input: {
   overrides?: unknown;
   serviceImageUrls?: readonly string[];
 }): WebsitePublicationSnapshot | null {
-  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(input.outputResult));
   const storedOutput = parseStoredWebsiteDraft(input.outputResult);
+  const storedRecord = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput)
+    ? storedOutput as Record<string, unknown>
+    : null;
+  const websiteOutput = storedLegacyWebsiteOutput(input.outputResult);
+  const fallbackEdits = websiteOutput
+    ? buildWebsiteEditsFallback({
+      companyName: input.companyName,
+      template: input.fallbackTemplate,
+      websiteOutput,
+      heroHeadline: storedRecord?.heroHeadline,
+    })
+    : null;
+  const websiteEdits = validateWebsiteEdits(storedWebsiteEdits(input.outputResult))
+    ?? normalizeWebsiteEdits(storedWebsiteEdits(input.outputResult), fallbackEdits ?? {});
   const siteDocument = storedOutput && typeof storedOutput === "object" && !Array.isArray(storedOutput) && "siteDocument" in storedOutput
     ? validateWebsiteSiteDocument(storedOutput.siteDocument)
     : null;
@@ -284,7 +364,7 @@ export function buildSavedWebsitePublicationSnapshot(input: {
     websiteGoal: input.websiteGoal,
     websiteRequirements: input.websiteRequirements,
     template: siteDocument?.theme.template || websiteEdits?.template || input.fallbackTemplate,
-    websiteOutput: storedLegacyWebsiteOutput(input.outputResult),
+    websiteOutput,
     ...(websiteEdits && { websiteEdits }),
     media: {
       ...(input.overrides && typeof input.overrides === "object" && !Array.isArray(input.overrides) ? {
