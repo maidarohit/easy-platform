@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import auth from "@/app/lib/auth";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
+import { withProjectId } from "@/app/lib/project-navigation";
 import { shouldShowBusinessPlanBadge } from "@/app/lib/sidebar-entitlement";
 
 type MenuItem = Readonly<{ label: string; href: string; icon: string; businessPlan?: boolean }>;
@@ -42,10 +43,7 @@ const ADVANCED_ITEMS: readonly MenuItem[] = [
 
 function withProject(path: string, projectId: string) {
   if (!projectId || path === "/dashboard") return path;
-  const [pathname, query = ""] = path.split("?");
-  const params = new URLSearchParams(query);
-  params.set("projectId", projectId);
-  return `${pathname}?${params.toString()}`;
+  return withProjectId(path, projectId);
 }
 
 function NavigationLink({ item, projectId, active, paidAccess }: { item: MenuItem; projectId: string; active: boolean; paidAccess: boolean | null }) {

@@ -1,3 +1,5 @@
+import { withProjectId } from "@/app/lib/project-navigation";
+
 export type LaunchCenterSectionState = "Ready" | "Not generated" | "In progress" | "Failed" | "Needs attention";
 
 export type LaunchCenterSection = Readonly<{
@@ -77,11 +79,11 @@ export function deriveLaunchCenterNextStep(input: Readonly<{
   publication: LaunchCenterPublication;
   socialConnections: readonly LaunchCenterSocialConnection[];
 }>): LaunchCenterNextStep {
-  const previewHref = `/business-preview?projectId=${encodeURIComponent(input.projectId)}`;
-  const socialHref = `/social?projectId=${encodeURIComponent(input.projectId)}`;
-  const storeHref = `/store?projectId=${encodeURIComponent(input.projectId)}`;
-  const automationHref = `/dashboard/automation?projectId=${encodeURIComponent(input.projectId)}`;
-  const advancedHref = `/master-workspace?projectId=${encodeURIComponent(input.projectId)}#advanced-tools`;
+  const previewHref = withProjectId("/business-preview", input.projectId);
+  const socialHref = withProjectId("/social", input.projectId);
+  const storeHref = withProjectId("/store", input.projectId);
+  const automationHref = withProjectId("/dashboard/automation", input.projectId);
+  const advancedHref = withProjectId("/master-workspace#advanced-tools", input.projectId);
   const websiteStatus = sectionStatus(input.sections, "website");
   const websiteReviewState = sectionReviewState(input.sections, "website");
   const marketingStatus = sectionStatus(input.sections, "marketing");
@@ -137,7 +139,7 @@ export function buildLaunchCenterView(input: Readonly<{
   publication: LaunchCenterPublication;
   socialConnections: readonly LaunchCenterSocialConnection[];
 }>): LaunchCenterView {
-  const previewHref = `/business-preview?projectId=${encodeURIComponent(input.projectId)}`;
+  const previewHref = withProjectId("/business-preview", input.projectId);
   const nextStep = deriveLaunchCenterNextStep(input);
   const brandStatus = sectionStatus(input.sections, "branding");
   const websiteStatus = sectionStatus(input.sections, "website");
@@ -183,5 +185,5 @@ export function buildLaunchCenterView(input: Readonly<{
 }
 
 function advancedHref(projectId: string) {
-  return `/master-workspace?projectId=${encodeURIComponent(projectId)}#advanced-tools`;
+  return withProjectId("/master-workspace#advanced-tools", projectId);
 }

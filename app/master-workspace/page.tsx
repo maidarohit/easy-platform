@@ -8,6 +8,7 @@ import Sidebar from "../dashboard/components/Sidebar";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
 import { buildLaunchCenterView } from "@/app/lib/master-workspace-launch-center";
+import { withProjectId } from "@/app/lib/project-navigation";
 import ProductTutorial from "@/app/components/ProductTutorial";
 import WorkspaceGuide from "@/app/components/WorkspaceGuide";
 
@@ -211,9 +212,7 @@ const savePrimaryLanguage = async () => {
     }
   };
   const projectLink = (path: string) =>
-    projectId
-      ? `${path}?projectId=${encodeURIComponent(projectId)}`
-      : path;
+    withProjectId(path, projectId);
 
   const modules = workspace?.sections.map((section) => ({ ...MODULE_DETAILS[section.module], ...section }))
     .filter((module) => Boolean(module.number)) ?? [];

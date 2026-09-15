@@ -27,7 +27,7 @@ test("primary sidebar is customer-first while specialists remain intentionally a
 
 test("project context and published-business navigation are preserved across the shared sidebar", async () => {
   const sidebar = await source("app/dashboard/components/Sidebar.tsx");
-  assert.match(sidebar, /params\.set\("projectId", projectId\)/);
+  assert.match(sidebar, /withProjectId\(path, projectId\)/);
   assert.match(sidebar, /\/api\/business-publications\?projectId=/);
   assert.match(sidebar, /publication\.status === "active"/);
   assert.match(sidebar, /View Live Business/);
