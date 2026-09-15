@@ -107,5 +107,5 @@ test("the same owned Website output row preserves a validated page document", as
   assert.match(route, /update\(projectOutputs\)[\s\S]*eq\(projectOutputs\.id, existingOutput\.id\)/);
   const publicationRoute = await source("app/api/website-publications/route.ts");
   assert.match(publicationRoute, /siteDocument: _siteDocument[\s\S]*validateWebsiteAiOutput\(legacyOutput\)/);
-  assert.match(publicationRoute, /websiteOutput: storedLegacyWebsiteOutput\(outputResult\)/);
+  assert.match(publicationRoute, /const websiteOutput = storedLegacyWebsiteOutput\(outputResult\)/);
 });

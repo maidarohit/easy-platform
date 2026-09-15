@@ -62,6 +62,12 @@ export type WebsiteEdits = {
   template: WebsiteTemplate;
 };
 
+export type WebsiteNormalizationIssue = Readonly<{
+  path: string;
+  valueType: string;
+  branch: string;
+}>;
+
 export const RESERVED_WEBSITE_SLUGS = new Set([
   "admin", "api", "assets", "billing", "boss", "contact-support", "dashboard",
   "favicon", "forgot-password", "help", "login", "logout", "onboarding",
@@ -90,6 +96,12 @@ function safeString(value: unknown, max: number, required = true): string | null
     return null;
   }
   return normalized;
+}
+
+function valueType(value: unknown) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
 }
 
 export function hasUnsafeWebsitePlainText(value: string) {
@@ -191,14 +203,32 @@ export function validateWebsiteEdits(value: unknown): WebsiteEdits | null {
   return { companyName, heroHeadline, heroDescription, aboutText, servicesText, phone, email, address, whatsapp, primaryCtaLabel, primaryCtaLink, template };
 }
 
+function normalizeLegacyWebsiteTemplate(value: unknown, fallback: unknown): WebsiteTemplate | null {
+  const direct = validateWebsiteTemplate(value);
+  if (direct) return direct;
+  if (typeof value === "string") {
+    const canonical = value.trim().toLowerCase().replace(/[^a-z]/g, "");
+    const normalized = {
+      modern: "Modern",
+      luxury: "Luxury",
+      corporate: "Corporate",
+      creative: "Creative",
+      minimal: "Minimal",
+      dark: "Dark",
+    }[canonical];
+    if (normalized) return normalized as WebsiteTemplate;
+  }
+  return validateWebsiteTemplate(fallback);
+}
+
 function normalizedEditText(
   source: unknown,
   fallback: unknown,
   maximum: number,
   required = true,
 ): string | null {
-  if (source !== undefined) return safeString(source, maximum, required);
-  if (fallback === undefined) return required ? null : "";
+  if (source !== undefined && source !== null) return safeString(source, maximum, required);
+  if (fallback === undefined || fallback === null) return required ? null : "";
   return safeString(fallback, maximum, required);
 }
 
@@ -239,7 +269,7 @@ export function buildWebsiteEditsFallback(input: {
 
 export function normalizeWebsiteEdits(value: unknown, fallback: Partial<WebsiteEdits> = {}): WebsiteEdits | null {
   if (!isPlainObject(value)) return null;
-  const template = value.template === undefined ? validateWebsiteTemplate(fallback.template) : validateWebsiteTemplate(value.template);
+  const template = normalizeLegacyWebsiteTemplate(value.template, fallback.template);
   const companyName = normalizedEditText(value.companyName, fallback.companyName, MAX_SHORT);
   const heroHeadline = normalizedEditText(value.heroHeadline, fallback.heroHeadline, MAX_SHORT);
   const heroDescription = normalizedEditText(value.heroDescription, fallback.heroDescription, MAX_LONG);
@@ -256,6 +286,46 @@ export function normalizeWebsiteEdits(value: unknown, fallback: Partial<WebsiteE
       address === null || whatsapp === null || primaryCtaLabel === null || primaryCtaLink === null) return null;
   if (!/^(?:https?:\/\/|mailto:|tel:|\/|#)[^\s]*$/i.test(primaryCtaLink)) return null;
   return { companyName, heroHeadline, heroDescription, aboutText, servicesText, phone, email, address, whatsapp, primaryCtaLabel, primaryCtaLink, template };
+}
+
+export function diagnoseWebsiteEdits(value: unknown, fallback: Partial<WebsiteEdits> = {}): WebsiteNormalizationIssue | null {
+  if (!isPlainObject(value)) {
+    return { path: "websiteEdits", valueType: valueType(value), branch: "normalizeWebsiteEdits:not-plain-object" };
+  }
+  const fields = [
+    ["companyName", MAX_SHORT, true],
+    ["heroHeadline", MAX_SHORT, true],
+    ["heroDescription", MAX_LONG, true],
+    ["aboutText", MAX_LONG, true],
+    ["servicesText", MAX_LONG, true],
+    ["phone", MAX_SHORT, false],
+    ["email", MAX_SHORT, false],
+    ["address", MAX_LONG, false],
+    ["whatsapp", MAX_SHORT, false],
+    ["primaryCtaLabel", MAX_SHORT, true],
+    ["primaryCtaLink", MAX_SHORT, true],
+  ] as const;
+  for (const [field, maximum, required] of fields) {
+    const current = value[field];
+    if (current !== undefined && current !== null) {
+      if (safeString(current, maximum, required) === null) {
+        return { path: `websiteEdits.${field}`, valueType: valueType(current), branch: "normalizeWebsiteEdits:field-value" };
+      }
+      continue;
+    }
+    const fallbackValue = fallback[field];
+    if (required && safeString(fallbackValue, maximum, required) === null) {
+      return { path: `websiteEdits.${field}`, valueType: valueType(current), branch: "normalizeWebsiteEdits:missing-required-field" };
+    }
+  }
+  if (!normalizeLegacyWebsiteTemplate(value.template, fallback.template)) {
+    return { path: "websiteEdits.template", valueType: valueType(value.template), branch: "normalizeWebsiteEdits:template" };
+  }
+  const resolvedLink = normalizedEditText(value.primaryCtaLink, fallback.primaryCtaLink, MAX_SHORT);
+  if (!resolvedLink || !/^(?:https?:\/\/|mailto:|tel:|\/|#)[^\s]*$/i.test(resolvedLink)) {
+    return { path: "websiteEdits.primaryCtaLink", valueType: valueType(value.primaryCtaLink), branch: "normalizeWebsiteEdits:primary-cta-link" };
+  }
+  return null;
 }
 
 export function buildWebsitePublicationSnapshot(input: {

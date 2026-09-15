@@ -92,6 +92,33 @@ test("legacy website edits normalize optional metadata but still reject unsafe p
     primaryCtaLink: "/contact",
     template: "Modern",
   });
+  assert.deepEqual(normalizeWebsiteEdits({
+    companyName: "Edited Business",
+    heroHeadline: "A better headline",
+    heroDescription: "Clear hero copy",
+    aboutText: "About the company",
+    servicesText: "Our services",
+    phone: null,
+    email: null,
+    address: null,
+    whatsapp: null,
+    primaryCtaLabel: "Book now",
+    primaryCtaLink: "/contact",
+    template: "Modern",
+  }, fallback), {
+    companyName: "Edited Business",
+    heroHeadline: "A better headline",
+    heroDescription: "Clear hero copy",
+    aboutText: "About the company",
+    servicesText: "Our services",
+    phone: "",
+    email: "",
+    address: "",
+    whatsapp: "",
+    primaryCtaLabel: "Book now",
+    primaryCtaLink: "/contact",
+    template: "Modern",
+  });
   assert.equal(normalizeWebsiteEdits({
     heroHeadline: "<script>alert(1)</script>",
     template: "Modern",

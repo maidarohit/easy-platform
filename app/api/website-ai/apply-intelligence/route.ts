@@ -3,7 +3,7 @@ import { db } from "@/app/db";
 import { projectBusinessDna, projectOutputs, projects, socialDailyPosts } from "@/app/db/schema";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { MalformedJsonBodyError, readLimitedJson, RequestBodyTooLargeError } from "@/app/lib/request-body";
-import { applyLatestWebsiteIntelligenceDetailed } from "@/app/lib/website-intelligence-connection";
+import { applyLatestWebsiteIntelligenceDetailed, diagnoseWebsiteDraftNormalization } from "@/app/lib/website-intelligence-connection";
 
 const MAX_BODY_BYTES = 1_024;
 const SOURCE_MODULES = ["website", "branding", "uiux", "seo", "marketing", "sales", "content"] as const;
@@ -57,13 +57,14 @@ export async function PATCH(request: Request) {
       for (const row of rows) if (!latest.has(row.module)) latest.set(row.module, row);
       const website = latest.get("website");
       if (!website) throw new Error("NO_WEBSITE_DRAFT");
+      const parsedWebsite = parsed(website.result);
       const approved = (module: string) => {
         const row = latest.get(module);
         return row?.approvedAt ? parsed(row.result) : null;
       };
       const mergeResult = applyLatestWebsiteIntelligenceDetailed({
         project,
-        website: parsed(website.result),
+        website: parsedWebsite,
         businessDna: dnaRows[0]?.dna ?? null,
         branding: parsed(latest.get("branding")?.result ?? ""),
         uiux: parsed(latest.get("uiux")?.result ?? ""),
@@ -76,7 +77,14 @@ export async function PATCH(request: Request) {
           recommendedAction: post.recommendedAction,
         })),
       });
-      if (!mergeResult.ok) return { mergeFailure: mergeResult.code, websiteOutputId: website.id } as const;
+      if (!mergeResult.ok) {
+        const issue = diagnoseWebsiteDraftNormalization({ project, website: parsedWebsite });
+        return {
+          mergeFailure: mergeResult.code,
+          websiteOutputId: website.id,
+          normalizationIssue: issue,
+        } as const;
+      }
       const merged = mergeResult.value;
       if (!merged.changed) return merged;
       const [updated] = await transaction.update(projectOutputs).set({
@@ -90,7 +98,13 @@ export async function PATCH(request: Request) {
     });
     if ("mergeFailure" in output) {
       console.error("Website intelligence merge rejected the saved draft.", {
-        code: output.mergeFailure, projectId, userId, websiteOutputId: output.websiteOutputId,
+        code: output.mergeFailure,
+        projectId,
+        userId,
+        websiteOutputId: output.websiteOutputId,
+        path: output.normalizationIssue?.path ?? "website",
+        valueType: output.normalizationIssue?.valueType ?? "unknown",
+        branch: output.normalizationIssue?.branch ?? "normalizeWebsiteDraftForPersistence",
       });
       const error = output.mergeFailure === "INVALID_EXISTING_WEBSITE"
         ? "The saved website draft could not be updated safely. Please save the website draft and try again."

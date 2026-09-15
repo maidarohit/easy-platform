@@ -10,7 +10,11 @@ import {
 } from "@/app/lib/request-body";
 import { validateProjectOutputBody } from "@/app/lib/project-request-validation";
 import { findLatestValidSeoOutput } from "@/app/lib/seo-opportunity-safety";
-import { normalizeWebsiteDraftForPersistence } from "@/app/lib/website-intelligence-connection";
+import {
+  diagnoseWebsiteDraftNormalization,
+  normalizeWebsiteDraftForPersistence,
+  restoreWebsiteDraftForEditing,
+} from "@/app/lib/website-intelligence-connection";
 
 const MAX_PROJECT_OUTPUT_BODY_BYTES = 256 * 1024;
 
@@ -62,7 +66,17 @@ export async function POST(req: Request) {
 
     if (moduleName === "website") {
       const normalized = normalizeWebsiteDraftForPersistence({ project: ownedProject, website: result });
-      if (!normalized) return NextResponse.json({ error: "The saved website draft could not be normalized safely." }, { status: 422 });
+      if (!normalized) {
+        const issue = diagnoseWebsiteDraftNormalization({ project: ownedProject, website: result });
+        console.error("Website draft normalization rejected during save.", {
+          projectId,
+          userId,
+          path: issue?.path ?? "website",
+          valueType: issue?.valueType ?? "unknown",
+          branch: issue?.branch ?? "normalizeWebsiteDraftForPersistence",
+        });
+        return NextResponse.json({ error: "The saved website draft could not be normalized safely." }, { status: 422 });
+      }
       result = JSON.stringify(normalized);
     }
 
@@ -155,7 +169,14 @@ export async function GET(req: Request) {
     }
 
     const [ownedProject] = await db
-      .select({ id: projects.id })
+      .select({
+        id: projects.id,
+        name: projects.name,
+        companyName: projects.companyName,
+        industry: projects.industry,
+        brandStyle: projects.brandStyle,
+        brandDescription: projects.brandDescription,
+      })
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
       .limit(1);
@@ -181,6 +202,29 @@ export async function GET(req: Request) {
       const output = moduleName === "seo"
         ? findLatestValidSeoOutput(candidates)
         : candidates[0];
+
+      if (moduleName === "website" && output) {
+        const normalized = normalizeWebsiteDraftForPersistence({ project: ownedProject, website: output.result });
+        if (normalized) {
+          return NextResponse.json({
+            success: true,
+            output: { ...output, result: JSON.stringify(normalized) },
+          });
+        }
+        const restored = restoreWebsiteDraftForEditing({ project: ownedProject, website: output.result });
+        const issue = diagnoseWebsiteDraftNormalization({ project: ownedProject, website: output.result });
+        console.error("Website draft normalization rejected during load.", {
+          projectId,
+          userId,
+          path: issue?.path ?? "website",
+          valueType: issue?.valueType ?? "unknown",
+          branch: issue?.branch ?? "normalizeWebsiteDraftForPersistence",
+        });
+        return NextResponse.json({
+          success: true,
+          output: restored ? { ...output, result: JSON.stringify(restored) } : output,
+        });
+      }
 
       return NextResponse.json({
         success: true,

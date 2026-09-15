@@ -8,6 +8,7 @@ import { hasUnsupportedPublicClaim } from "@/app/lib/public-content-safety";
 import { concisePublicCopy, publicIndustryLabel, publicServiceText, publicServiceTitle } from "@/app/lib/public-website-presentation";
 import {
   buildWebsiteEditsFallback,
+  diagnoseWebsiteEdits,
   hasUnsafeWebsitePlainText,
   normalizeWebsiteEdits,
   validateWebsiteAiOutput,
@@ -46,6 +47,11 @@ export type WebsiteIntelligenceFailure = Readonly<{
   ok: false;
   code: "INVALID_EXISTING_WEBSITE" | "INVALID_WEBSITE_EDITS" | "INVALID_MERGED_WEBSITE";
 }>;
+export type WebsiteDraftNormalizationIssue = Readonly<{
+  path: string;
+  valueType: string;
+  branch: string;
+}>;
 
 const PRIVATE_STRATEGY = /\b(?:internal strategy|marketing strategy|sales strategy|seo strategy|lead generation strategy|sales funnel|lead scoring|campaign timeline|content calendar|implementation notes?|sales script|outreach plan|pricing recommendation|target customer profile)\b/i;
 const INTERNAL_STRATEGY_LABEL = /(?:^|\n)\s*(?:primary(?:\s+goal|\s+objective|\s+strategy|\s+recommendation)?|proposed\s+recommendation|goal|objective|strategy|recommendation|kpi|funnel|priority)\s*:/i;
@@ -72,19 +78,49 @@ function record(value: unknown): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
-function normalizeExistingWebsite(value: unknown, project: ProjectIdentity) {
+function valueType(value: unknown) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
+function existingWebsiteCandidate(value: unknown) {
   let candidate = record(value);
-  if (candidate && !candidate.websiteOverview && candidate.output) candidate = record(candidate.output);
-  if (!candidate) return null;
+  if (candidate && !candidate.websiteOverview) {
+    for (const field of ["output", "result", "websiteOutput"] as const) {
+      const nested = record(candidate[field]);
+      if (nested?.websiteOverview) {
+        candidate = nested;
+        break;
+      }
+    }
+  }
+  return candidate;
+}
+
+function canonicalWebsiteOutput(candidate: Record<string, unknown>): { website: ReturnType<typeof validateWebsiteAiOutput>; issue: WebsiteDraftNormalizationIssue | null } {
   const canonical: Record<string, unknown> = {};
   for (const field of WEBSITE_FIELDS) {
     const fieldValue = field === "colourScheme" ? candidate[field] ?? candidate.colorScheme : candidate[field];
-    if (typeof fieldValue !== "string") return null;
+    if (typeof fieldValue !== "string") {
+      return { website: null, issue: { path: field, valueType: valueType(fieldValue), branch: "normalizeExistingWebsite:field-type" } };
+    }
     const normalized = fieldValue.trim();
-    if (!normalized || normalized.length > LEGACY_WEBSITE_MAX || hasUnsafeWebsitePlainText(normalized)) return null;
+    if (!normalized || normalized.length > LEGACY_WEBSITE_MAX || hasUnsafeWebsitePlainText(normalized)) {
+      return { website: null, issue: { path: field, valueType: valueType(fieldValue), branch: "normalizeExistingWebsite:field-value" } };
+    }
     canonical[field] = normalized.slice(0, CANONICAL_WEBSITE_MAX).trimEnd();
   }
   const website = validateWebsiteAiOutput(canonical);
+  return website
+    ? { website, issue: null }
+    : { website: null, issue: { path: "website", valueType: "object", branch: "validateWebsiteAiOutput" } };
+}
+
+function normalizeExistingWebsite(value: unknown, project: ProjectIdentity) {
+  const candidate = existingWebsiteCandidate(value);
+  if (!candidate) return null;
+  const { website } = canonicalWebsiteOutput(candidate);
   if (!website) return null;
   const fallbackEdits = buildWebsiteEditsFallback({
     companyName: project.companyName ?? project.name,
@@ -104,6 +140,30 @@ function normalizeExistingWebsite(value: unknown, project: ProjectIdentity) {
     siteDocument,
     hadInvalidSiteDocument: candidate.siteDocument !== undefined && !siteDocument,
   };
+}
+
+export function diagnoseWebsiteDraftNormalization(input: Readonly<{
+  project: ProjectIdentity;
+  website: unknown;
+}>): WebsiteDraftNormalizationIssue | null {
+  const candidate = existingWebsiteCandidate(input.website);
+  if (!candidate) return { path: "website", valueType: valueType(input.website), branch: "normalizeExistingWebsite:parse" };
+  const { website, issue } = canonicalWebsiteOutput(candidate);
+  if (!website || issue) return issue;
+  const fallbackEdits = buildWebsiteEditsFallback({
+    companyName: input.project.companyName ?? input.project.name,
+    template: validateWebsiteTemplate(input.project.brandStyle) ?? "Modern",
+    websiteOutput: website,
+    heroHeadline: candidate.heroHeadline,
+  });
+  if (candidate.websiteEdits !== undefined) {
+    const edits = validateWebsiteEdits(candidate.websiteEdits) ?? normalizeWebsiteEdits(candidate.websiteEdits, fallbackEdits ?? {});
+    if (!edits) return diagnoseWebsiteEdits(candidate.websiteEdits, fallbackEdits ?? {});
+  }
+  if (candidate.siteDocument !== undefined && !validateWebsiteSiteDocument(candidate.siteDocument)) {
+    return { path: "siteDocument", valueType: valueType(candidate.siteDocument), branch: "validateWebsiteSiteDocument" };
+  }
+  return null;
 }
 
 function publicCopy(value: unknown, maximum = 650) {
@@ -163,6 +223,62 @@ function confirmedOfferings(dna: BusinessDnaContent | null | undefined, fallback
       .filter((item): item is string => Boolean(item));
   });
   return [...new Set(fromFallbacks)];
+}
+
+export function restoreWebsiteDraftForEditing(input: Readonly<{
+  project: ProjectIdentity;
+  website: unknown;
+}>) {
+  const normalized = normalizeWebsiteDraftForPersistence(input);
+  if (normalized) return normalized;
+  const candidate = existingWebsiteCandidate(input.website);
+  if (!candidate) return null;
+  const { website } = canonicalWebsiteOutput(candidate);
+  if (!website) return null;
+  const fallbackEdits = buildWebsiteEditsFallback({
+    companyName: input.project.companyName ?? input.project.name,
+    template: validateWebsiteTemplate(input.project.brandStyle) ?? "Modern",
+    websiteOutput: website,
+    heroHeadline: candidate.heroHeadline,
+  });
+  const existingEdits = candidate.websiteEdits === undefined
+    ? null
+    : validateWebsiteEdits(candidate.websiteEdits) ?? normalizeWebsiteEdits(candidate.websiteEdits, fallbackEdits ?? {});
+  const companyName = publicCopy(existingEdits?.companyName, 200)
+    ?? publicCopy(input.project.companyName, 200)
+    ?? input.project.name;
+  const websiteEdits = {
+    companyName,
+    heroHeadline: publicCopy(existingEdits?.heroHeadline, 200)
+      ?? publicCopy(candidate.heroHeadline, 200)
+      ?? publicCopy(website.websiteGoal, 200)
+      ?? fallbackEdits?.heroHeadline
+      ?? companyName,
+    heroDescription: publicCopy(existingEdits?.heroDescription, 650)
+      ?? publicCopy(website.websiteOverview, 650)
+      ?? `Contact ${companyName} to ask about current services.`,
+    aboutText: publicUnverifiedAboutCopy(existingEdits?.aboutText, 1_500)
+      ?? publicUnverifiedAboutCopy(website.websiteOverview, 1_500)
+      ?? `Contact ${companyName} to learn more.`,
+    servicesText: publicServiceText(publicCopy(existingEdits?.servicesText, 1_500))
+      ?? publicServiceText(publicCopy(website.websiteFeatures, 1_500))
+      ?? `Contact ${companyName} to ask about current services.`,
+    phone: existingEdits?.phone ?? "",
+    email: existingEdits?.email ?? "",
+    address: existingEdits?.address ?? "",
+    whatsapp: existingEdits?.whatsapp ?? "",
+    primaryCtaLabel: publicCta(existingEdits?.primaryCtaLabel)
+      ?? publicCta(website.websiteGoal)
+      ?? "Send an enquiry",
+    primaryCtaLink: existingEdits?.primaryCtaLink ?? "#contact",
+    template: existingEdits?.template
+      ?? validateWebsiteTemplate(input.project.brandStyle)
+      ?? "Modern",
+  };
+  const validatedEdits = validateWebsiteEdits(websiteEdits);
+  if (!validatedEdits) return null;
+  const siteDocument = candidate.siteDocument === undefined ? null : validateWebsiteSiteDocument(candidate.siteDocument);
+  return { ...website, websiteEdits: validatedEdits, ...(siteDocument && { siteDocument }) };
 }
 
 export function applyLatestWebsiteIntelligenceDetailed(sources: WebsiteIntelligenceSources) {

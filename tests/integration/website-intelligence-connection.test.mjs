@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { applyLatestWebsiteIntelligence, normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
+import {
+  applyLatestWebsiteIntelligence,
+  diagnoseWebsiteDraftNormalization,
+  normalizeWebsiteDraftForPersistence,
+  restoreWebsiteDraftForEditing,
+} from "../../app/lib/website-intelligence-connection.ts";
 import { websiteMediaReference } from "../../app/lib/website-essential-pages.ts";
 import { buildWebsiteSiteDocumentWithTheme } from "../../app/lib/website-site-document.ts";
 
@@ -156,6 +161,79 @@ test("legacy website without saved edits safely normalizes a long website goal i
   assert.ok(result);
   assert.equal(result.output.websiteEdits.heroHeadline.length <= 200, true);
   assert.equal(result.output.websiteEdits.primaryCtaLink, "#contact");
+});
+
+test("legacy drafts with null optional website edits normalize safely and strip planning labels", () => {
+  const project = { name: "CanvasNest", companyName: "CanvasNest", industry: "Art marketplace", brandStyle: "Luxury" };
+  const saved = normalizeWebsiteDraftForPersistence({
+    project,
+    website: {
+      websiteOverview: "Curated original artwork for homes and collectors.",
+      websiteGoal: "Primary goal: Convert motivated browsers into commission enquiries.",
+      recommendedPages: "Home; Collections; Artists; Contact",
+      siteStructure: "Home -> Collections -> Contact",
+      websiteFeatures: "Curated collections; artist stories; enquiry forms",
+      designRecommendations: "Editorial and premium.",
+      colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+      typography: "Cormorant Garamond",
+      recommendedTechStack: "Next.js",
+      seoRecommendations: "Meta title: CanvasNest",
+      websiteEdits: {
+        companyName: "CanvasNest",
+        heroHeadline: "Primary goal: Convert motivated browsers into commission enquiries.",
+        heroDescription: "Curated original artwork for homes and collectors.",
+        aboutText: "CanvasNest connects independent artists with collectors.",
+        servicesText: "Original artwork; Commissions",
+        phone: null,
+        email: null,
+        address: null,
+        whatsapp: null,
+        primaryCtaLabel: "Start your collection",
+        primaryCtaLink: "#contact",
+        template: "Luxury",
+      },
+    },
+  });
+  assert.ok(saved);
+  assert.doesNotMatch(saved.websiteEdits.heroHeadline, /primary\s+goal\s*:/i);
+  assert.equal(saved.websiteEdits.phone, "");
+  assert.equal(saved.websiteEdits.email, "");
+  assert.equal(saved.websiteEdits.address, "");
+  assert.equal(saved.websiteEdits.whatsapp, "");
+});
+
+test("diagnostics identify the first invalid legacy website edit field without logging content", () => {
+  const issue = diagnoseWebsiteDraftNormalization({
+    project: { name: "CanvasNest", companyName: "CanvasNest", industry: "Art marketplace", brandStyle: "Luxury" },
+    website: {
+      websiteOverview: "Curated original artwork for homes and collectors.",
+      websiteGoal: "Commission enquiries",
+      recommendedPages: "Home; Collections; Artists; Contact",
+      siteStructure: "Home -> Collections -> Contact",
+      websiteFeatures: "Curated collections; artist stories; enquiry forms",
+      designRecommendations: "Editorial and premium.",
+      colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+      typography: "Cormorant Garamond",
+      recommendedTechStack: "Next.js",
+      seoRecommendations: "Meta title: CanvasNest",
+      websiteEdits: {
+        companyName: "CanvasNest",
+        heroHeadline: "CanvasNest",
+        heroDescription: "Curated original artwork for homes and collectors.",
+        aboutText: "CanvasNest connects independent artists with collectors.",
+        servicesText: "Original artwork; Commissions",
+        phone: { private: true },
+        primaryCtaLabel: "Start your collection",
+        primaryCtaLink: "#contact",
+        template: "Luxury",
+      },
+    },
+  });
+  assert.deepEqual(issue, {
+    path: "websiteEdits.phone",
+    valueType: "object",
+    branch: "normalizeWebsiteEdits:field-value",
+  });
 });
 
 test("internal strategy labels never reach public hero, headings, CTA, or public sections", () => {
@@ -390,6 +468,47 @@ test("legacy saved drafts with optional schema-v2 metadata normalize safely with
   assert.equal("generatedAt" in saved.siteDocument, false);
 });
 
+test("load fallback strips planning labels from editable hero fields without rewriting invalid legacy drafts", () => {
+  const restored = restoreWebsiteDraftForEditing({
+    project: { name: "CanvasNest", companyName: "CanvasNest", industry: "Art marketplace", brandStyle: "Luxury" },
+    website: {
+      websiteOverview: "Curated original artwork for homes and collectors.",
+      websiteGoal: "Primary goal: Convert motivated browsers into commission enquiries.",
+      recommendedPages: "Home; Collections; Artists; Contact",
+      siteStructure: "Home -> Collections -> Contact",
+      websiteFeatures: "Curated collections; artist stories; enquiry forms",
+      designRecommendations: "Editorial and premium.",
+      colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+      typography: "Cormorant Garamond",
+      recommendedTechStack: "Next.js",
+      seoRecommendations: "Meta title: CanvasNest",
+      siteDocument: {
+        schemaVersion: 2,
+        theme: { template: "Luxury", colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF", typography: "Cormorant Garamond" },
+        branding: { name: "CanvasNest", voice: "" },
+        navigation: { items: [{ id: "nav-home", pageId: "page-home", label: "Home", order: 0, visibility: "visible" }] },
+        header: { brandLabel: "CanvasNest", ctaLabel: "Contact", ctaHref: "#contact" },
+        footer: { businessName: "CanvasNest", description: "Curated original artwork for homes and collectors.", showContact: true },
+        pages: [{
+          id: "page-home",
+          type: "home",
+          path: "/",
+          title: "Home",
+          order: 0,
+          visibility: "visible",
+          seo: { title: "CanvasNest", description: "Curated original artwork for homes and collectors.", canonicalPath: "/", index: true },
+          blocks: [
+            { id: "block-home-hero", type: "hero", order: 0, visibility: "visible", headline: "Primary goal: Convert motivated browsers into commission enquiries.", description: "Curated original artwork for homes and collectors.", ctaLabel: "Contact", ctaHref: null },
+          ],
+        }],
+      },
+    },
+  });
+  assert.ok(restored);
+  assert.doesNotMatch(restored.websiteEdits.heroHeadline, /primary\s+goal\s*:/i);
+  assert.equal("siteDocument" in restored, false);
+});
+
 test("legacy saved drafts with partial edits and optional metadata normalize safely without losing edits, pages, or media", () => {
   const project = { name: "CanvasNest", companyName: "CanvasNest", industry: "Interior design", brandStyle: "Luxury" };
   const saved = normalizeWebsiteDraftForPersistence({
@@ -581,6 +700,8 @@ test("Save Project canonicalizes the same latest owned website row used by hydra
   assert.match(saveProject, /authenticatedFetch\("\/api\/projects"[\s\S]*authenticatedFetch\("\/api\/project-outputs"/);
   assert.match(saveProject, /module: "website"[\s\S]*JSON\.stringify\(brandResult\)/);
   assert.match(outputs, /normalizeWebsiteDraftForPersistence/);
+  assert.match(outputs, /restoreWebsiteDraftForEditing/);
+  assert.match(outputs, /diagnoseWebsiteDraftNormalization/);
   assert.match(outputs, /orderBy\(desc\(projectOutputs\.updatedAt\), desc\(projectOutputs\.createdAt\)\)[\s\S]*limit\(1\)/);
   assert.match(outputs, /eq\(projectOutputs\.id, existingOutput\.id\)[\s\S]*eq\(projectOutputs\.projectId, projectId\)[\s\S]*eq\(projectOutputs\.userId, userId\)[\s\S]*eq\(projectOutputs\.module, moduleName\)/);
 });
