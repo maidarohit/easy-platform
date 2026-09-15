@@ -1,4 +1,5 @@
 import type { WebsiteAiOutput } from "@/app/lib/ai/types";
+import { isUsableBusinessUploadedSrc } from "@/app/lib/business-site-visuals";
 
 export const WEBSITE_SITE_DOCUMENT_VERSION = 2 as const;
 
@@ -95,6 +96,37 @@ function order(value: unknown) {
   return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 10_000 ? value as number : null;
 }
 
+function stableReference(prefix: string, value: string) {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${prefix}-${(hash >>> 0).toString(36)}`;
+}
+
+function legacyReferenceId(value: unknown, prefix: string) {
+  const current = id(value);
+  if (current) return current;
+  const fallback = text(value, 200, true);
+  return fallback ? stableReference(prefix, fallback.toLowerCase()) : null;
+}
+
+function normalizeReferenceList(
+  value: unknown,
+  prefix: string,
+  input: { allowUploadedMedia?: boolean } = {},
+) {
+  if (!Array.isArray(value) || value.length > 100) return null;
+  const items = value.map((item) => {
+    if (input.allowUploadedMedia && typeof item === "string" && isUsableBusinessUploadedSrc(item)) {
+      return stableReference("media", item.trim());
+    }
+    return legacyReferenceId(item, prefix);
+  });
+  return items.some((item) => !item) || new Set(items).size !== items.length ? null : items as string[];
+}
+
 export function validateWebsitePagePath(value: unknown): string | null {
   if (typeof value !== "string" || value.length > 160 || !PATH_PATTERN.test(value) || value.includes("//")) return null;
   if (value === "/") return value;
@@ -159,7 +191,7 @@ function validateBlock(value: unknown): WebsiteBlock | null {
   return null;
 }
 
-export function validateWebsiteSiteDocument(value: unknown): WebsiteSiteDocument | null {
+function validateCanonicalWebsiteSiteDocument(value: unknown): WebsiteSiteDocument | null {
   if (!isRecord(value) || !exact(value, ["schemaVersion", "theme", "branding", "navigation", "header", "footer", "pages"]) || value.schemaVersion !== WEBSITE_SITE_DOCUMENT_VERSION) return null;
   const theme = value.theme, branding = value.branding, navigation = value.navigation, header = value.header, footer = value.footer;
   if (!isRecord(theme) || !exact(theme, ["template", "colorPalette", "typography"]) || !isRecord(branding) || !exact(branding, ["name", "voice"]) ||
@@ -194,6 +226,200 @@ export function validateWebsiteSiteDocument(value: unknown): WebsiteSiteDocument
     header: { brandLabel: headerValues[0]!, ctaLabel: headerValues[1]!, ctaHref: headerValues[2]! },
     footer: { businessName: footerValues[0]!, description: footerValues[1]!, showContact: footer.showContact }, pages: validPages,
   };
+}
+
+function normalizeLegacyPageType(value: unknown, path: string): WebsitePageType | null {
+  if (path === "/") return "home";
+  return WEBSITE_PAGE_TYPES.includes(value as WebsitePageType) && value !== "home"
+    ? value as WebsitePageType
+    : null;
+}
+
+function normalizeLegacySeo(value: unknown, path: string, title: string, pageVisibilityValue: WebsitePageVisibility): WebsiteSeo | null {
+  const current = validateSeo(value, path);
+  if (current) return current;
+  return {
+    title: title.slice(0, 70),
+    description: "",
+    canonicalPath: path,
+    index: pageVisibilityValue !== "removed",
+  };
+}
+
+function normalizeLegacyStructuredList(
+  value: unknown,
+  fields: readonly string[],
+  key: "steps" | "items",
+) {
+  if (!Array.isArray(value) || value.length > 50) return null;
+  const entries = value.map((item, index) => {
+    if (!isRecord(item)) return null;
+    const itemId = legacyReferenceId(item.id, key === "steps" ? "step" : "faq");
+    if (!itemId) return null;
+    if (key === "steps") {
+      const title = text(item.title), body = text(item.body);
+      return title !== null && body !== null ? { id: itemId, title, body } : null;
+    }
+    const question = text(item.question), answer = text(item.answer);
+    return question !== null && answer !== null ? { id: itemId, question, answer } : null;
+  }).filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (entries.length !== value.length) return null;
+  const unique = entries.map((item, index) => item.id === entries.find((candidate, candidateIndex) => candidateIndex !== index && candidate.id === item.id)?.id
+    ? { ...item, id: stableReference(key === "steps" ? "step" : "faq", `${item.id}:${index}`) }
+    : item);
+  return new Set(unique.map((item) => item.id)).size === unique.length ? unique : null;
+}
+
+function normalizeLegacyBlock(value: unknown, index: number): WebsiteBlock | null {
+  if (!isRecord(value) || !WEBSITE_BLOCK_TYPES.includes(value.type as WebsiteBlockType)) return null;
+  const blockId = legacyReferenceId(value.id, "block");
+  const blockOrder = order(value.order) ?? index;
+  const blockVisibility = visibility(value.visibility) ?? "visible";
+  if (!blockId) return null;
+  const base = { id: blockId, type: value.type as WebsiteBlockType, order: blockOrder, visibility: blockVisibility };
+  if (value.type === "hero") {
+    const headline = text(value.headline), description = text(value.description), ctaLabel = text(value.ctaLabel), ctaHref = text(value.ctaHref, 500);
+    return headline !== null && description !== null && ctaLabel !== null && ctaHref !== null && SAFE_HREF.test(ctaHref)
+      ? { ...base, type: "hero", headline, description, ctaLabel, ctaHref }
+      : null;
+  }
+  if (value.type === "content") {
+    const heading = text(value.heading), body = text(value.body);
+    return heading !== null && body !== null ? { ...base, type: "content", heading, body } : null;
+  }
+  if (value.type === "services") {
+    const heading = text(value.heading), introduction = text(value.introduction), serviceIds = normalizeReferenceList(value.serviceIds, "service");
+    return heading !== null && introduction !== null && serviceIds ? { ...base, type: "services", heading, introduction, serviceIds } : null;
+  }
+  if (value.type === "serviceDetail") {
+    const serviceId = legacyReferenceId(value.serviceId, "service"), heading = text(value.heading), body = text(value.body);
+    return serviceId && heading !== null && body !== null ? { ...base, type: "serviceDetail", serviceId, heading, body } : null;
+  }
+  if (value.type === "gallery") {
+    const heading = text(value.heading), mediaIds = normalizeReferenceList(value.mediaIds, "media", { allowUploadedMedia: true });
+    return heading !== null && mediaIds ? { ...base, type: "gallery", heading, mediaIds } : null;
+  }
+  if (value.type === "process") {
+    const heading = text(value.heading), steps = normalizeLegacyStructuredList(value.steps, ["id", "title", "body"], "steps");
+    return heading !== null && steps ? { ...base, type: "process", heading, steps } : null;
+  }
+  if (value.type === "faq") {
+    const heading = text(value.heading), items = normalizeLegacyStructuredList(value.items, ["id", "question", "answer"], "items");
+    return heading !== null && items ? { ...base, type: "faq", heading, items } : null;
+  }
+  if (value.type === "contact") {
+    const heading = text(value.heading), body = text(value.body);
+    return heading !== null && body !== null ? { ...base, type: "contact", heading, body } : null;
+  }
+  const heading = text(value.heading), body = text(value.body), label = text(value.label), href = text(value.href, 500);
+  return heading !== null && body !== null && label !== null && href !== null && SAFE_HREF.test(href)
+    ? { ...base, type: "cta", heading, body, label, href }
+    : null;
+}
+
+function normalizeLegacyWebsiteSiteDocument(value: unknown): WebsiteSiteDocument | null {
+  if (!isRecord(value) || ![WEBSITE_SITE_DOCUMENT_VERSION, String(WEBSITE_SITE_DOCUMENT_VERSION)].includes(value.schemaVersion as never)) return null;
+  const theme = isRecord(value.theme) ? value.theme : null;
+  const branding = isRecord(value.branding) ? value.branding : null;
+  const navigation = isRecord(value.navigation) ? value.navigation : null;
+  const header = isRecord(value.header) ? value.header : null;
+  const footer = isRecord(value.footer) ? value.footer : null;
+  if (!theme || !branding || !navigation || !header || !footer || !Array.isArray(value.pages) || value.pages.length < 1 || value.pages.length > 100) return null;
+
+  const normalizedPages = value.pages.map((raw, index): WebsitePage | null => {
+    if (!isRecord(raw) || !Array.isArray(raw.blocks) || raw.blocks.length > 100) return null;
+    const path = validateWebsitePagePath(raw.path);
+    const title = text(raw.title, 200, true);
+    if (!path || !title) return null;
+    const pageId = legacyReferenceId(raw.id, "page");
+    const pageType = normalizeLegacyPageType(raw.type, path);
+    const pageOrder = order(raw.order) ?? index;
+    const pageVisibilityValue = pageVisibility(raw.visibility) ?? "visible";
+    const blocks = raw.blocks.map((block, blockIndex) => normalizeLegacyBlock(block, blockIndex));
+    if (!pageId || !pageType || blocks.some((block) => !block)) return null;
+    const uniqueBlocks = (blocks as WebsiteBlock[]).map((block, blockIndex, list) =>
+      list.findIndex((candidate) => candidate.id === block.id) === blockIndex
+        ? block
+        : { ...block, id: stableReference("block", `${pageId}:${block.id}:${blockIndex}`) });
+    if (new Set(uniqueBlocks.map((block) => block.id)).size !== uniqueBlocks.length) return null;
+    return {
+      id: pageId,
+      type: pageType,
+      path,
+      title,
+      order: pageOrder,
+      visibility: pageVisibilityValue,
+      seo: normalizeLegacySeo(raw.seo, path, title, pageVisibilityValue),
+      blocks: uniqueBlocks,
+    };
+  });
+  if (normalizedPages.some((page) => !page)) return null;
+  const pages = normalizedPages as WebsitePage[];
+  if (new Set(pages.map((page) => page.id)).size !== pages.length || new Set(pages.map((page) => page.path)).size !== pages.length) return null;
+
+  const pageIds = new Set(pages.map((page) => page.id));
+  const pageById = new Map(pages.map((page) => [page.id, page]));
+  const normalizedItems = Array.isArray(navigation.items) ? navigation.items.map((raw, index) => {
+    if (!isRecord(raw)) return null;
+    const rawPageId = legacyReferenceId(raw.pageId, "page");
+    const page = rawPageId ? pageById.get(rawPageId) : null;
+    if (!page) return null;
+    return {
+      id: legacyReferenceId(raw.id, "nav") ?? stableReference("nav", `${page.id}:${index}`),
+      pageId: page.id,
+      label: text(raw.label, 200, true) ?? page.title,
+      order: order(raw.order) ?? page.order,
+      visibility: visibility(raw.visibility) ?? (page.visibility === "visible" ? "visible" : "hidden"),
+    };
+  }).filter((item): item is NonNullable<typeof item> => Boolean(item)) : [];
+  const seenPageIds = new Set(normalizedItems.map((item) => item.pageId));
+  const generatedItems = pages
+    .filter((page) => page.visibility !== "removed" && !seenPageIds.has(page.id))
+    .map((page, index) => ({
+      id: stableReference("nav", `${page.id}:${normalizedItems.length + index}`),
+      pageId: page.id,
+      label: page.title,
+      order: page.order,
+      visibility: page.visibility === "visible" ? "visible" as const : "hidden" as const,
+    }));
+  const items = [...normalizedItems, ...generatedItems].map((item, index, list) =>
+    list.findIndex((candidate) => candidate.id === item.id) === index
+      ? item
+      : { ...item, id: stableReference("nav", `${item.pageId}:${item.id}:${index}`) });
+  if (items.some((item) => !pageIds.has(item.pageId)) || new Set(items.map((item) => item.id)).size !== items.length || new Set(items.map((item) => item.pageId)).size !== items.length) return null;
+
+  const normalized = {
+    schemaVersion: WEBSITE_SITE_DOCUMENT_VERSION,
+    theme: {
+      template: text(theme.template, 100, true) ?? "Modern",
+      colorPalette: text(theme.colorPalette) ?? "",
+      typography: text(theme.typography) ?? "",
+    },
+    branding: {
+      name: text(branding.name, 200, true) ?? "",
+      voice: text(branding.voice) ?? "",
+    },
+    navigation: { items },
+    header: {
+      brandLabel: text(header.brandLabel, 200, true) ?? (text(branding.name, 200, true) ?? ""),
+      ctaLabel: text(header.ctaLabel, 200) ?? "",
+      ctaHref: (() => {
+        const candidate = text(header.ctaHref, 500) ?? "#contact";
+        return SAFE_HREF.test(candidate) ? candidate : "#contact";
+      })(),
+    },
+    footer: {
+      businessName: text(footer.businessName, 200, true) ?? (text(branding.name, 200, true) ?? ""),
+      description: text(footer.description) ?? "",
+      showContact: typeof footer.showContact === "boolean" ? footer.showContact : true,
+    },
+    pages,
+  };
+  return validateCanonicalWebsiteSiteDocument(normalized);
+}
+
+export function validateWebsiteSiteDocument(value: unknown): WebsiteSiteDocument | null {
+  return validateCanonicalWebsiteSiteDocument(value) ?? normalizeLegacyWebsiteSiteDocument(value);
 }
 
 export function removeWebsitePage(document: WebsiteSiteDocument, pageId: string): WebsiteSiteDocument | null {

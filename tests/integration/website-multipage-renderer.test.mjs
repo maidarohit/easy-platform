@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { resolveWebsiteMedia } from "../../app/lib/business-site-visuals.ts";
+import { websiteMediaReference } from "../../app/lib/website-essential-pages.ts";
 import { readableTextColor, resolveWebsiteSurfaceForeground } from "../../app/lib/website-theme-foreground.ts";
 import { resolveWebsiteSitePage, safeWebsiteBlockText, visibleWebsiteNavigation } from "../../app/lib/website-site-presentation.ts";
 import { adaptLegacyWebsiteToSiteDocument, buildWebsiteSiteDocumentWithTheme, validateWebsiteSiteDocument } from "../../app/lib/website-site-document.ts";
@@ -217,6 +218,115 @@ test("preview, saved draft, and public publication reuse the same resolved schem
   assert.match(preview, /publicPageOnly=\{previewSiteDocument\}/);
   assert.match(root, /<WebsiteSiteRenderer document=\{snapshot\.siteDocument\}/);
   assert.match(child, /<WebsiteSiteRenderer document=\{loaded\.snapshot\.siteDocument!\}/);
+});
+
+test("legacy and current saved drafts both stay publishable through the shared publication snapshot builder", () => {
+  const legacyPublication = buildSavedWebsitePublicationSnapshot({
+    companyName: "Example Studio",
+    industry: "Design",
+    websiteGoal: "Book consultations",
+    websiteRequirements: "Show modern design work.",
+    fallbackTemplate: "Modern",
+    outputResult: JSON.stringify({
+      ...output,
+      colourScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+      colorScheme: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+      legacyLayout: "grid",
+      websiteEdits: {
+        companyName: "Example Studio",
+        heroHeadline: "Distinctive spaces, clearly presented",
+        heroDescription: "Updated hero copy",
+        aboutText: "Updated about copy",
+        servicesText: "Interior design; Space planning",
+        phone: "",
+        email: "",
+        address: "",
+        whatsapp: "",
+        primaryCtaLabel: "Book now",
+        primaryCtaLink: "#contact",
+        template: "Luxury",
+      },
+      siteDocument: {
+        schemaVersion: "2",
+        theme: {
+          template: "Luxury",
+          colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+          typography: "Cormorant Garamond",
+          internalNotes: "Ignore",
+        },
+        branding: { name: "Example Studio", voice: "", strategy: "Internal only" },
+        navigation: { items: [{ id: "nav_home", pageId: "page_home", label: "Home", order: 0, visibility: "visible", section: "primary" }] },
+        header: { brandLabel: "Example Studio", ctaLabel: "Contact", ctaHref: "#contact", hint: "Ignore" },
+        footer: { businessName: "Example Studio", description: "Updated hero copy", showContact: true, metadata: "Ignore" },
+        pages: [{
+          id: "page_home",
+          type: "home",
+          path: "/",
+          title: "Home",
+          order: 0,
+          visibility: "visible",
+          seo: { title: "Example Studio", description: "Updated hero copy", canonicalPath: "/", index: true, hint: "Ignore" },
+          blocks: [
+            { id: "block_home_hero", type: "hero", order: 0, visibility: "visible", headline: "Distinctive spaces, clearly presented", description: "Updated hero copy", ctaLabel: "Contact", ctaHref: "#contact", strategy: "Internal" },
+            { id: "block_home_gallery", type: "gallery", order: 1, visibility: "visible", heading: "Projects", mediaIds: ["/uploads/project-one.jpg"], label: "Ignore" },
+            { id: "block_home_services", type: "services", order: 2, visibility: "visible", heading: "Services", introduction: "Interior design; Space planning", serviceIds: ["Design Consultation"], note: "Ignore" },
+            { id: "block_home_contact", type: "contact", order: 3, visibility: "visible", heading: "Contact", body: "" },
+          ],
+          note: "Ignore",
+        }],
+      },
+    }),
+  });
+  assert.equal(legacyPublication?.schemaVersion, 2);
+  assert.equal(legacyPublication?.websiteOutput.colourScheme, "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF");
+  assert.equal(
+    legacyPublication?.schemaVersion === 2
+      ? legacyPublication.siteDocument.pages[0].blocks.find((block) => block.type === "gallery")?.mediaIds[0]
+      : null,
+    websiteMediaReference("/uploads/project-one.jpg"),
+  );
+
+  const currentSaved = normalizeWebsiteDraftForPersistence({
+    project: { name: "Example Studio", companyName: "Example Studio", industry: "Design", brandStyle: "Modern" },
+    website: {
+      ...output,
+      colourScheme: "#010203, #0A7C86, #D9E7E8, #FAF6F0, #B68C5A, #FDFDFD",
+      typography: "Fraunces",
+      websiteEdits: {
+        companyName: "Example Studio",
+        heroHeadline: "Distinctive spaces, clearly presented",
+        heroDescription: "Updated hero copy",
+        aboutText: "Updated about copy",
+        servicesText: "Interior design; Space planning",
+        phone: "",
+        email: "",
+        address: "",
+        whatsapp: "",
+        primaryCtaLabel: "Book now",
+        primaryCtaLink: "#contact",
+        template: "Dark",
+      },
+      siteDocument: buildWebsiteSiteDocumentWithTheme({
+        siteDocument: null,
+        companyName: "Example Studio",
+        template: "Dark",
+        colorPalette: "#010203, #0A7C86, #D9E7E8, #FAF6F0, #B68C5A, #FDFDFD",
+        typography: "Fraunces",
+        websiteOutput: output,
+      }),
+    },
+  });
+  assert.ok(currentSaved?.siteDocument);
+  const currentPublication = buildSavedWebsitePublicationSnapshot({
+    companyName: "Example Studio",
+    industry: "Design",
+    websiteGoal: "Book consultations",
+    websiteRequirements: "Show modern design work.",
+    fallbackTemplate: "Modern",
+    outputResult: JSON.stringify(currentSaved),
+  });
+  assert.equal(currentPublication?.schemaVersion, 2);
+  assert.deepEqual(currentPublication?.schemaVersion === 2 ? currentPublication.siteDocument : null, currentSaved?.siteDocument ?? null);
 });
 
 test("preview and public schema-v2 routes share the same public renderer text-color and hero-description inputs", async () => {

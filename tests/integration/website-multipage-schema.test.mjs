@@ -61,5 +61,7 @@ test("publication ownership remains server-authoritative and outside the site do
   assert.match(route, /eq\(projects\.userId, uid\)/);
   assert.match(route, /eq\(projectOutputs\.userId, authorized\.uid\)/);
   assert.doesNotMatch(route, /body\.(?:ownerUid|userId|siteDocument|snapshot)/);
-  assert.equal(validateWebsiteSiteDocument({ ...adaptLegacyWebsiteToSiteDocument(input), ownerUid: "attacker" }), null);
+  const sanitized = validateWebsiteSiteDocument({ ...adaptLegacyWebsiteToSiteDocument(input), ownerUid: "attacker" });
+  assert.ok(sanitized);
+  assert.equal("ownerUid" in sanitized, false);
 });

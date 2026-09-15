@@ -157,6 +157,18 @@ export function validateWebsiteAiOutput(value: unknown): WebsitePublicationSnaps
   return output;
 }
 
+export function normalizeWebsiteAiOutput(value: unknown): WebsitePublicationSnapshot["websiteOutput"] | null {
+  if (!isPlainObject(value)) return null;
+  const normalized = {} as WebsitePublicationSnapshot["websiteOutput"];
+  for (const field of OUTPUT_FIELDS) {
+    const source = field === "colourScheme" ? value.colourScheme ?? value.colorScheme : value[field];
+    const item = safeString(source, MAX_LONG);
+    if (item === null) return null;
+    normalized[field] = item;
+  }
+  return normalized;
+}
+
 export function validateWebsiteEdits(value: unknown): WebsiteEdits | null {
   if (!isPlainObject(value) || Object.keys(value).some((key) => !EDIT_FIELDS.includes(key as never))) return null;
   if (EDIT_FIELDS.some((field) => !(field in value))) return null;
@@ -194,7 +206,7 @@ export function buildWebsitePublicationSnapshot(input: {
   const websiteGoal = safeString(input.websiteGoal, MAX_SHORT, false);
   const websiteRequirements = safeString(input.websiteRequirements, MAX_LONG, false);
   const template = validateWebsiteTemplate(input.template);
-  const websiteOutput = validateWebsiteAiOutput(input.websiteOutput);
+  const websiteOutput = validateWebsiteAiOutput(input.websiteOutput) ?? normalizeWebsiteAiOutput(input.websiteOutput);
   const websiteEdits = input.websiteEdits === undefined ? undefined : validateWebsiteEdits(input.websiteEdits);
   const media = validateWebsiteMedia(input.media);
   if (companyName === null || industry === null || websiteGoal === null ||
@@ -248,7 +260,7 @@ function storedLegacyWebsiteOutput(result: string) {
   const { websiteEdits: _websiteEdits, siteDocument: _siteDocument, ...legacyOutput } = output as Record<string, unknown>;
   void _websiteEdits;
   void _siteDocument;
-  return validateWebsiteAiOutput(legacyOutput);
+  return normalizeWebsiteAiOutput(legacyOutput);
 }
 
 export function buildSavedWebsitePublicationSnapshot(input: {

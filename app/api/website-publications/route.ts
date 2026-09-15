@@ -22,6 +22,7 @@ import {
 import {
   buildWebsitePublicationSnapshot,
   buildMultiPageWebsitePublicationSnapshot,
+  normalizeWebsiteAiOutput,
   suggestWebsiteSlug,
   validatePublicationMutationBody,
   validateWebsiteAiOutput,
@@ -115,7 +116,7 @@ function storedLegacyWebsiteOutput(result: string) {
   if (!output || typeof output !== "object" || Array.isArray(output)) return null;
   const { websiteEdits: _websiteEdits, siteDocument: _siteDocument, ...legacyOutput } = output as Record<string, unknown>;
   void _websiteEdits; void _siteDocument;
-  return validateWebsiteAiOutput(legacyOutput);
+  return validateWebsiteAiOutput(legacyOutput) ?? normalizeWebsiteAiOutput(legacyOutput);
 }
 
 function snapshotFor(

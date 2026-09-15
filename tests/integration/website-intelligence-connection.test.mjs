@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { applyLatestWebsiteIntelligence, normalizeWebsiteDraftForPersistence } from "../../app/lib/website-intelligence-connection.ts";
+import { websiteMediaReference } from "../../app/lib/website-essential-pages.ts";
 
 const source = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
 const website = {
@@ -297,6 +298,63 @@ test("legacy website draft is canonicalized on save and then applies successfull
   const result = applyLatestWebsiteIntelligence({ project, website: saved, branding });
   assert.ok(result);
   assert.equal(result.changed, true);
+});
+
+test("legacy saved drafts with optional schema-v2 metadata normalize safely without losing pages or media", () => {
+  const project = { name: "Project", companyName: "Acme", industry: "Design", brandStyle: "Modern" };
+  const saved = normalizeWebsiteDraftForPersistence({
+    project,
+    website: {
+      ...website,
+      legacyLayout: "grid",
+      siteDocument: {
+        schemaVersion: "2",
+        generatedAt: "2026-08-01T00:00:00.000Z",
+        theme: {
+          template: "Luxury",
+          colorPalette: "#111111, #222222, #C7A96B, #F5F0E6, #EFE7DA, #FFFFFF",
+          typography: "Cormorant Garamond",
+          internalNotes: "Ignore this",
+        },
+        branding: { name: "Acme", voice: "", strategyNote: "Internal only" },
+        navigation: {
+          items: [
+            { id: "nav_home", pageId: "page_home", label: "Home", order: 0, visibility: "visible", section: "primary" },
+          ],
+        },
+        header: { brandLabel: "Acme", ctaLabel: "Contact", ctaHref: "#contact", draftLabel: "Hero CTA" },
+        footer: { businessName: "Acme", description: "Existing description", showContact: true, editorNote: "Ignore" },
+        pages: [
+          {
+            id: "page_home",
+            type: "home",
+            path: "/",
+            title: "Home",
+            order: 0,
+            visibility: "visible",
+            seo: { title: "Acme", description: "Existing description", canonicalPath: "/", index: true, sectionLabel: "Home" },
+            blocks: [
+              { id: "block_home_hero", type: "hero", order: 0, visibility: "visible", headline: "Existing headline", description: "Existing description", ctaLabel: "Contact", ctaHref: "#contact", strategy: "Never show" },
+              { id: "block_home_gallery", type: "gallery", order: 1, visibility: "visible", heading: "Projects", mediaIds: ["/uploads/project-one.jpg"], plannerNote: "Legacy" },
+              { id: "block_home_services", type: "services", order: 2, visibility: "visible", heading: "Services", introduction: "Existing services", serviceIds: ["Design Consultation"], source: "legacy" },
+              { id: "block_home_contact", type: "contact", order: 3, visibility: "visible", heading: "Contact", body: "" },
+            ],
+            sectionLabel: "Primary",
+          },
+        ],
+      },
+    },
+  });
+  assert.ok(saved);
+  assert.equal("legacyLayout" in saved, false);
+  assert.ok(saved.siteDocument);
+  assert.equal(saved.siteDocument.schemaVersion, 2);
+  assert.equal(saved.siteDocument.pages[0].path, "/");
+  assert.match(saved.siteDocument.pages[0].id, /^page-/);
+  assert.match(saved.siteDocument.navigation.items[0].id, /^nav-/);
+  assert.equal(saved.siteDocument.pages[0].blocks.find((block) => block.type === "gallery")?.mediaIds[0], websiteMediaReference("/uploads/project-one.jpg"));
+  assert.match(saved.siteDocument.pages[0].blocks.find((block) => block.type === "services")?.serviceIds[0] ?? "", /^service-/);
+  assert.equal("generatedAt" in saved.siteDocument, false);
 });
 
 test("Save Changes persistence rewrites stale saved theme fields before reload", async () => {
