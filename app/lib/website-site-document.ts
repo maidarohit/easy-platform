@@ -235,7 +235,7 @@ function normalizeLegacyPageType(value: unknown, path: string): WebsitePageType 
     : null;
 }
 
-function normalizeLegacySeo(value: unknown, path: string, title: string, pageVisibilityValue: WebsitePageVisibility): WebsiteSeo | null {
+function normalizeLegacySeo(value: unknown, path: string, title: string, pageVisibilityValue: WebsitePageVisibility): WebsiteSeo {
   const current = validateSeo(value, path);
   if (current) return current;
   return {
@@ -246,26 +246,34 @@ function normalizeLegacySeo(value: unknown, path: string, title: string, pageVis
   };
 }
 
-function normalizeLegacyStructuredList(
-  value: unknown,
-  fields: readonly string[],
-  key: "steps" | "items",
-) {
+function normalizeLegacyProcessSteps(value: unknown): Array<{ id: string; title: string; body: string }> | null {
   if (!Array.isArray(value) || value.length > 50) return null;
   const entries = value.map((item, index) => {
     if (!isRecord(item)) return null;
-    const itemId = legacyReferenceId(item.id, key === "steps" ? "step" : "faq");
+    const itemId = legacyReferenceId(item.id, "step");
     if (!itemId) return null;
-    if (key === "steps") {
-      const title = text(item.title), body = text(item.body);
-      return title !== null && body !== null ? { id: itemId, title, body } : null;
-    }
+    const title = text(item.title), body = text(item.body);
+    return title !== null && body !== null ? { id: itemId, title, body } : null;
+  }).filter((item): item is NonNullable<typeof item> => Boolean(item));
+  if (entries.length !== value.length) return null;
+  const unique = entries.map((item, index) => item.id === entries.find((candidate, candidateIndex) => candidateIndex !== index && candidate.id === item.id)?.id
+    ? { ...item, id: stableReference("step", `${item.id}:${index}`) }
+    : item);
+  return new Set(unique.map((item) => item.id)).size === unique.length ? unique : null;
+}
+
+function normalizeLegacyFaqItems(value: unknown): Array<{ id: string; question: string; answer: string }> | null {
+  if (!Array.isArray(value) || value.length > 50) return null;
+  const entries = value.map((item, index) => {
+    if (!isRecord(item)) return null;
+    const itemId = legacyReferenceId(item.id, "faq");
+    if (!itemId) return null;
     const question = text(item.question), answer = text(item.answer);
     return question !== null && answer !== null ? { id: itemId, question, answer } : null;
   }).filter((item): item is NonNullable<typeof item> => Boolean(item));
   if (entries.length !== value.length) return null;
   const unique = entries.map((item, index) => item.id === entries.find((candidate, candidateIndex) => candidateIndex !== index && candidate.id === item.id)?.id
-    ? { ...item, id: stableReference(key === "steps" ? "step" : "faq", `${item.id}:${index}`) }
+    ? { ...item, id: stableReference("faq", `${item.id}:${index}`) }
     : item);
   return new Set(unique.map((item) => item.id)).size === unique.length ? unique : null;
 }
@@ -300,11 +308,11 @@ function normalizeLegacyBlock(value: unknown, index: number): WebsiteBlock | nul
     return heading !== null && mediaIds ? { ...base, type: "gallery", heading, mediaIds } : null;
   }
   if (value.type === "process") {
-    const heading = text(value.heading), steps = normalizeLegacyStructuredList(value.steps, ["id", "title", "body"], "steps");
+    const heading = text(value.heading), steps = normalizeLegacyProcessSteps(value.steps);
     return heading !== null && steps ? { ...base, type: "process", heading, steps } : null;
   }
   if (value.type === "faq") {
-    const heading = text(value.heading), items = normalizeLegacyStructuredList(value.items, ["id", "question", "answer"], "items");
+    const heading = text(value.heading), items = normalizeLegacyFaqItems(value.items);
     return heading !== null && items ? { ...base, type: "faq", heading, items } : null;
   }
   if (value.type === "contact") {
