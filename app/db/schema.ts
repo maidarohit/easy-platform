@@ -20,6 +20,22 @@ import type { PublicContactSettings } from "@/app/lib/public-contact";
 import type { EasyModeAttemptRecoveryState } from "@/app/lib/easy-mode-recovery-state";
 import type { SupportedLanguageCode } from "@/app/lib/supported-languages";
 
+export const platformPageViews = pgTable("platform_page_views", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  visitorId: uuid("visitor_id"),
+  sessionId: uuid("session_id").notNull(),
+  pathname: varchar("pathname", { length: 1024 }).notNull(),
+  referrer: varchar("referrer", { length: 255 }),
+  utmSource: varchar("utm_source", { length: 200 }),
+  utmMedium: varchar("utm_medium", { length: 200 }),
+  utmCampaign: varchar("utm_campaign", { length: 200 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("platform_page_views_time_session_idx").on(table.createdAt, table.sessionId),
+  index("platform_page_views_session_time_idx").on(table.sessionId, table.createdAt),
+  index("platform_page_views_time_visitor_idx").on(table.createdAt, table.visitorId),
+]);
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),

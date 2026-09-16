@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import AssistantWidget from "./components/AssistantWidget";
 import SubscriptionUpgradeModal from "./components/SubscriptionUpgradeModal";
+import PlatformPageTracker from "./components/PlatformPageTracker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <Suspense fallback={null}><PlatformPageTracker /></Suspense>
         <SubscriptionUpgradeModal />
         <Toaster
   position="top-right"
