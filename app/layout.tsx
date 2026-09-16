@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Toaster } from "react-hot-toast";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import AssistantWidget from "./components/AssistantWidget";
 import SubscriptionUpgradeModal from "./components/SubscriptionUpgradeModal";
@@ -48,6 +49,7 @@ export default function RootLayout({
 <Suspense fallback={null}>
   <AssistantWidget />
 </Suspense>
+        <Analytics />
       </body>
     </html>
   );

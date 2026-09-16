@@ -12,6 +12,7 @@
     "test:orchestration": "node --experimental-strip-types --experimental-loader ./tests/typescript-loader.mjs --test tests/orchestration/*.test.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "file-saver": "^2.0.5",
