@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import auth from "@/app/lib/auth";
 import { authenticatedFetch } from "@/app/lib/authenticated-fetch";
@@ -111,7 +112,7 @@ export default function Sidebar({ projectId: suppliedProjectId = "" }: { project
   return <aside className="easy-intelligence-sidebar sticky top-0 flex h-screen w-20 shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[#07100d] sm:w-64">
     <div className="border-b border-white/10 px-3 py-5 sm:px-5">
       <Link href="/dashboard" className="flex items-center gap-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#B89A61]">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173D32] text-white">B</span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center"><Image src="/buzypeezy-icon.png" alt="Buzypeezy" width={40} height={40} className="h-10 w-10 object-contain" /></span>
         <span className="hidden sm:block"><strong className="text-white">Buzypeezy</strong><span className="mt-1 block text-[10px] uppercase tracking-[0.18em] text-[#839088]">Build your business</span></span>
       </Link>
     </div>
