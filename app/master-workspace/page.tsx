@@ -85,6 +85,7 @@ function MasterWorkspaceContent() {
   const [workspaceError, setWorkspaceError] = useState("");
   const [approvingOutputId, setApprovingOutputId] = useState<string | null>(null);
   const [publication, setPublication] = useState<BusinessPublication>({ status: "unpublished" });
+  const [publicationProjectId, setPublicationProjectId] = useState("");
   const [primaryLanguage, setPrimaryLanguage] = useState("en");
   const [languageSaving, setLanguageSaving] = useState(false);
   const [languageMessage, setLanguageMessage] = useState("");
@@ -122,7 +123,7 @@ function MasterWorkspaceContent() {
     if (!projectId) return;
     let active = true;
     void authenticatedFetch(`/api/business-publications?projectId=${encodeURIComponent(projectId)}`, { cache: "no-store" })
-      .then(async (response) => { const data = await response.json(); if (response.ok && active) setPublication(data.publication as BusinessPublication); })
+      .then(async (response) => { const data = await response.json(); if (response.ok && active) { setPublication(data.publication as BusinessPublication); setPublicationProjectId(projectId); } })
       .catch(() => undefined);
     return () => { active = false; };
   }, [projectId]);
@@ -266,6 +267,7 @@ const savePrimaryLanguage = async () => {
           <section className="mb-8">
             <div className="mb-4 flex flex-wrap justify-end gap-3">
               {publication.status === "active" && publication.publicUrl && <Link href={publication.publicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">View Live Website</Link>}
+              {connected && project?.id === projectId && publicationProjectId === projectId && publication.status === "active" && publication.publicUrl && <Link href={withProjectId("/analytics-ai", projectId)} className="inline-flex min-h-11 items-center rounded-full border border-[#A8B8A7] bg-white px-5 text-sm font-semibold text-[#103c32]">Website Traffic</Link>}
               <Link
                 href={projectLink("/business-preview")}
                 className="inline-flex min-h-11 items-center rounded-full bg-[#103c32] px-5 text-sm font-semibold text-white transition hover:bg-[#185a4b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#103c32] focus-visible:ring-offset-2"
