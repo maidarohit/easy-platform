@@ -1,3 +1,4 @@
+import WebsiteTrafficTracker from "@/app/components/WebsiteTrafficTracker";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import WebsitePreview from "@/app/dashboard/components/WebsitePreview";
@@ -38,7 +39,7 @@ export default async function PublishedWebsiteSubpage({ params }: { params: Rout
   const loaded = await loadPage(params);
   if (!loaded) notFound();
   const { snapshot } = loaded;
-  return <main className="min-h-screen bg-white"><WebsitePreview
+  return <main className="min-h-screen bg-white"><WebsiteTrafficTracker kind="website" publicationId={loaded.publication.publicationId} slug={decodeURIComponent(loaded.slug)} pagePath={loaded.path} /><WebsitePreview
     companyName={snapshot.companyName} industry={snapshot.industry} websiteGoal={snapshot.websiteGoal}
     websiteStyle={snapshot.websiteEdits?.template || snapshot.template} websiteRequirements={snapshot.websiteRequirements}
     previewMode="desktop" brandResult={snapshot.websiteOutput} websiteEdits={snapshot.websiteEdits} media={snapshot.media}

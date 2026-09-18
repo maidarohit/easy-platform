@@ -1224,6 +1224,7 @@ contact={{ ...(activeWebsiteEdits?.email ? { email: activeWebsiteEdits.email } :
                     <button type="button" onClick={() => document.querySelector(".easy-website-preview")?.scrollIntoView({ behavior: "smooth" })} className={copyButtonClass}>Preview Website</button>
                     {publication?.status === "unpublished" && <button type="button" disabled={!websiteEdits} onClick={() => setShowGoLiveReview(true)} className={copyButtonClass}>Review &amp; Go Live</button>}
                     {publication?.status === "active" && <a href={publication.internalUrl} target="_blank" rel="noopener noreferrer" className={copyButtonClass}>View Live Site</a>}
+                    {publication?.status === "active" && <a href={`/analytics-ai?projectId=${encodeURIComponent(projectId)}#website-traffic`} className={copyButtonClass}>Website Traffic</a>}
                     {publication && publication.status !== "unpublished" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("PATCH")} className={copyButtonClass}>Republish Changes</button>}
                     {publication?.status === "active" && <button type="button" disabled={publicationLoading} onClick={() => updatePublication("DELETE")} className={copyButtonClass}>Unpublish</button>}
                   </div>

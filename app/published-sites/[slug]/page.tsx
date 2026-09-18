@@ -1,3 +1,4 @@
+import WebsiteTrafficTracker from "@/app/components/WebsiteTrafficTracker";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import WebsitePreview from "@/app/dashboard/components/WebsitePreview";
@@ -34,7 +35,7 @@ export default async function PublishedWebsitePage({
   const snapshot = publication.snapshot;
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-white"><WebsiteTrafficTracker kind="website" publicationId={publication.publicationId} slug={decodeURIComponent((await params).slug)} pagePath="/" />
       <WebsitePreview
         companyName={snapshot.companyName}
         industry={snapshot.industry}

@@ -11,6 +11,7 @@ export const loadPublishedBusiness = cache(async (candidate: string) => {
   const slug = validateBusinessSlug(candidate);
   if (!slug) return null;
   const [row] = await db.select({
+    publicationId: businessPublications.id,
     snapshot: businessPublicationVersions.snapshot,
     userId: businessPublications.userId,
     projectId: businessPublications.projectId,
@@ -20,5 +21,5 @@ export const loadPublishedBusiness = cache(async (candidate: string) => {
   )).where(and(eq(businessPublications.publicSlug, slug), eq(businessPublications.status, "active"))).limit(1);
   if (!row || !await hasPaidProductAccess(row.userId)) return null;
   const snapshot = validatePublishedBusinessSnapshot(row.snapshot);
-  return snapshot ? { snapshot, projectId: row.projectId } : null;
+  return snapshot ? { snapshot, projectId: row.projectId, publicationId: row.publicationId } : null;
 });

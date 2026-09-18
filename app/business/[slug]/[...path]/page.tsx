@@ -1,3 +1,4 @@
+import WebsiteTrafficTracker from "@/app/components/WebsiteTrafficTracker";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import WebsiteSiteRenderer from "@/app/dashboard/components/WebsiteSiteRenderer";
@@ -17,7 +18,7 @@ async function loadPage(params: Props["params"]) {
   const snapshot = published?.snapshot ?? null;
   const path = `/${segments.map((segment) => decodeURIComponent(segment)).join("/")}`;
   if (!snapshot?.siteDocument || !resolvePublishedWebsitePage(snapshot.siteDocument, path)) return null;
-  return { slug, path, snapshot };
+  return { slug, path, snapshot, publicationId: published!.publicationId };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -32,5 +33,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function PublicBusinessChildPage({ params }: Props) {
   const loaded = await loadPage(params);
   if (!loaded) notFound();
-  return <WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} serviceItems={publicServices(loaded.snapshot).map((service, index) => ({ id: `published-service-${index + 1}`, title: service.title, description: service.description }))} contact={loaded.snapshot.contact} inquirySlug={loaded.slug} publicPageOnly />;
+  return <><WebsiteTrafficTracker kind="business" publicationId={loaded.publicationId} slug={loaded.slug} pagePath={loaded.path} /><WebsiteSiteRenderer document={loaded.snapshot.siteDocument!} pagePath={loaded.path} basePath={`/business/${encodeURIComponent(loaded.slug)}`} industry={loaded.snapshot.business.industry ?? ""} description={loaded.snapshot.business.description ?? ""} media={{ hero: loaded.snapshot.website?.heroImage, work: loaded.snapshot.website?.secondaryImage }} serviceItems={publicServices(loaded.snapshot).map((service, index) => ({ id: `published-service-${index + 1}`, title: service.title, description: service.description }))} contact={loaded.snapshot.contact} inquirySlug={loaded.slug} publicPageOnly /></>;
 }

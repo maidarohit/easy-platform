@@ -36,6 +36,24 @@ export const platformPageViews = pgTable("platform_page_views", {
   index("platform_page_views_time_visitor_idx").on(table.createdAt, table.visitorId),
 ]);
 
+export const websitePageViews = pgTable("website_page_views", {
+  eventId: uuid("event_id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  publicationKind: varchar("publication_kind", { length: 16 }).notNull(),
+  publicationId: uuid("publication_id").notNull(),
+  pagePath: varchar("page_path", { length: 256 }).notNull(),
+  visitorId: uuid("visitor_id").notNull(), sessionId: uuid("session_id").notNull(),
+  referrerOrigin: varchar("referrer_origin", { length: 255 }),
+  utmSource: varchar("utm_source", { length: 64 }), utmMedium: varchar("utm_medium", { length: 64 }), utmCampaign: varchar("utm_campaign", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("website_page_views_publication_kind_check", sql`${table.publicationKind} in ('business','website')`),
+  index("website_page_views_project_time_idx").on(table.projectId, table.createdAt),
+  index("website_page_views_project_visitor_time_idx").on(table.projectId, table.publicationKind, table.publicationId, table.visitorId, table.createdAt),
+  index("website_page_views_publication_time_idx").on(table.publicationKind, table.publicationId, table.createdAt),
+  index("website_page_views_session_time_idx").on(table.publicationId, table.sessionId, table.createdAt),
+]);
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),

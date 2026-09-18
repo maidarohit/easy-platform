@@ -11,6 +11,8 @@ export const loadActiveWebsitePublication = cache(async (candidate: string) => {
   const slug = validateWebsiteSlug(candidate);
   if (!slug) return null;
   const [row] = await db.select({
+    publicationId: publishedWebsites.id,
+    projectId: publishedWebsites.projectId,
     snapshot: websitePublicationVersions.snapshot,
     userId: publishedWebsites.ownerUid,
     currentVersion: publishedWebsites.currentVersion,
@@ -21,5 +23,5 @@ export const loadActiveWebsitePublication = cache(async (candidate: string) => {
   )).where(and(eq(publishedWebsites.slug, slug), eq(publishedWebsites.status, "active"))).limit(1);
   if (!row || !await hasPaidProductAccess(row.userId)) return null;
   const stored = validateWebsitePublicationSnapshot(row.snapshot);
-  return stored ? { snapshot: publicWebsitePublicationView(stored), currentVersion: row.currentVersion, updatedAt: row.updatedAt } : null;
+  return stored ? { snapshot: publicWebsitePublicationView(stored), currentVersion: row.currentVersion, updatedAt: row.updatedAt, publicationId: row.publicationId, projectId: row.projectId } : null;
 });

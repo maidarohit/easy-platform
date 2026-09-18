@@ -9,6 +9,7 @@ import Navbar from "../dashboard/components/Navbar";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import { useProjectMemory } from "../hooks/useProjectMemory";
+import WebsiteTrafficPanel from "@/app/components/WebsiteTrafficPanel";
 
 const AnalyticsIcon = ({ className = "h-6 w-6" }: { className?: string }) => (
   <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className}>
@@ -235,7 +236,7 @@ useEffect(() => {
     ["13", "90-Day Action Plan", "EXECUTION", analyticsResult.actionPlan90Days],
   ] : [];
   const kpis = [
-    ["Website Visitors", "Not measured", "No visitor tracker is installed"],
+    ["Website Visitors", "Not measured", "See the Website Traffic panel above for measured visits."],
     ["Saved Enquiries", leads.toLocaleString(), "Public website enquiries"],
     ["Store Orders", (businessMetrics?.orders ?? 0).toLocaleString(), "Submitted store orders"],
     ["Paid Orders", sales.toLocaleString(), "Provider-verified paid orders"],
@@ -256,6 +257,7 @@ useEffect(() => {
       <section className="relative z-10 min-w-0 flex-1">
         <Navbar />
         <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-10 lg:py-12">
+          <WebsiteTrafficPanel projectId={projectId} />
           <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4"><div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-red-500/30 bg-red-500/10 text-red-300 shadow-[0_0_30px_rgba(239,68,68,0.14)]"><div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-cyan-400/10" /><AnalyticsIcon className="relative h-7 w-7" /><span className="absolute bottom-2 right-2 h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" /></div><div><p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-red-300">Performance Intelligence</p><h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">Analytics Intelligence</h1><p className="mt-3 max-w-3xl text-sm leading-7 text-slate-400 sm:text-base">Engineer complete performance intelligence, conversion analysis, marketing efficiency, revenue insights and scalable growth recommendations through one intelligent analytics engine.</p></div></div>
             <button onClick={resetReport} className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>New Analytics Report</button>
@@ -291,7 +293,7 @@ useEffect(() => {
                   <p className="mt-1 text-sm text-slate-500">Conversion stages use their own contextual scale so each step remains readable.</p>
                   <div className="mt-6 space-y-3">
                     {[
-                      ["Website Visitors", "Not measured", "0", "No visitor tracker is installed"],
+                      ["Website Visitors", "Not measured", "0", "See the Website Traffic panel above for measured visits."],
                       ["Saved Enquiries", leads.toLocaleString(), "100", "Public website enquiry records"],
                       ["Paid Orders", sales.toLocaleString(), salesConversionRate ?? 0, salesConversionRate == null ? "Needs at least one enquiry" : `${salesConversionRate}% enquiry → paid order`],
                     ].map(([label, value, width, helper], index) => (
