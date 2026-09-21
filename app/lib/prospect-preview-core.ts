@@ -87,44 +87,198 @@ export function prospectPreviewAccessible(record: { status: string; expiresAt: D
 }
 
 export function buildProspectDraft(input: ProspectInput, upstream: unknown) {
-  const project = { name: input.companyName, companyName: input.companyName, industry: input.businessType,
-    brandDescription: input.businessDescription, brandStyle: input.brandStyle };
-  const generated = normalizeWebsiteDraftForPersistence({ project, website: upstream });
-  if (!generated) return null;
-  // No generated prose, URLs, media, service lists or contact details cross this
-  // boundary. Facts are copied from the validated request; AI supplies design only.
-  const colourScheme = generated.colourScheme.match(/#[0-9a-f]{6}\b/gi)?.slice(0, 5).join(" ") || "#173D32 #E9E4D8 #FCFBF7";
-  const typography = /\b(Inter|Arial|Georgia|Verdana|Roboto)\b/i.exec(generated.typography)?.[1] || "Arial";
-  const template = validateWebsiteTemplate(input.brandStyle) || "Minimal";
-  const website = {
-    websiteOverview: input.businessDescription, websiteGoal: input.companyName,
-    recommendedPages: "Home", siteStructure: "Single page concept",
-    websiteFeatures: input.services.join("; ") || "Services not supplied",
-    designRecommendations: "View-only concept", colourScheme, typography,
-    recommendedTechStack: "Buzypeezy", seoRecommendations: "Private preview; do not index",
+  const displayName =
+    input.companyName.split("|")[0]?.split(":")[0]?.trim() ||
+    input.companyName.trim();
+
+  const project = {
+    name: displayName,
+    companyName: displayName,
+    industry: input.businessType,
+    brandDescription: input.businessDescription,
+    brandStyle: input.brandStyle,
   };
-  const normalized = normalizeWebsiteDraftForPersistence({ project, website });
-  if (!normalized) return null;
-  const blocks: WebsiteBlock[] = [
-    { id: "hero", type: "hero", order: 0, visibility: "visible", headline: input.companyName,
-      description: input.businessDescription.length <= 650 ? input.businessDescription : "", ctaLabel: "", ctaHref: "#" },
-    { id: "about", type: "content", order: 1, visibility: "visible", heading: "About", body: input.businessDescription },
-    ...input.services.map((service, index): WebsiteBlock => ({ id: `service-${index}`, type: "content", order: index + 2,
-      visibility: "visible", heading: "Service", body: service })),
-  ];
-  const contact = [input.location, input.email, input.phone].filter(Boolean).join(" · ");
-  if (contact) blocks.push({ id: "details", type: "content", order: 20, visibility: "visible", heading: "Details", body: contact });
-  const siteDocument = validateWebsiteSiteDocument({
-    schemaVersion: 2, theme: { template, colorPalette: colourScheme, typography },
-    branding: { name: input.companyName, voice: "" }, navigation: { items: [] },
-    header: { brandLabel: input.companyName, ctaLabel: "", ctaHref: "#" },
-    footer: { businessName: input.companyName, description: "", showContact: false },
-    pages: [{ id: "home", type: "home", path: "/", title: "Home", order: 0, visibility: "visible",
-      seo: { title: input.companyName.slice(0, 70), description: "Private concept preview", canonicalPath: "/", index: false }, blocks }],
+
+  const generated = normalizeWebsiteDraftForPersistence({
+    project,
+    website: upstream,
   });
-  // Overwrite normalizer-generated legacy copy too, so no inferred service survives storage.
-  const draft = { ...normalized, ...website, siteDocument };
-  return siteDocument && normalizeWebsiteAiOutput(website) ? draft : null;
+
+  if (!generated) return null;
+
+  // Keep AI-generated visual direction only.
+  // All visible business facts below come from the validated prospect input.
+  const colourScheme =
+    generated.colourScheme
+      .match(/#[0-9a-f]{6}\b/gi)
+      ?.slice(0, 5)
+      .join(" ") || "#173D32 #E9E4D8 #FCFBF7";
+
+  const typography =
+    /\b(Inter|Arial|Georgia|Verdana|Roboto)\b/i.exec(
+      generated.typography
+    )?.[1] || "Arial";
+
+  const template =
+    validateWebsiteTemplate(input.brandStyle) || "Minimal";
+
+  const website = {
+    websiteOverview: input.businessDescription,
+    websiteGoal: `Present ${displayName} clearly online`,
+    recommendedPages: "Home",
+    siteStructure: "Single page concept",
+    websiteFeatures:
+      input.services.length > 0
+        ? input.services.join("; ")
+        : input.businessType || "Business information",
+    designRecommendations:
+      "Premium view-only concept generated for outreach",
+    colourScheme,
+    typography,
+    recommendedTechStack: "Buzypeezy",
+    seoRecommendations: "Private preview; do not index",
+  };
+
+  const normalized = normalizeWebsiteDraftForPersistence({
+    project,
+    website,
+  });
+
+  if (!normalized) return null;
+
+  const blocks: WebsiteBlock[] = [];
+
+  blocks.push({
+    id: "hero",
+    type: "hero",
+    order: 0,
+    visibility: "visible",
+    headline: displayName,
+    description:
+      input.businessDescription.length <= 500
+        ? input.businessDescription
+        : input.businessDescription.slice(0, 497) + "...",
+    ctaLabel: input.services.length > 0 ? "Explore Services" : "Learn More",
+    ctaHref: "#services",
+  });
+
+  blocks.push({
+    id: "about",
+    type: "content",
+    order: 1,
+    visibility: "visible",
+    heading: `About ${displayName}`,
+    body: input.businessDescription,
+  });
+
+  if (input.services.length > 0) {
+    blocks.push({
+      id: "services",
+      type: "content",
+      order: 2,
+      visibility: "visible",
+      heading: "Services",
+      body: input.services.join(" • "),
+    });
+
+    input.services.slice(0, 6).forEach((service, index) => {
+      blocks.push({
+        id: `service-${index}`,
+        type: "content",
+        order: index + 3,
+        visibility: "visible",
+        heading: service,
+        body: service,
+      });
+    });
+  } else if (input.businessType) {
+    blocks.push({
+      id: "services",
+      type: "content",
+      order: 2,
+      visibility: "visible",
+      heading: "What They Do",
+      body: input.businessType,
+    });
+  }
+
+  const contactParts = [
+    input.location,
+    input.email,
+    input.phone,
+  ].filter(Boolean);
+
+  if (contactParts.length > 0) {
+    blocks.push({
+      id: "contact",
+      type: "content",
+      order: 20,
+      visibility: "visible",
+      heading: "Contact",
+      body: contactParts.join(" · "),
+    });
+  }
+
+  const siteDocument = validateWebsiteSiteDocument({
+    schemaVersion: 2,
+
+    theme: {
+      template,
+      colorPalette: colourScheme,
+      typography,
+    },
+
+    branding: {
+      name: displayName,
+      voice: "",
+    },
+
+    navigation: {
+      items: [],
+    },
+
+    header: {
+      brandLabel: displayName,
+      ctaLabel: "",
+      ctaHref: "#",
+    },
+
+    footer: {
+      businessName: displayName,
+      description: "Private website concept powered by Buzypeezy",
+      showContact: false,
+    },
+
+    pages: [
+      {
+        id: "home",
+        type: "home",
+        path: "/",
+        title: "Home",
+        order: 0,
+        visibility: "visible",
+
+        seo: {
+          title: displayName.slice(0, 70),
+          description: "Private concept preview",
+          canonicalPath: "/",
+          index: false,
+        },
+
+        blocks,
+      },
+    ],
+  });
+
+  const draft = {
+    ...normalized,
+    ...website,
+    siteDocument,
+  };
+
+  return siteDocument && normalizeWebsiteAiOutput(website)
+    ? draft
+    : null;
 }
 
 export type ProspectDraft = NonNullable<ReturnType<typeof buildProspectDraft>>;
