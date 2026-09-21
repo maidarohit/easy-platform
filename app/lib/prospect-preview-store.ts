@@ -100,15 +100,75 @@ export function createProspectPreviewStore(database = db) {
       });
     },
     async load(token: string) {
-      if (!validProspectPreviewToken(token)) return null;
-      const [row] = await database.select({ record: prospectPreviews, result: projectOutputs.result }).from(prospectPreviews)
-        .innerJoin(projects, and(eq(projects.id, prospectPreviews.projectId), eq(projects.userId, PROSPECT_OWNER_ID)))
-        .innerJoin(projectOutputs, and(eq(projectOutputs.id, prospectPreviews.outputId), eq(projectOutputs.projectId, prospectPreviews.projectId),
-          eq(projectOutputs.userId, PROSPECT_OWNER_ID), eq(projectOutputs.module, "website")))
-        .where(and(eq(prospectPreviews.tokenHash, hashProspectValue(token)), eq(prospectPreviews.status, "ready"),
-          isNull(prospectPreviews.revokedAt), gt(prospectPreviews.expiresAt, sql`now()`))).limit(1);
-      if (!row || !prospectPreviewAccessible(row.record)) return null;
-      try { return validateWebsiteSiteDocument(JSON.parse(row.result).siteDocument); } catch { return null; }
+      let requestId: string | undefined;
+      let stage = "token_received";
+      const diagnostic = (success: boolean, category?: string) => {
+        // Only fixed categories and the database request UUID may reach logs.
+        // Never pass a token, hash, SQL error, exception message or draft here.
+        const event = { ...(requestId && { requestId }), stage, success, ...(category && { category }) };
+        if (success) console.info("Prospect preview load.", event);
+        else console.warn("Prospect preview load.", event);
+      };
+      try {
+        if (!validProspectPreviewToken(token)) {
+          diagnostic(false, "invalid_token_format");
+          return null;
+        }
+        diagnostic(true);
+        stage = "token_hash_calculated";
+        const tokenHash = hashProspectValue(token);
+        diagnostic(true);
+        stage = "preview_row_lookup";
+        // Keep one database snapshot. Left joins expose which relation failed;
+        // the original ownership, module and access restrictions still gate return.
+        const [row] = await database.select({
+          record: prospectPreviews,
+          project: { id: projects.id },
+          output: { id: projectOutputs.id, result: projectOutputs.result },
+          databaseAccessible: sql<boolean>`${prospectPreviews.status} = 'ready' and ${prospectPreviews.revokedAt} is null and ${prospectPreviews.expiresAt} > now()`,
+        }).from(prospectPreviews)
+          .leftJoin(projects, and(eq(projects.id, prospectPreviews.projectId), eq(projects.userId, PROSPECT_OWNER_ID)))
+          .leftJoin(projectOutputs, and(eq(projectOutputs.id, prospectPreviews.outputId), eq(projectOutputs.projectId, prospectPreviews.projectId),
+            eq(projectOutputs.userId, PROSPECT_OWNER_ID), eq(projectOutputs.module, "website")))
+          .where(eq(prospectPreviews.tokenHash, tokenHash)).limit(1);
+        if (!row) {
+          diagnostic(false, "not_found");
+          return null;
+        }
+        requestId = row.record.id;
+        diagnostic(true);
+        stage = "expiry_revocation_check";
+        if (!row.databaseAccessible || !prospectPreviewAccessible(row.record)) {
+          diagnostic(false, row.record.status !== "ready" ? "not_ready" : row.record.revokedAt ? "revoked" : "expired_or_invalid_expiry");
+          return null;
+        }
+        diagnostic(true);
+        stage = "project_lookup";
+        if (!row.project) {
+          diagnostic(false, "missing_or_unauthorized_project");
+          return null;
+        }
+        diagnostic(true);
+        stage = "project_output_lookup";
+        if (!row.output) {
+          diagnostic(false, "missing_or_unauthorized_output");
+          return null;
+        }
+        diagnostic(true);
+        stage = "draft_parse_validation";
+        const document = validateWebsiteSiteDocument(JSON.parse(row.output.result).siteDocument);
+        if (!document) {
+          diagnostic(false, "invalid_site_document");
+          return null;
+        }
+        diagnostic(true);
+        stage = "renderer_data_ready";
+        diagnostic(true);
+        return document;
+      } catch {
+        diagnostic(false, stage === "preview_row_lookup" ? "database_lookup_error" : stage === "draft_parse_validation" ? "draft_parse_or_validation_error" : "loader_error");
+        return null;
+      }
     },
     async revoke(requestId: string) {
       await database.update(prospectPreviews).set({ revokedAt: new Date(), tokenHash: null, updatedAt: new Date() })
