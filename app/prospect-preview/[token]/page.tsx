@@ -22,7 +22,7 @@ export default async function ProspectPreviewPage({ params }: { params: Promise<
         No inquiry slug, contact actions, catalogue, editor or matched media is supplied. */}
     <div inert>
       <WebsiteSiteRenderer document={document} pagePath="/" basePath="#" preview
-        publicPageOnly={false} editorMode={false} checkoutReady={false} />
+        publicPageOnly={false} checkoutReady={false} />
     </div>
   </main>;
 }
