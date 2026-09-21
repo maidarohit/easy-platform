@@ -25,7 +25,7 @@ export function parsePageView(value: unknown) {
   if (typeof body.sessionId !== "string" || !ANONYMOUS_UUID.test(body.sessionId)) return null;
   if (typeof body.visitorId !== "string" || !ANONYMOUS_UUID.test(body.visitorId)) return null;
   if (typeof body.pathname !== "string" || body.pathname.length > 1024 || !body.pathname.startsWith("/") || /[?#\\\s\u0000-\u001f]/.test(body.pathname) || body.pathname.startsWith("//")) return null;
-  if (/^\/(admin|boss|api)(\/|$)/.test(body.pathname)) return null;
+  if (/^\/(admin|boss|api|prospect-preview)(\/|$)/.test(body.pathname)) return null;
   const campaign = (key: string) => {
     const value = body[key];
     return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 200) || null : null;

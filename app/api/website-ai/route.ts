@@ -5,11 +5,11 @@ import {
   failAiUsage,
   startAiUsage,
 } from "@/app/lib/ai-usage";
-import { parseAiUsageMetadata, type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import { type AiUsageComponent } from "@/app/lib/ai-usage-metadata";
+import { generateWebsiteAi } from "@/app/lib/website-ai-generation";
 import { associateN8nExecution } from "@/app/lib/ai-usage-reconciliation";
 import { verifyFirebaseIdToken } from "@/app/lib/firebase-admin";
 import { readValidatedAiRequest } from "@/app/lib/ai-request-validation";
-import { parseN8nExecutionId } from "@/app/lib/n8n-executions";
 import { getN8nWebhookConfig, n8nConfigurationErrorResponse } from "@/app/lib/n8n-webhooks";
 import { supportedLanguageOrEnglish } from "@/app/lib/supported-languages";
 import { allowanceError, checkUsageAllowance } from "@/app/lib/paid-entitlements";
@@ -105,21 +105,11 @@ export async function POST(request: Request) {
   const websitePayload: Record<string, unknown> = { ...body, primaryLanguage };
   delete websitePayload.projectId;
   delete websitePayload.userId;
-  const controller = new AbortController();
   const startedAt = Date.now();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
-    const upstream = await fetch(webhook.url, {
-      method: "POST",
-      headers: webhook.headers,
-      body: JSON.stringify(websitePayload),
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const usageMetadata = parseAiUsageMetadata(upstream.headers);
-    const n8nExecutionId = parseN8nExecutionId(upstream.headers);
-    const responseText = await upstream.text();
+    const upstream = await generateWebsiteAi(webhook, websitePayload);
+    const { usageMetadata, n8nExecutionId, responseText } = upstream;
 
     if (!upstream.ok) {
       if (usageId) await finalizeUsage(usageId, "failed", startedAt);
@@ -174,7 +164,5 @@ export async function POST(request: Request) {
     if (freeClaim) await releaseFreeWebsitePreview(uid, freeClaim);
     console.error("Website AI request failed.");
     return Response.json({ error: "Website AI failed." }, { status: 500 });
-  } finally {
-    clearTimeout(timeout);
   }
 }

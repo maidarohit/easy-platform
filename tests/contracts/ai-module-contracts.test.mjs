@@ -58,6 +58,19 @@ for (const [path, environmentVariable, outputKind] of routeContracts) {
     assert.ok(contents.includes(environmentVariable), `Expected ${environmentVariable}`);
     assert.match(contents, /getN8nWebhookConfig\(/);
     assert.match(contents, /n8nConfigurationErrorResponse\(\)/);
+    if (path === "app/api/website-ai/route.ts") {
+      const transport = await source("app/lib/website-ai-generation.ts");
+      assert.match(contents, /generateWebsiteAi\(webhook, websitePayload\)/);
+      assert.match(transport, /options\.fetcher \?\? fetch/);
+      assert.match(transport, /webhook\.url/);
+      assert.match(transport, /headers: webhook\.headers/);
+      assert.match(transport, /body: JSON\.stringify\(payload\)/);
+      assert.match(transport, /120_000/);
+      assert.ok(contents.indexOf("const webhook = getN8nWebhookConfig") < contents.indexOf("usageId = await startAiUsage"));
+      assert.ok(contents.indexOf("usageId = await startAiUsage") < contents.indexOf("await generateWebsiteAi("));
+      assert.doesNotMatch(contents + transport, /https?:\/\/[^"']*n8n\.cloud/i);
+      return;
+    }
     assert.match(contents, /fetch\(webhook\.url/);
     assert.match(contents, /webhook\.headers/);
     assert.doesNotMatch(contents, /https?:\/\/[^"']*n8n\.cloud/i);

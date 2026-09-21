@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Toaster } from "react-hot-toast";
-import { Analytics } from "@vercel/analytics/next";
+import PrivacyAwareAnalytics from "./components/PrivacyAwareAnalytics";
 import "./globals.css";
 import AssistantWidget from "./components/AssistantWidget";
 import SubscriptionUpgradeModal from "./components/SubscriptionUpgradeModal";
 import PlatformPageTracker from "./components/PlatformPageTracker";
+import NonProspectOnly from "./components/NonProspectOnly";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,6 +36,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <Suspense fallback={null}><NonProspectOnly>
         <Suspense fallback={null}><PlatformPageTracker /></Suspense>
         <SubscriptionUpgradeModal />
         <Toaster
@@ -51,7 +53,8 @@ export default function RootLayout({
 <Suspense fallback={null}>
   <AssistantWidget />
 </Suspense>
-        <Analytics />
+        <PrivacyAwareAnalytics />
+        </NonProspectOnly></Suspense>
       </body>
     </html>
   );

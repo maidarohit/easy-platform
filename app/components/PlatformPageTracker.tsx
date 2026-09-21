@@ -10,7 +10,7 @@ const SESSION_TIMEOUT = 30 * 60 * 1000;
 export default function PlatformPageTracker() {
   const pathname = usePathname();
   useEffect(() => {
-    if (!pathname || /^\/(admin|boss|api)(\/|$)/.test(pathname)) return;
+    if (!pathname || /^\/(admin|boss|api|prospect-preview)(\/|$)/.test(pathname)) return;
     // Deferring also prevents duplicate effects during React development checks.
     const timer = window.setTimeout(async () => {
       try {

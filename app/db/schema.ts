@@ -670,6 +670,35 @@ export const publicAiUsage = pgTable("public_ai_usage", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const prospectPreviews = pgTable("prospect_previews", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  idempotencyKey: varchar("idempotency_key", { length: 128 }).notNull(),
+  payloadHash: varchar("payload_hash", { length: 64 }).notNull(),
+  status: varchar("status", { length: 16 }).$type<"processing" | "ready" | "failed">().notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "restrict" }),
+  outputId: uuid("output_id").references(() => projectOutputs.id, { onDelete: "restrict" }),
+  usageId: uuid("usage_id").notNull().references(() => aiUsage.id, { onDelete: "restrict" }),
+  tokenHash: varchar("token_hash", { length: 64 }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }).notNull(),
+  errorCategory: varchar("error_category", { length: 40 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("prospect_previews_idempotency_unique").on(table.idempotencyKey),
+  uniqueIndex("prospect_previews_token_unique").on(table.tokenHash),
+  uniqueIndex("prospect_previews_project_unique").on(table.projectId),
+  index("prospect_previews_created_idx").on(table.createdAt),
+  check("prospect_previews_status_check", sql`${table.status} in ('processing','ready','failed')`),
+]);
+
+export const prospectPreviewRateLimits = pgTable("prospect_preview_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+});
+
 export type PublishedWebsiteStatus = "active" | "inactive";
 export type WebsitePublicationAction = "publish" | "republish" | "unpublish" | "rollback";
 
