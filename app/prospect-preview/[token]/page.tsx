@@ -14,15 +14,18 @@ export const metadata: Metadata = {
 
 export default async function ProspectPreviewPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const document = await createProspectPreviewStore().load(token).catch(() => null);
-  if (!document) notFound();
+  const snapshot = await createProspectPreviewStore().load(token).catch(() => null);
+  if (!snapshot) notFound();
+  const { document, render } = snapshot;
   return <main className="min-h-screen bg-white">
     <p className="border-b bg-slate-50 px-6 py-3 text-center text-sm text-slate-700">Private website concept · View only</p>
-    {/* Inert suppresses link activation and focus, including renderer branding links.
-        No inquiry slug, contact actions, catalogue, editor or matched media is supplied. */}
-    <div inert>
+    {/* New snapshots allow section anchors and native FAQ expansion. The authored
+        renderer never mounts action controls. Old snapshots retain the inert shell. */}
+    {render ? <WebsiteSiteRenderer document={document} pagePath="/" basePath=""
+      renderingMode="authored-prospect" industry={render.industry} description={render.description}
+      media={render.media} serviceItems={render.services} /> : <div inert>
       <WebsiteSiteRenderer document={document} pagePath="/" basePath="#" preview
         publicPageOnly={false} checkoutReady={false} />
-    </div>
+    </div>}
   </main>;
 }

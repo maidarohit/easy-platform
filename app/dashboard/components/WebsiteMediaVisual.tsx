@@ -15,7 +15,7 @@ export default function WebsiteMediaVisual({
   if (failedSrc === media.src) return null;
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
+    <div data-website-media className={`relative overflow-hidden ${className}`}>
       <Image
         src={media.src}
         alt={media.alt}

@@ -1,4 +1,5 @@
 import "server-only";
+import { validateProspectRenderMetadata } from "./prospect-site-composer";
 
 import { randomUUID } from "node:crypto";
 import { and, eq, gt, isNull, ne, sql } from "drizzle-orm";
@@ -156,7 +157,13 @@ export function createProspectPreviewStore(database = db) {
         }
         diagnostic(true);
         stage = "draft_parse_validation";
-        const document = validateWebsiteSiteDocument(JSON.parse(row.output.result).siteDocument);
+        const snapshot = JSON.parse(row.output.result);
+        const document = validateWebsiteSiteDocument(snapshot.siteDocument);
+        const render = snapshot.prospectRender === undefined ? null : validateProspectRenderMetadata(snapshot.prospectRender);
+        if (snapshot.prospectRender !== undefined && !render) {
+          diagnostic(false, "invalid_render_metadata");
+          return null;
+        }
         if (!document) {
           diagnostic(false, "invalid_site_document");
           return null;
@@ -164,7 +171,7 @@ export function createProspectPreviewStore(database = db) {
         diagnostic(true);
         stage = "renderer_data_ready";
         diagnostic(true);
-        return document;
+        return { document, render };
       } catch {
         diagnostic(false, stage === "preview_row_lookup" ? "database_lookup_error" : stage === "draft_parse_validation" ? "draft_parse_or_validation_error" : "loader_error");
         return null;

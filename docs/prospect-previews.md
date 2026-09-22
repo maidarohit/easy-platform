@@ -1,6 +1,6 @@
 # Internal prospect previews
 
-This is a view-only, single-page concept flow. It never calls publication APIs,
+This is a view-only, single-page website concept flow. It never calls publication APIs,
 customer entitlement helpers, a prospect domain, or OpenAI directly. It uses the
 existing Website AI n8n webhook and saves a normalized website draft server-side.
 
@@ -52,6 +52,27 @@ generation payload. The saved and rendered prose comes only from supplied facts;
 generated prose, testimonials, statistics, addresses, media and service lists are
 discarded. Only bounded hex colors and allowlisted font names are taken from AI.
 Existing renderer safety filters may additionally omit unsuitable supplied copy.
+
+### Authored prospect snapshots
+
+New generations save `prospectRender: { version: 1, mode: "authored", ... }`
+alongside the v2 `siteDocument` in the existing output JSON. The server composer
+uses supplied facts and generic enquiry guidance; strategy may suggest a process
+section but never supplies factual claims. Services, FAQ and process sections are
+conditional on available input. No n8n workflow change is required.
+
+The authored renderer preserves visible block order, supports section anchors and
+native FAQ expansion, and never mounts forms, checkout or editing controls.
+Snapshots without render metadata retain the old inert presentation. There is no
+database migration or automatic rewriting of existing previews.
+
+Optional `media` accepts `hero`, `about`, `services` and `work`, each a trusted
+image URL or an array of up to six URLs. The internal caller is responsible for
+source verification. URLs must pass the existing website uploaded-media policy;
+arbitrary external website images are rejected. Source assets are not sent to n8n.
+Contextual bundled illustrations can decorate a site but are excluded from
+portfolio evidence. Missing media uses a text layout. No source scraping or new
+image generation runs in this flow.
 
 ## Response and retries
 

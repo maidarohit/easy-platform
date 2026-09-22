@@ -92,7 +92,8 @@ test("factual boundary removes ALL generated claims, media, links and contacts",
   assert.match(serialized, /Pottery workshops/);
   assert.equal(draft.siteDocument.theme.colorPalette, "#123456 #abcdef");
   assert.equal(draft.siteDocument.pages.length, 1);
-  assert.ok(draft.siteDocument.pages[0].blocks.every(block => ["hero", "content"].includes(block.type)));
+  assert.equal(draft.prospectRender.mode, "authored");
+  assert.ok(draft.siteDocument.pages[0].blocks.some(block => block.type === "services"));
   assert.equal(draft.siteDocument.footer.showContact, false);
   assert.equal(buildProspectDraft(input, { output: {} }), null);
 });
@@ -197,12 +198,19 @@ test("loader diagnostics distinguish every stage without logging credentials, ha
   console.info = console.warn = (message, event) => { assert.equal(message, "Prospect preview load."); events.push(event); };
   try {
     const document = await createProspectPreviewStore(mockDatabase(ready)).load(token);
-    assert.ok(document);
+    assert.ok(document.document);
+    assert.equal(document.render.mode, "authored");
     assert.deepEqual(events.map(event => event.stage), ["token_received", "token_hash_calculated", "preview_row_lookup",
       "expiry_revocation_check", "project_lookup", "project_output_lookup", "draft_parse_validation", "renderer_data_ready"]);
     assert.ok(events.every(event => event.success));
     assert.ok(events.slice(2).every(event => event.requestId === requestId));
+    const { prospectRender: _render, ...legacyDraft } = draft;
+    void _render;
+    const legacy = await createProspectPreviewStore(mockDatabase({ ...ready, output: { ...ready.output, result: JSON.stringify(legacyDraft) } })).load(token);
+    assert.equal(legacy.render, null);
+    assert.deepEqual(legacy.document, draft.siteDocument);
     for (const [row, stage, category, throws, candidate = token] of [
+      [{ ...ready, output: { ...ready.output, result: JSON.stringify({ ...draft, prospectRender: { version: 99 } }) } }, "draft_parse_validation", "invalid_render_metadata"],
       [ready, "token_received", "invalid_token_format", false, "invalid"],
       [null, "preview_row_lookup", "not_found"],
       [ready, "preview_row_lookup", "database_lookup_error", true],

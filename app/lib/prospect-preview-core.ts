@@ -3,7 +3,8 @@ import "server-only";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { normalizeWebsiteDraftForPersistence } from "@/app/lib/website-intelligence-connection";
 import { normalizeWebsiteAiOutput, validateWebsiteTemplate } from "@/app/lib/website-publication";
-import { validateWebsiteSiteDocument, type WebsiteBlock } from "@/app/lib/website-site-document";
+import { composeProspectSite, validateProspectMedia } from "./prospect-site-composer";
+import type { WebsiteMediaInput } from "./business-site-visuals";
 
 // Firebase's verifier rejects subjects longer than 128 characters. This database-only
 // identity cannot be a customer Firebase UID, even via a custom Firebase token.
@@ -22,7 +23,7 @@ const limits = {
   mainOpportunity: 500, previewAngle: 500,
 } as const;
 type ProspectText = keyof typeof limits;
-export type ProspectInput = Record<ProspectText, string> & { services: string[] };
+export type ProspectInput = Record<ProspectText, string> & { services: string[]; media?: WebsiteMediaInput };
 
 export function hashProspectValue(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,7 +39,7 @@ export function authorizeProspectRequest(request: Request, expected = process.en
 export function validateProspectInput(value: unknown): ProspectInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
-  if (Object.keys(body).some((key) => !Object.hasOwn(limits, key) && key !== "services")) return null;
+  if (Object.keys(body).some((key) => !Object.hasOwn(limits, key) && key !== "services" && key !== "media")) return null;
   const result = {} as ProspectInput;
   const unsafe = /[<>\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]|(?:javascript|vbscript)\s*:/i;
   for (const key of Object.keys(limits) as ProspectText[]) {
@@ -56,6 +57,11 @@ export function validateProspectInput(value: unknown): ProspectInput | null {
   const services = body.services === undefined ? [] : body.services;
   if (!Array.isArray(services) || services.length > 12 || services.some((item) => typeof item !== "string" || !item.trim() || item.length > 160 || unsafe.test(item))) return null;
   result.services = services.map((item: string) => item.trim());
+  if (body.media !== undefined) {
+    const media = validateProspectMedia(body.media);
+    if (!media) return null;
+    result.media = media;
+  }
   return result;
 }
 
@@ -64,7 +70,8 @@ export function validateProspectIdempotencyKey(value: string | null) {
 }
 
 export function prospectWebsitePayload(input: ProspectInput) {
-  const { mainOpportunity, previewAngle, brandStyle, ...facts } = input;
+  const { mainOpportunity, previewAngle, brandStyle, media: _media, ...facts } = input;
+  void _media;
   return {
     companyName: input.companyName, industry: input.businessType,
     targetAudience: input.targetAudience, brandStyle: input.brandStyle || "Minimal",
@@ -87,9 +94,7 @@ export function prospectPreviewAccessible(record: { status: string; expiresAt: D
 }
 
 export function buildProspectDraft(input: ProspectInput, upstream: unknown) {
-  const displayName =
-    input.companyName.split("|")[0]?.split(":")[0]?.trim() ||
-    input.companyName.trim();
+  const displayName = input.companyName;
 
   const project = {
     name: displayName,
@@ -146,138 +151,12 @@ export function buildProspectDraft(input: ProspectInput, upstream: unknown) {
 
   if (!normalized) return null;
 
-  const blocks: WebsiteBlock[] = [];
-
-  blocks.push({
-    id: "hero",
-    type: "hero",
-    order: 0,
-    visibility: "visible",
-    headline: displayName,
-    description:
-      input.businessDescription.length <= 500
-        ? input.businessDescription
-        : input.businessDescription.slice(0, 497) + "...",
-    ctaLabel: input.services.length > 0 ? "Explore Services" : "Learn More",
-    ctaHref: "#services",
+  const composed = composeProspectSite(input, {
+    template, colorPalette: colourScheme, typography,
+    structure: generated.siteStructure + " " + generated.recommendedPages,
   });
-
-  blocks.push({
-    id: "about",
-    type: "content",
-    order: 1,
-    visibility: "visible",
-    heading: `About ${displayName}`,
-    body: input.businessDescription,
-  });
-
-  if (input.services.length > 0) {
-    blocks.push({
-      id: "services",
-      type: "content",
-      order: 2,
-      visibility: "visible",
-      heading: "Services",
-      body: input.services.join(" • "),
-    });
-
-    input.services.slice(0, 6).forEach((service, index) => {
-      blocks.push({
-        id: `service-${index}`,
-        type: "content",
-        order: index + 3,
-        visibility: "visible",
-        heading: service,
-        body: service,
-      });
-    });
-  } else if (input.businessType) {
-    blocks.push({
-      id: "services",
-      type: "content",
-      order: 2,
-      visibility: "visible",
-      heading: "What They Do",
-      body: input.businessType,
-    });
-  }
-
-  const contactParts = [
-    input.location,
-    input.email,
-    input.phone,
-  ].filter(Boolean);
-
-  if (contactParts.length > 0) {
-    blocks.push({
-      id: "contact",
-      type: "content",
-      order: 20,
-      visibility: "visible",
-      heading: "Contact",
-      body: contactParts.join(" · "),
-    });
-  }
-
-  const siteDocument = validateWebsiteSiteDocument({
-    schemaVersion: 2,
-
-    theme: {
-      template,
-      colorPalette: colourScheme,
-      typography,
-    },
-
-    branding: {
-      name: displayName,
-      voice: "",
-    },
-
-    navigation: {
-      items: [],
-    },
-
-    header: {
-      brandLabel: displayName,
-      ctaLabel: "",
-      ctaHref: "#",
-    },
-
-    footer: {
-      businessName: displayName,
-      description: "Private website concept powered by Buzypeezy",
-      showContact: false,
-    },
-
-    pages: [
-      {
-        id: "home",
-        type: "home",
-        path: "/",
-        title: "Home",
-        order: 0,
-        visibility: "visible",
-
-        seo: {
-          title: displayName.slice(0, 70),
-          description: "Private concept preview",
-          canonicalPath: "/",
-          index: false,
-        },
-
-        blocks,
-      },
-    ],
-  });
-
-  const draft = {
-    ...normalized,
-    ...website,
-    siteDocument,
-  };
-
-  return siteDocument && normalizeWebsiteAiOutput(website)
-    ? draft
+  return composed && normalizeWebsiteAiOutput(website)
+    ? { ...normalized, ...website, ...composed }
     : null;
 }
 
