@@ -277,8 +277,9 @@ test("customer isolation and no publication writes; privacy and renderer side-ef
   assert.match(route, /claimFreeWebsitePreview/);
   assert.match(route, /persistSuccessfulFreeWebsitePreview/);
   assert.match(route, /associateN8nExecution/);
-  assert.match(page, /<div inert>/);
-  assert.match(page, /publicPageOnly=\{false\} checkoutReady=\{false\}/);
+  assert.match(page, /<ProspectConcept document=\{document\} render=\{render\}/);
+  assert.match(page, /createProspectPreviewStore\(\)\.load\(token\)/);
+  assert.match(page, /if \(!snapshot\) notFound\(\)/);
   assert.doesNotMatch(page, /editorMode=/);
   assert.match(config, /private, no-store/);
   assert.match(config, /noindex, nofollow, noarchive/);

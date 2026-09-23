@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { createProspectPreviewStore } from "@/app/lib/prospect-preview-store";
-import WebsiteSiteRenderer from "@/app/dashboard/components/WebsiteSiteRenderer";
+import ProspectConcept from "../ProspectConcept";
+import styles from "../concept.module.css";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,15 +18,5 @@ export default async function ProspectPreviewPage({ params }: { params: Promise<
   const snapshot = await createProspectPreviewStore().load(token).catch(() => null);
   if (!snapshot) notFound();
   const { document, render } = snapshot;
-  return <main className="min-h-screen bg-white">
-    <p className="border-b bg-slate-50 px-6 py-3 text-center text-sm text-slate-700">Private website concept · View only</p>
-    {/* New snapshots allow section anchors and native FAQ expansion. The authored
-        renderer never mounts action controls. Old snapshots retain the inert shell. */}
-    {render ? <WebsiteSiteRenderer document={document} pagePath="/" basePath=""
-      renderingMode="authored-prospect" industry={render.industry} description={render.description}
-      media={render.media} serviceItems={render.services} /> : <div inert>
-      <WebsiteSiteRenderer document={document} pagePath="/" basePath="#" preview
-        publicPageOnly={false} checkoutReady={false} />
-    </div>}
-  </main>;
+  return <ProspectConcept document={document} render={render} className={styles.site} />;
 }
