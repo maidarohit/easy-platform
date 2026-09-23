@@ -5,6 +5,7 @@
 .site h1, .site h2, .site h3, .site p { margin: 0; }
 .site h1, .site h2, .site h3, .site address { overflow-wrap: anywhere; }
 .site h1 { font-size: clamp(3.5rem, 7.8vw, 7.4rem); font-weight: 500; letter-spacing: -.075em; line-height: .99; }
+@media (min-width: 1001px) { .site h1 { font-size: clamp(3.5rem, 6.4vw, 6.2rem); } }
 .site h2 { font-size: clamp(2.5rem, 4.5vw, 4.6rem); font-weight: 500; letter-spacing: -.055em; line-height: 1.08; }
 .site h3 { font-size: 1.45rem; font-weight: 500; letter-spacing: -.035em; line-height: 1.3; }
 .site em { font-family: Georgia, serif; font-weight: 400; }
