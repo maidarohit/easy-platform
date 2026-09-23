@@ -8,6 +8,7 @@ import { useProjectMemory } from "../hooks/useProjectMemory";
 import auth from "../lib/auth";
 import { authenticatedFetch } from "../lib/authenticated-fetch";
 import type { AiManagerJobStatus, AiManagerOutput, AiManagerStrategy } from "../lib/ai/types";
+import { restoreAiManagerStrategy } from "../lib/ai/restore-manager-strategy";
 
 const industryOptions = [
   "Digital Marketing",
@@ -72,16 +73,32 @@ function AIManagerPageContent() {
         setIndustry(project.industry);
         setBusinessGoal(project.goal);
         setAnalyticsContext(null);
-        if (project.result) {
-  try {
-    setResult(JSON.parse(project.result) as AiManagerStrategy);
-  } catch {
-    setResult(null);
-  }
-} else {
-  setResult(null);
-}
+        setResult(restoreAiManagerStrategy(project.result));
     });
+  }, [project, requestedProjectId]);
+
+  useEffect(() => {
+    if (!project || project.id !== requestedProjectId) return;
+
+    let active = true;
+    const loadSavedOutput = async () => {
+      try {
+        const response = await authenticatedFetch(
+          `/api/project-outputs?projectId=${encodeURIComponent(project.id)}&module=ai-manager`,
+          { cache: "no-store" },
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load AI Manager result");
+        if (!active || !data.output?.result) return;
+        const restored = restoreAiManagerStrategy(data.output.result);
+        if (restored) setResult(restored);
+      } catch (loadError) {
+        if (active) console.error("Failed to load AI Manager result:", loadError);
+      }
+    };
+
+    void loadSavedOutput();
+    return () => { active = false; };
   }, [project, requestedProjectId]);
 
   useEffect(() => {
